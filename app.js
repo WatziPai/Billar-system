@@ -1596,3 +1596,46 @@ if (DEBUG_MODE) {
     console.log('%c🔧 Modo DEBUG activado', 
         'background: #fd7e14; color: white; padding: 5px 10px; border-radius: 3px; margin-top: 10px;');
 }
+// ========== EXPONER FUNCIONES GLOBALMENTE PARA onclick ==========
+window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;
+window.changeTab = changeTab;
+window.agregarMesa = agregarMesa;
+window.eliminarMesa = eliminarMesa;
+window.toggleMesa = toggleMesa;
+window.showModalVentaManual = showModalVentaManual;
+window.closeModalVentaManual = closeModalVentaManual;
+window.agregarVentaManual = agregarVentaManual;
+window.showModalVentaProductos = showModalVentaProductos;
+window.closeModalVentaProductos = closeModalVentaProductos;
+window.agregarVentaProducto = agregarVentaProducto;
+window.eliminarVenta = eliminarVenta;
+window.showModalProducto = showModalProducto;
+window.closeModalProducto = closeModalProducto;
+window.guardarProducto = guardarProducto;
+window.eliminarProducto = eliminarProducto;
+window.showModalStock = showModalStock;
+window.closeModalStock = closeModalStock;
+window.ajustarStock = ajustarStock;
+window.generarReporte = generarReporte;
+window.showModalError = showModalError;
+window.closeModalError = closeModalError;
+window.reportarError = reportarError;
+window.marcarErrorResuelto = marcarErrorResuelto;
+window.eliminarError = eliminarError;
+window.toggleUsuarios = toggleUsuarios;
+window.showModalUsuarioId = showModalUsuarioId;
+window.showModalUsuario = showModalUsuario;
+window.closeModalUsuario = closeModalUsuario;
+window.crearUsuario = crearUsuario;
+window.eliminarUsuario = eliminarUsuario;
+window.agregarMesaConsumo = agregarMesaConsumo;
+window.iniciarMesaConsumo = iniciarMesaConsumo;
+window.abrirModalConsumo = abrirModalConsumo;
+window.agregarConsumoMesa = agregarConsumoMesa;
+window.aplicarConsumos = aplicarConsumos;
+window.cerrarModalConsumo = cerrarModalConsumo;
+window.finalizarMesaConsumo = finalizarMesaConsumo;
+window.guardarConfiguracion = guardarConfiguracion;
+
+console.log('%c✅ Todas las funciones expuestas globalmente', 'color: #28a745; font-weight: bold;');
