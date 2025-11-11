@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Billar</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- PANTALLA DE LOGIN -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-box">
+            <div class="login-icon">🎱</div>
+            <h1>Sistema de Billar</h1>
+            <p style="text-align: center; color: #666; margin-bottom: 30px;">Inicia sesión para continuar</p>
+            
+            <div id="loginError" class="error-msg hidden"></div>
+            
+            <div class="input-group">
+                <label>Usuario</label>
+                <input type="text" id="loginUsername" placeholder="Ingresa tu usuario" autocomplete="username">
+            </div>
+            
+            <div class="input-group">
+                <label>Contraseña</label>
+                <input type="password" id="loginPassword" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+            </div>
+            
+            <button class="btn btn-primary" style="width: 100%;" onclick="handleLogin()" id="btnLogin">
+                Iniciar Sesión
+            </button>
+            
+            <div class="login-info">
+                <p>Usuario por defecto: <strong>admin</strong></p>
+                <p>Contraseña: <strong>admin123</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANTALLA PRINCIPAL -->
+    <div id="mainScreen" class="container hidden">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-top">
+                <div>
+                    <h1>🎱 Sistema de Gestión de Billar</h1>
+                    <div class="user-info">
+                        Bienvenido, <strong id="userName"></strong>
+                        <span class="user-badge" id="userRole"></span>
+                        <span style="margin-left: 10px; color: #28a745; font-size: 12px;">● Conectado</span>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <button id="btnUsuarios" class="btn-small btn-blue hidden" onclick="toggleUsuarios()">
+                        👥 Usuarios
+                    </button>
+                    <button class="btn-small btn-red" onclick="handleLogout()">
+                        🚪 Salir
+                    </button>
+                </div>
+            </div>
+
+            <!-- PANEL USUARIOS -->
+            <div id="usuariosPanel" class="usuarios-panel hidden">
+                <div class="section-header">
+                    <h3>Gestión de Usuarios</h3>
+                    <button class="btn-small btn-green" onclick="showModalUsuario()">
+                        ➕ Crear Usuario
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Nombre</th>
+                                <th>Rol</th>
+                                <th style="text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usuariosTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CONFIGURACIÓN -->
+            <div class="config-grid">
+                <div class="config-box" style="background: #cfe2ff;">
+                    <label>Tarifa por Hora Completa (S/)</label>
+                    <input type="number" id="tarifaHora" value="5.00" step="0.50" min="0" onchange="guardarConfiguracion()">
+                </div>
+                <div class="config-box" style="background: #fff3cd;">
+                    <label>Tarifa cada 5 min extra (S/)</label>
+                    <input type="number" id="tarifaExtra5Min" value="0.50" step="0.10" min="0" onchange="guardarConfiguracion()">
+                </div>
+                <div class="config-box total-box">
+                    <label>Total del Día</label>
+                    <div class="total-amount" id="totalDia">S/ 0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABS DE NAVEGACIÓN -->
+        <div class="tabs">
+            <button class="tab active" onclick="changeTab('mesas', event)" data-tab="mesas">
+                🎱 Mesas
+            </button>
+            <button class="tab" onclick="changeTab('ventas', event)" data-tab="ventas">
+                💰 Ventas
+            </button>
+            <button class="tab" onclick="changeTab('inventario', event)" data-tab="inventario">
+                📦 Inventario
+            </button>
+            <button class="tab" onclick="changeTab('reportes', event)" data-tab="reportes">
+                📊 Reportes
+            </button>
+            <button id="tabErrores" class="tab hidden" onclick="changeTab('errores', event)" data-tab="errores">
+                ⚠️ Errores
+            </button>
+        </div>
+
+        <!-- TAB: MESAS -->
+        <div id="tabMesas" class="tab-content active">
+            <!-- Mesas de Billar -->
+            <div class="section-box" style="margin-bottom: 30px;">
+                <div class="section-header">
+                    <h2>🎱 Mesas de Billar</h2>
+                    <button id="btnAgregarMesa" class="btn-small btn-green hidden" onclick="agregarMesa()">
+                        ➕ Agregar Mesa
+                    </button>
+                </div>
+                <div id="mesasContainer" class="mesas-grid"></div>
+            </div>
+
+            <!-- Mesas de Consumo -->
+            <div class="section-divider">
+                <span>🍺 ZONA DE CONSUMO</span>
+            </div>
+            
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>🍺 Mesas de Consumo (Tomar/Fumar)</h2>
+                    <button id="btnAgregarMesaConsumo" class="btn-small btn-green hidden" onclick="agregarMesaConsumo()">
+                        ➕ Agregar Mesa
+                    </button>
+                </div>
+                <div id="mesasConsumoContainer" class="mesas-grid"></div>
+            </div>
+        </div>
+
+        <!-- TAB: VENTAS -->
+        <div id="tabVentas" class="tab-content">
+            <div class="ventas-section">
+                <div class="section-header">
+                    <h2>Registro de Ventas</h2>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn-small btn-blue" onclick="showModalVentaManual()">
+                            ➕ Venta Manual
+                        </button>
+                        <button class="btn-small btn-green" onclick="showModalVentaProductos()">
+                            🛒 Vender Productos
+                        </button>
+                        <button id="btnReportarError" class="btn-small btn-orange hidden" onclick="showModalError()">
+                            ⚠️ Reportar Error
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripción</th>
+                                <th>Usuario</th>
+                                <th style="text-align: right;">Monto</th>
+                                <th style="text-align: center;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ventasTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: INVENTARIO -->
+        <div id="tabInventario" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>Inventario de Productos</h2>
+                    <button id="btnAgregarProducto" class="btn-small btn-green hidden" onclick="showModalProducto()">
+                        ➕ Agregar Producto
+                    </button>
+                </div>
+                <div id="inventarioGrid" class="inventario-grid"></div>
+            </div>
+        </div>
+
+        <!-- TAB: REPORTES -->
+        <div id="tabReportes" class="tab-content">
+            <div class="section-box">
+                <h2 style="margin-bottom: 20px;">Reportes y Estadísticas</h2>
+                
+                <div class="reporte-filters">
+                    <select id="reportePeriodo" onchange="generarReporte()">
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Esta Semana</option>
+                        <option value="mes">Este Mes</option>
+                    </select>
+                    <button class="btn-small btn-teal" onclick="generarReporte()">
+                        🔄 Actualizar
+                    </button>
+                </div>
+
+                <div class="reporte-grid">
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h3>Total Ventas</h3>
+                        <div class="valor" id="reporteTotalVentas">S/ 0.00</div>
+                    </div>
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <h3>Ventas Mesas</h3>
+                        <div class="valor" id="reporteVentasMesas">S/ 0.00</div>
+                    </div>
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <h3>Ventas Productos</h3>
+                        <div class="valor" id="reporteVentasProductos">S/ 0.00</div>
+                    </div>
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        <h3>Transacciones</h3>
+                        <div class="valor" id="reporteTransacciones">0</div>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0;">Detalle de Ventas</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripción</th>
+                                <th>Usuario</th>
+                                <th style="text-align: right;">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reporteDetalleTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: ERRORES -->
+        <div id="tabErrores" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>Errores Reportados</h2>
+                </div>
+                <div id="erroresContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALES (igual que antes, los mismos...) -->
+    
+    <!-- Modal: Usuario -->
+    <div id="modalUsuario" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" id="usuarioModalTitle">Crear Usuario</div>
+            <div id="usuarioError" class="error-msg hidden"></div>
+            <div class="input-group">
+                <label>Nombre Completo</label>
+                <input type="text" id="nuevoNombre" autocomplete="name">
+            </div>
+            <div class="input-group">
+                <label>Usuario</label>
+                <input type="text" id="nuevoUsername" autocomplete="username">
+            </div>
+            <div class="input-group">
+                <label>Contraseña</label>
+                <input type="password" id="nuevoPassword" autocomplete="new-password" placeholder="Dejar en blanco para mantener la actual (al editar)">
+            </div>
+            <div class="input-group">
+                <label>Rol</label>
+                <select id="nuevoRol">
+                    <option value="empleado">Empleado</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-green btn-full" onclick="crearUsuario()">Guardar</button>
+                <button class="btn btn-gray btn-full" onclick="closeModalUsuario()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Venta Manual -->
+    <div id="modalVentaManual" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Venta Manual</div>
+            <div class="input-group">
+                <label>Descripción</label>
+                <input type="text" id="ventaDescripcionManual" placeholder="Ej: Alquiler mesa pool">
+            </div>
+            <div class="input-group">
+                <label>Monto (S/)</label>
+                <input type="number" id="ventaMontoManual" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-green btn-full" onclick="agregarVentaManual()" id="btnGuardarVentaManual">
+                    Guardar
+                </button>
+                <button class="btn btn-gray btn-full" onclick="closeModalVentaManual()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Vender Productos -->
+    <div id="modalVentaProductos" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">Vender Productos</div>
+            <div id="productosVentaContainer" class="productos-venta-grid"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-gray btn-full" onclick="closeModalVentaProductos()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Producto -->
+    <div id="modalProducto" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" id="productoModalTitle">Agregar Producto</div>
+            <div id="productoError" class="error-msg hidden"></div>
+            <div class="input-group">
+                <label>Nombre</label>
+                <input type="text" id="productoNombre" placeholder="Ej: Cerveza Pilsen">
+            </div>
+            <div class="input-group">
+                <label>Precio (S/)</label>
+                <input type="number" id="productoPrecio" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="input-group">
+                <label>Stock Inicial</label>
+                <input type="number" id="productoStock" min="0" placeholder="0">
+            </div>
+            <div class="input-group">
+                <label>Stock Mínimo (Alerta)</label>
+                <input type="number" id="productoStockMin" min="0" value="5" placeholder="5">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-green btn-full" onclick="guardarProducto()">Guardar</button>
+                <button class="btn btn-gray btn-full" onclick="closeModalProducto()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Stock -->
+    <div id="modalStock" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Ajustar Stock</div>
+            <h3 id="stockProductoNombre" style="margin-bottom: 15px; color: #666;"></h3>
+            <div class="input-group">
+                <label>Stock Actual: <strong id="stockActual">0</strong></label>
+            </div>
+            <div class="input-group">
+                <label>Ajuste (+/-)</label>
+                <input type="number" id="stockAjuste" placeholder="+10 para agregar, -5 para quitar">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-green btn-full" onclick="ajustarStock()">Guardar</button>
+                <button class="btn btn-gray btn-full" onclick="closeModalStock()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Error -->
+    <div id="modalError" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Reportar Error</div>
+            <div class="input-group">
+                <label>Describe el error</label>
+                <textarea id="errorMensaje" placeholder="Describe qué sucedió... Ej: La mesa 2 no calculó bien el tiempo"></textarea>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-orange btn-full" onclick="reportarError()">Enviar</button>
+                <button class="btn btn-gray btn-full" onclick="closeModalError()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Agregar Consumo -->
+    <div id="modalConsumo" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <h3 id="consumoModalTitle" style="margin-bottom: 10px; color: #333;">Agregar Consumo</h3>
+            <p style="color: #666; margin-bottom: 20px;">✨ Selecciona los productos para agregar a la mesa</p>
+            
+            <div class="productos-grid-modal" id="productosConsumoGrid"></div>
+            
+            <div class="cuenta-actual">
+                <h4 style="margin-bottom: 15px; color: #155724; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 24px;">📋</span> Resumen de Consumos
+                </h4>
+                <div id="cuentaActualLista"></div>
+                <div class="total-cuenta" id="totalCuentaActual">S/ 0.00</div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn btn-green btn-full" onclick="aplicarConsumos()">
+                    ✅ Agregar a la Mesa
+                </button>
+                <button class="btn btn-gray btn-full" onclick="cerrarModalConsumo()">
+                    ❌ Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p>Conectando con Firebase...</p>
+    </div>
+
+    <!-- IMPORTANTE: Cargar Firebase PRIMERO, luego app.js -->
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
