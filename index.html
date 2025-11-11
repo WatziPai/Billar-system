@@ -198,15 +198,21 @@
                 <h2 style="margin-bottom: 20px;">Reportes y Estadísticas</h2>
                 
                 <div class="reporte-filters">
-                    <select id="reportePeriodo" onchange="generarReporte()">
-                        <option value="hoy">Hoy</option>
-                        <option value="semana">Esta Semana</option>
-                        <option value="mes">Este Mes</option>
-                    </select>
-                    <button class="btn-small btn-teal" onclick="generarReporte()">
-                        🔄 Actualizar
-                    </button>
-                </div>
+            <select id="reportePeriodo" onchange="generarReporte()">
+                <option value="hoy">Hoy</option>
+                <option value="semana">Esta Semana</option>
+                <option value="mes">Este Mes</option>
+            </select>
+            <button class="btn-small btn-teal" onclick="generarReporte()">
+                🔄 Actualizar
+            </button>
+            <button class="btn-small btn-green" onclick="descargarReporteExcel()">
+                📥 Descargar Excel
+            </button>
+            <button class="btn-small btn-blue" onclick="descargarReportePDF()">
+                📄 Descargar PDF
+            </button>
+        </div>
 
                 <div class="reporte-grid">
                     <div class="reporte-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
