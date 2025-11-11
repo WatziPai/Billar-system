@@ -1317,6 +1317,25 @@ async function agregarMesaConsumo() {
     await guardarMesasConsumo();
     actualizarMesasConsumo();
 }
+async function eliminarMesaConsumo(id) {
+    if (usuarioActual.rol !== 'admin') {
+        mostrarError('Solo los administradores pueden eliminar mesas');
+        return;
+    }
+    
+    const mesa = mesasConsumo.find(m => m.id === id);
+    if (mesa && mesa.ocupada) {
+        mostrarError('No puedes eliminar una mesa ocupada. Ciérrala primero.');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de eliminar esta mesa de consumo?')) return;
+    
+    mesasConsumo = mesasConsumo.filter(m => m.id !== id);
+    await guardarMesasConsumo();
+    actualizarMesasConsumo();
+    debugLog('sistema', '🗑️ Mesa de consumo eliminada', { id });
+}
 
 function actualizarMesasConsumo() {
     const container = document.getElementById('mesasConsumoContainer');
@@ -1327,7 +1346,8 @@ function actualizarMesasConsumo() {
         mesa.total = total;
         
         return `
-            <div class="mesa-card" style="border-color: #6f42c1; background: ${mesa.ocupada ? '#e7d4f7' : '#f8f9fa'};">
+            <div class="mesa-card" style="border-color: #6f42c1; background: ${mesa.ocupada ? '#e7d4f7' : '#f8f9fa'}; position: relative;">
+                ${usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesaConsumo(${mesa.id})">×</button>` : ''}
                 <h3>🍺 Mesa ${mesa.id}</h3>
                 <span class="mesa-status" style="background: ${mesa.ocupada ? '#6f42c1' : '#6c757d'};">
                     ${mesa.ocupada ? 'OCUPADA' : 'DISPONIBLE'}
@@ -1637,5 +1657,6 @@ window.aplicarConsumos = aplicarConsumos;
 window.cerrarModalConsumo = cerrarModalConsumo;
 window.finalizarMesaConsumo = finalizarMesaConsumo;
 window.guardarConfiguracion = guardarConfiguracion;
+window.eliminarMesaConsumo = eliminarMesaConsumo;
 
 console.log('%c✅ Todas las funciones expuestas globalmente', 'color: #28a745; font-weight: bold;');
