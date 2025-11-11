@@ -1,8 +1,8 @@
-// Configuración de Firebase
+// Importar Firebase desde CDN
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-// Tu configuración de Firebase
+// Configuración de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCMJbPKQ434-pSvCXnleNkancO1RN7kn_Y",
   authDomain: "billar-system.firebaseapp.com",
@@ -16,7 +16,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Funciones helper para Firestore
+// Exponer funciones globalmente para que funcionen con onclick
 window.firebaseDB = {
   // Guardar documento
   async set(coleccion, id, data) {
@@ -25,7 +25,7 @@ window.firebaseDB = {
       await setDoc(docRef, data, { merge: true });
       return true;
     } catch (error) {
-      console.error('Error guardando en Firebase:', error);
+      console.error('❌ Error guardando en Firebase:', error);
       return false;
     }
   },
@@ -37,7 +37,7 @@ window.firebaseDB = {
       const docSnap = await getDoc(docRef);
       return docSnap.exists() ? docSnap.data() : null;
     } catch (error) {
-      console.error('Error obteniendo de Firebase:', error);
+      console.error('❌ Error obteniendo de Firebase:', error);
       return null;
     }
   },
@@ -52,7 +52,7 @@ window.firebaseDB = {
       });
       return data;
     } catch (error) {
-      console.error('Error obteniendo colección:', error);
+      console.error('❌ Error obteniendo colección:', error);
       return [];
     }
   },
@@ -63,7 +63,7 @@ window.firebaseDB = {
       await deleteDoc(doc(db, coleccion, String(id)));
       return true;
     } catch (error) {
-      console.error('Error eliminando de Firebase:', error);
+      console.error('❌ Error eliminando de Firebase:', error);
       return false;
     }
   },
@@ -81,5 +81,8 @@ window.firebaseDB = {
   }
 };
 
-console.log('✅ Firebase conectado correctamente');
-console.log('📡 Base de datos en tiempo real activada');
+console.log('%c✅ Firebase conectado correctamente', 'color: #28a745; font-weight: bold;');
+console.log('%c📡 Base de datos en tiempo real activada', 'color: #007bff; font-weight: bold;');
+
+// Señal de que Firebase está listo
+window.firebaseReady = true;
