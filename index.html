@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- PANTALLA DE LOGIN -->
     <div id="loginScreen" class="login-screen">
         <div class="login-box">
             <div class="login-icon">🎱</div>
@@ -26,7 +25,6 @@
                 <input type="password" id="loginPassword" placeholder="Ingresa tu contraseña" autocomplete="current-password">
             </div>
             
-            <!-- ✅ AGREGADO ONCLICK -->
             <button class="btn btn-primary" style="width: 100%;" id="btnLogin" onclick="handleLogin()">
                 Iniciar Sesión
             </button>
@@ -39,9 +37,7 @@
         </div>
     </div>
 
-    <!-- PANTALLA PRINCIPAL -->
     <div id="mainScreen" class="container hidden">
-        <!-- HEADER -->
         <div class="header">
             <div class="header-top">
                 <div>
@@ -62,7 +58,6 @@
                 </div>
             </div>
 
-            <!-- PANEL USUARIOS -->
             <div id="usuariosPanel" class="usuarios-panel hidden">
                 <div class="section-header">
                     <h3>Gestión de Usuarios</h3>
@@ -85,7 +80,6 @@
                 </div>
             </div>
 
-            <!-- CONFIGURACIÓN -->
             <div class="config-grid">
                 <div class="config-box" style="background: #cfe2ff;">
                     <label>Tarifa por Hora Completa (S/)</label>
@@ -102,7 +96,6 @@
             </div>
         </div>
 
-        <!-- TABS DE NAVEGACIÓN -->
         <div class="tabs">
             <button class="tab active" onclick="changeTab('mesas', event)" data-tab="mesas">
                 🎱 Mesas
@@ -121,9 +114,7 @@
             </button>
         </div>
 
-        <!-- TAB: MESAS -->
         <div id="tabMesas" class="tab-content active">
-            <!-- Mesas de Billar -->
             <div class="section-box" style="margin-bottom: 30px;">
                 <div class="section-header">
                     <h2>🎱 Mesas de Billar</h2>
@@ -134,7 +125,6 @@
                 <div id="mesasContainer" class="mesas-grid"></div>
             </div>
 
-            <!-- Mesas de Consumo -->
             <div class="section-divider">
                 <span>🍺 ZONA DE CONSUMO</span>
             </div>
@@ -150,7 +140,6 @@
             </div>
         </div>
 
-        <!-- TAB: VENTAS -->
         <div id="tabVentas" class="tab-content">
             <div class="ventas-section">
                 <div class="section-header">
@@ -184,7 +173,6 @@
             </div>
         </div>
 
-        <!-- TAB: INVENTARIO -->
         <div id="tabInventario" class="tab-content">
             <div class="section-box">
                 <div class="section-header">
@@ -197,7 +185,6 @@
             </div>
         </div>
 
-        <!-- TAB: REPORTES -->
         <div id="tabReportes" class="tab-content">
             <div class="section-box">
                 <h2 style="margin-bottom: 20px;">Reportes y Estadísticas</h2>
@@ -238,24 +225,41 @@
                     </div>
                 </div>
 
-                <h3 style="margin: 30px 0 15px 0;">Detalle de Ventas</h3>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Descripción</th>
-                                <th>Usuario</th>
-                                <th style="text-align: right;">Monto</th>
-                            </tr>
-                        </thead>
-                        <tbody id="reporteDetalleTable"></tbody>
-                    </table>
+                <div style="margin: 20px 0; text-align: center;">
+                    <button class="btn btn-primary" onclick="cerrarDia()" style="padding: 15px 40px; font-size: 16px;">
+                        🔒 Cerrar Turno/Día
+                    </button>
+                    <p style="margin-top: 10px; color: #666; font-size: 13px;">
+                        Genera un reporte del período actual y archiva las ventas
+                    </p>
                 </div>
+
+                <h3 style="margin: 30px 0 15px 0;">Detalle de Ventas</h3>
+                
+                <div class="table-responsive">
+                    <div id="reporteDetalleContainer">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Descripción</th>
+                                    <th>Usuario</th>
+                                    <th style="text-align: right;">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reporteDetalleTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2d7a4d; margin-bottom: 15px;">📁 Historial de Cierres</h3>
+                    <div id="historialCierresContainer"></div>
+                </div>
+
             </div>
         </div>
 
-        <!-- TAB: ERRORES -->
         <div id="tabErrores" class="tab-content">
             <div class="section-box">
                 <div class="section-header">
@@ -266,9 +270,6 @@
         </div>
     </div>
 
-    <!-- MODALES -->
-    
-    <!-- Modal: Usuario -->
     <div id="modalUsuario" class="modal">
         <div class="modal-content">
             <div class="modal-header" id="usuarioModalTitle">Crear Usuario</div>
@@ -299,7 +300,6 @@
         </div>
     </div>
 
-    <!-- Modal: Venta Manual -->
     <div id="modalVentaManual" class="modal">
         <div class="modal-content">
             <div class="modal-header">Venta Manual</div>
@@ -320,7 +320,6 @@
         </div>
     </div>
 
-    <!-- Modal: Vender Productos -->
     <div id="modalVentaProductos" class="modal">
         <div class="modal-content" style="max-width: 900px;">
             <div class="modal-header">Vender Productos</div>
@@ -331,7 +330,6 @@
         </div>
     </div>
 
-    <!-- Modal: Producto -->
     <div id="modalProducto" class="modal">
         <div class="modal-content">
             <div class="modal-header" id="productoModalTitle">Agregar Producto</div>
@@ -359,7 +357,6 @@
         </div>
     </div>
 
-    <!-- Modal: Stock -->
     <div id="modalStock" class="modal">
         <div class="modal-content">
             <div class="modal-header">Ajustar Stock</div>
@@ -378,7 +375,6 @@
         </div>
     </div>
 
-    <!-- Modal: Error -->
     <div id="modalError" class="modal">
         <div class="modal-content">
             <div class="modal-header">Reportar Error</div>
@@ -393,7 +389,6 @@
         </div>
     </div>
 
-    <!-- Modal: Agregar Consumo -->
     <div id="modalConsumo" class="modal">
         <div class="modal-content" style="max-width: 900px;">
             <h3 id="consumoModalTitle" style="margin-bottom: 10px; color: #333;">Agregar Consumo</h3>
@@ -417,7 +412,6 @@
         </div>
     </div>
 
-    <!-- SCRIPTS: Primero Firebase, luego la app -->
     <script type="module" src="firebase-config.js"></script>
     <script  src="app.js"></script>
 </body>
