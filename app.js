@@ -31,342 +31,15 @@ let mesaConsumoActual = null;
 let tipoMesaActual = null;
 let tabActual = 'mesas';
 
-// ========== EXPONER FUNCIONES INMEDIATAMENTE ==========
-// Esto debe ir ANTES del DOMContentLoaded para que estén disponibles en los onclick
-window.handleLogin = function() { console.log('handleLogin llamado (placeholder)'); };
-window.handleLogout = function() { console.log('handleLogout llamado (placeholder)'); };
-window.changeTab = function() { console.log('changeTab llamado (placeholder)'); };
-window.agregarMesa = function() { console.log('agregarMesa llamado (placeholder)'); };
-window.eliminarMesa = function() { console.log('eliminarMesa llamado (placeholder)'); };
-window.toggleMesa = function() { console.log('toggleMesa llamado (placeholder)'); };
-window.showModalVentaManual = function() { console.log('showModalVentaManual llamado (placeholder)'); };
-window.closeModalVentaManual = function() { console.log('closeModalVentaManual llamado (placeholder)'); };
-window.agregarVentaManual = function() { console.log('agregarVentaManual llamado (placeholder)'); };
-window.showModalVentaProductos = function() { console.log('showModalVentaProductos llamado (placeholder)'); };
-window.closeModalVentaProductos = function() { console.log('closeModalVentaProductos llamado (placeholder)'); };
-window.agregarVentaProducto = function() { console.log('agregarVentaProducto llamado (placeholder)'); };
-window.eliminarVenta = function() { console.log('eliminarVenta llamado (placeholder)'); };
-window.showModalProducto = function() { console.log('showModalProducto llamado (placeholder)'); };
-window.closeModalProducto = function() { console.log('closeModalProducto llamado (placeholder)'); };
-window.guardarProducto = function() { console.log('guardarProducto llamado (placeholder)'); };
-window.eliminarProducto = function() { console.log('eliminarProducto llamado (placeholder)'); };
-window.showModalStock = function() { console.log('showModalStock llamado (placeholder)'); };
-window.closeModalStock = function() { console.log('closeModalStock llamado (placeholder)'); };
-window.ajustarStock = function() { console.log('ajustarStock llamado (placeholder)'); };
-window.generarReporte = function() { console.log('generarReporte llamado (placeholder)'); };
-window.showModalError = function() { console.log('showModalError llamado (placeholder)'); };
-window.closeModalError = function() { console.log('closeModalError llamado (placeholder)'); };
-window.reportarError = function() { console.log('reportarError llamado (placeholder)'); };
-window.marcarErrorResuelto = function() { console.log('marcarErrorResuelto llamado (placeholder)'); };
-window.eliminarError = function() { console.log('eliminarError llamado (placeholder)'); };
-window.toggleUsuarios = function() { console.log('toggleUsuarios llamado (placeholder)'); };
-window.showModalUsuarioId = function() { console.log('showModalUsuarioId llamado (placeholder)'); };
-window.showModalUsuario = function() { console.log('showModalUsuario llamado (placeholder)'); };
-window.closeModalUsuario = function() { console.log('closeModalUsuario llamado (placeholder)'); };
-window.crearUsuario = function() { console.log('crearUsuario llamado (placeholder)'); };
-window.eliminarUsuario = function() { console.log('eliminarUsuario llamado (placeholder)'); };
-window.agregarMesaConsumo = function() { console.log('agregarMesaConsumo llamado (placeholder)'); };
-window.iniciarMesaConsumo = function() { console.log('iniciarMesaConsumo llamado (placeholder)'); };
-window.abrirModalConsumo = function() { console.log('abrirModalConsumo llamado (placeholder)'); };
-window.agregarConsumoMesa = function() { console.log('agregarConsumoMesa llamado (placeholder)'); };
-window.aplicarConsumos = function() { console.log('aplicarConsumos llamado (placeholder)'); };
-window.cerrarModalConsumo = function() { console.log('cerrarModalConsumo llamado (placeholder)'); };
-window.finalizarMesaConsumo = function() { console.log('finalizarMesaConsumo llamado (placeholder)'); };
-window.guardarConfiguracion = function() { console.log('guardarConfiguracion llamado (placeholder)'); };
-window.eliminarMesaConsumo = function() { console.log('eliminarMesaConsumo llamado (placeholder)'); };
-window.descargarReporteExcel = function() { console.log('descargarReporteExcel llamado (placeholder)'); };
-window.descargarReportePDF = function() { console.log('descargarReportePDF llamado (placeholder)'); };
+// ========== FUNCIONES PRINCIPALES (Declaradas inmediatamente) ==========
 
-// ========== INICIALIZACIÓN ==========
-document.addEventListener('DOMContentLoaded', async function() {
-    debugLog('sistema', '🚀 Iniciando aplicación con Firebase...');
-    showLoading();
-    
-    // Esperar a que Firebase esté listo
-    await esperarFirebase();
-    
-    await cargarDatos();
-    
-    // Enter en login
-    const loginPassword = document.getElementById('loginPassword');
-    if (loginPassword) {
-        loginPassword.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') handleLogin();
-        });
-    }
-    
-    // REEMPLAZAR PLACEHOLDERS CON FUNCIONES REALES
-    asignarFuncionesReales();
-    
-    hideLoading();
-    debugLog('sistema', '✅ Aplicación iniciada correctamente');
-});
-
-// Esperar a que Firebase esté disponible
-function esperarFirebase() {
-    return new Promise((resolve) => {
-        const checkFirebase = setInterval(() => {
-            if (window.firebaseDB) {
-                clearInterval(checkFirebase);
-                debugLog('firebase', '✅ Firebase disponible');
-                resolve();
-            }
-        }, 100);
-    });
-}
-
-// ========== GESTIÓN DE DATOS (Firebase) ==========
-async function guardarUsuarios() {
-    try {
-        await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
-        debugLog('firebase', '💾 Usuarios guardados en Firebase', { total: usuarios.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar usuarios', error);
-        mostrarError('No se pudieron guardar los usuarios.');
-    }
-}
-
-async function guardarVentas() {
-    try {
-        await window.firebaseDB.set('ventas', 'todas', { lista: ventas });
-        debugLog('firebase', '💾 Ventas guardadas en Firebase', { total: ventas.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar ventas', error);
-        mostrarError('No se pudieron guardar las ventas.');
-    }
-}
-
-async function guardarProductos() {
-    try {
-        await window.firebaseDB.set('productos', 'todos', { lista: productos });
-        debugLog('firebase', '💾 Productos guardados en Firebase', { total: productos.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar productos', error);
-        mostrarError('No se pudieron guardar los productos.');
-    }
-}
-
-async function guardarErrores() {
-    try {
-        await window.firebaseDB.set('errores', 'todos', { lista: erroresReportados });
-        debugLog('firebase', '💾 Errores guardados en Firebase', { total: erroresReportados.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar errores', error);
-    }
-}
-
-async function guardarMesas() {
-    try {
-        await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
-        debugLog('firebase', '💾 Mesas guardadas en Firebase', { total: mesas.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar mesas', error);
-        mostrarError('No se pudieron guardar las mesas.');
-    }
-}
-
-async function guardarMesasConsumo() {
-    try {
-        await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
-        debugLog('firebase', '💾 Mesas de consumo guardadas en Firebase', { total: mesasConsumo.length });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar mesas de consumo', error);
-    }
-}
-
-async function guardarConfiguracion() {
-    try {
-        const config = {
-            tarifaHora: document.getElementById('tarifaHora').value,
-            tarifaExtra5Min: document.getElementById('tarifaExtra5Min').value
-        };
-        await window.firebaseDB.set('configuracion', 'general', config);
-        debugLog('firebase', '⚙️ Configuración guardada en Firebase', config);
-        
-        // Recalcular costos de mesas activas
-        mesas.forEach(mesa => {
-            if (mesa.ocupada) {
-                actualizarTimer(mesa.id);
-            }
-        });
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar configuración', error);
-    }
-}
-
-function guardarSesion() {
-    try {
-        if (usuarioActual) {
-            localStorage.setItem('sesion', JSON.stringify({ usuarioId: usuarioActual.id }));
-            debugLog('sistema', '🔐 Sesión guardada localmente', { usuario: usuarioActual.nombre });
-        } else {
-            localStorage.removeItem('sesion');
-            debugLog('sistema', '🔓 Sesión cerrada');
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al guardar sesión', error);
-    }
-}
-
-async function cargarDatos() {
-    debugLog('firebase', '📂 Cargando datos desde Firebase...');
-    
-    // Cargar usuarios
-    try {
-        const usuariosData = await window.firebaseDB.get('usuarios', 'todos');
-        if (usuariosData && usuariosData.lista) {
-            usuarios = usuariosData.lista;
-            debugLog('firebase', '👥 Usuarios cargados', { total: usuarios.length });
-        } else {
-            usuarios = [{
-                id: 1,
-                username: 'admin',
-                password: 'admin123',
-                nombre: 'Administrador',
-                rol: 'admin'
-            }];
-            await guardarUsuarios();
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al cargar usuarios', error);
-        usuarios = [{
-            id: 1,
-            username: 'admin',
-            password: 'admin123',
-            nombre: 'Administrador',
-            rol: 'admin'
-        }];
-        await guardarUsuarios();
-    }
-
-    // Cargar configuración
-    try {
-        const config = await window.firebaseDB.get('configuracion', 'general');
-        if (config) {
-            document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
-            document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
-            debugLog('firebase', '⚙️ Configuración cargada', config);
-        }
-    } catch (error) {
-        debugLog('error', '⚠️ Error al cargar configuración', error);
-    }
-
-    // Verificar sesión activa
-    try {
-        const sesion = localStorage.getItem('sesion');
-        if (sesion) {
-            const { usuarioId } = JSON.parse(sesion);
-            usuarioActual = usuarios.find(u => u.id === usuarioId);
-            if (usuarioActual) {
-                debugLog('sistema', '✅ Sesión activa encontrada', { usuario: usuarioActual.nombre });
-                mostrarPantallaPrincipal();
-            }
-        }
-    } catch (error) {
-        debugLog('error', '⚠️ Error al verificar sesión', error);
-        localStorage.removeItem('sesion');
-    }
-
-    // Cargar ventas
-    try {
-        const ventasData = await window.firebaseDB.get('ventas', 'todas');
-        if (ventasData && ventasData.lista) {
-            ventas = ventasData.lista;
-            debugLog('firebase', '💰 Ventas cargadas', { total: ventas.length });
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al cargar ventas', error);
-        ventas = [];
-    }
-
-    // Cargar productos
-    try {
-        const productosData = await window.firebaseDB.get('productos', 'todos');
-        if (productosData && productosData.lista) {
-            productos = productosData.lista;
-            debugLog('firebase', '📦 Productos cargados', { total: productos.length });
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al cargar productos', error);
-        productos = [];
-    }
-
-    // Cargar errores
-    try {
-        const erroresData = await window.firebaseDB.get('errores', 'todos');
-        if (erroresData && erroresData.lista) {
-            erroresReportados = erroresData.lista;
-            debugLog('firebase', '⚠️ Errores cargados', { total: erroresReportados.length });
-        }
-    } catch (error) {
-        debugLog('error', '⚠️ Error al cargar errores', error);
-        erroresReportados = [];
-    }
-
-    // Cargar mesas
-    try {
-        const mesasData = await window.firebaseDB.get('mesas', 'billar');
-        if (mesasData && mesasData.lista) {
-            mesas = mesasData.lista;
-            
-            // Limpiar timers viejos
-            Object.keys(timers).forEach(id => {
-                clearInterval(timers[id]);
-            });
-            timers = {};
-            
-            debugLog('firebase', '🎱 Mesas cargadas', { total: mesas.length });
-        } else {
-            mesas = [
-                { id: 1, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-                { id: 2, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-                { id: 3, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-                { id: 4, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] }
-            ];
-            await guardarMesas();
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al cargar mesas', error);
-        mesas = [
-            { id: 1, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-            { id: 2, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-            { id: 3, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
-            { id: 4, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] }
-        ];
-        await guardarMesas();
-    }
-
-    // Cargar mesas de consumo
-    try {
-        const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
-        if (mesasConsumoData && mesasConsumoData.lista) {
-            mesasConsumo = mesasConsumoData.lista;
-            debugLog('firebase', '🍺 Mesas de consumo cargadas', { total: mesasConsumo.length });
-        } else {
-            mesasConsumo = [
-                { id: 1, ocupada: false, consumos: [], total: 0 },
-                { id: 2, ocupada: false, consumos: [], total: 0 }
-            ];
-            await guardarMesasConsumo();
-        }
-    } catch (error) {
-        debugLog('error', '❌ Error al cargar mesas de consumo', error);
-        mesasConsumo = [
-            { id: 1, ocupada: false, consumos: [], total: 0 },
-            { id: 2, ocupada: false, consumos: [], total: 0 }
-        ];
-        await guardarMesasConsumo();
-    }
-}
-
-// ========== FUNCIÓN DE MOSTRAR ERRORES ==========
 function mostrarError(mensaje) {
     alert('⚠️ ' + mensaje);
     debugLog('error', '🚨 Error mostrado al usuario', mensaje);
 }
 
-// ========== LOGIN / LOGOUT ==========
-function handleLogin() {
+// LOGIN / LOGOUT
+window.handleLogin = function() {
     const btnLogin = document.getElementById('btnLogin');
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
@@ -401,9 +74,9 @@ function handleLogin() {
         btnLogin.disabled = false;
         btnLogin.textContent = 'Iniciar Sesión';
     }, 300);
-}
+};
 
-function handleLogout() {
+window.handleLogout = function() {
     debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual.nombre });
     
     Object.keys(timers).forEach(id => {
@@ -415,7 +88,7 @@ function handleLogout() {
     guardarSesion();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('mainScreen').classList.add('hidden');
-}
+};
 
 function mostrarPantallaPrincipal() {
     document.getElementById('loginScreen').classList.add('hidden');
@@ -449,8 +122,8 @@ function mostrarPantallaPrincipal() {
     calcularTotal();
 }
 
-// ========== TABS ==========
-function changeTab(tab, event) {
+// TABS
+window.changeTab = function(tab, event) {
     tabActual = tab;
     debugLog('sistema', '📑 Cambiando tab', { tab });
     
@@ -473,10 +146,10 @@ function changeTab(tab, event) {
     } else if (tab === 'inventario') {
         actualizarInventario();
     }
-}
+};
 
-// ========== GESTIÓN DE MESAS ==========
-async function agregarMesa() {
+// GESTIÓN DE MESAS
+window.agregarMesa = async function() {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden agregar mesas');
         return;
@@ -493,9 +166,9 @@ async function agregarMesa() {
     await guardarMesas();
     actualizarMesas();
     debugLog('timer', '➕ Mesa agregada', { id: nuevoId });
-}
+};
 
-async function eliminarMesa(id) {
+window.eliminarMesa = async function(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar mesas');
         return;
@@ -517,6 +190,29 @@ async function eliminarMesa(id) {
     await guardarMesas();
     actualizarMesas();
     debugLog('timer', '🗑️ Mesa eliminada', { id });
+};
+
+window.toggleMesa = function(id) {
+    const mesa = mesas.find(m => m.id === id);
+    if (!mesa) return;
+    
+    if (mesa.ocupada) {
+        finalizarMesa(id);
+    } else {
+        iniciarMesa(id);
+    }
+};
+
+async function iniciarMesa(id) {
+    const mesa = mesas.find(m => m.id === id);
+    mesa.ocupada = true;
+    mesa.inicio = Date.now();
+    mesa.tiempoTranscurrido = 0;
+    mesa.consumos = [];
+    await guardarMesas();
+    
+    debugLog('timer', '▶️ Mesa iniciada', { id });
+    actualizarMesas();
 }
 
 function actualizarMesas() {
@@ -559,29 +255,6 @@ function actualizarMesas() {
             debugLog('timer', '▶️ Timer reiniciado', { mesa: mesa.id });
         }
     });
-}
-
-function toggleMesa(id) {
-    const mesa = mesas.find(m => m.id === id);
-    if (!mesa) return;
-    
-    if (mesa.ocupada) {
-        finalizarMesa(id);
-    } else {
-        iniciarMesa(id);
-    }
-}
-
-async function iniciarMesa(id) {
-    const mesa = mesas.find(m => m.id === id);
-    mesa.ocupada = true;
-    mesa.inicio = Date.now();
-    mesa.tiempoTranscurrido = 0;
-    mesa.consumos = [];
-    await guardarMesas();
-    
-    debugLog('timer', '▶️ Mesa iniciada', { id });
-    actualizarMesas();
 }
 
 function calcularCostoTiempo(segundos) {
@@ -683,18 +356,18 @@ function actualizarTimer(id) {
     if (costoEl) costoEl.textContent = `S/ ${costo}`;
 }
 
-// ========== GESTIÓN DE VENTAS ==========
-function showModalVentaManual() {
+// VENTAS
+window.showModalVentaManual = function() {
     document.getElementById('modalVentaManual').classList.add('show');
     document.getElementById('ventaDescripcionManual').value = '';
     document.getElementById('ventaMontoManual').value = '';
-}
+};
 
-function closeModalVentaManual() {
+window.closeModalVentaManual = function() {
     document.getElementById('modalVentaManual').classList.remove('show');
-}
+};
 
-async function agregarVentaManual() {
+window.agregarVentaManual = async function() {
     const btn = document.getElementById('btnGuardarVentaManual');
     const descripcion = document.getElementById('ventaDescripcionManual').value.trim();
     const monto = parseFloat(document.getElementById('ventaMontoManual').value);
@@ -719,22 +392,22 @@ async function agregarVentaManual() {
     await guardarVentas();
     actualizarTablaVentas();
     calcularTotal();
-    closeModalVentaManual();
+    window.closeModalVentaManual();
     
     btn.disabled = false;
     btn.textContent = 'Guardar';
     
     debugLog('venta', '✅ Venta manual registrada', { descripcion, monto });
-}
+};
 
-function showModalVentaProductos() {
+window.showModalVentaProductos = function() {
     document.getElementById('modalVentaProductos').classList.add('show');
     renderProductosVenta();
-}
+};
 
-function closeModalVentaProductos() {
+window.closeModalVentaProductos = function() {
     document.getElementById('modalVentaProductos').classList.remove('show');
-}
+};
 
 function renderProductosVenta() {
     const container = document.getElementById('productosVentaContainer');
@@ -770,7 +443,7 @@ function renderProductosVenta() {
     }).join('');
 }
 
-async function agregarVentaProducto(productoId) {
+window.agregarVentaProducto = async function(productoId) {
     const btn = document.getElementById(`btn-vender-${productoId}`);
     if (btn.disabled) return;
     
@@ -829,9 +502,9 @@ async function agregarVentaProducto(productoId) {
     
     btn.disabled = false;
     btn.textContent = 'Vender';
-}
+};
 
-async function eliminarVenta(id) {
+window.eliminarVenta = async function(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar ventas');
         return;
@@ -844,7 +517,7 @@ async function eliminarVenta(id) {
     actualizarTablaVentas();
     calcularTotal();
     debugLog('venta', '🗑️ Venta eliminada', { id });
-}
+};
 
 function actualizarTablaVentas() {
     const tbody = document.getElementById('ventasTable');
@@ -878,8 +551,8 @@ function calcularTotal() {
     }
 }
 
-// ========== GESTIÓN DE INVENTARIO ==========
-function showModalProducto(producto = null) {
+// PRODUCTOS
+window.showModalProducto = function(producto = null) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden gestionar productos');
         return;
@@ -905,14 +578,14 @@ function showModalProducto(producto = null) {
     
     document.getElementById('productoError').classList.add('hidden');
     modal.classList.add('show');
-}
+};
 
-function closeModalProducto() {
+window.closeModalProducto = function() {
     document.getElementById('modalProducto').classList.remove('show');
     productoEditando = null;
-}
+};
 
-async function guardarProducto() {
+window.guardarProducto = async function() {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden agregar o editar productos');
         return;
@@ -948,10 +621,10 @@ async function guardarProducto() {
     
     await guardarProductos();
     actualizarInventario();
-    closeModalProducto();
-}
+    window.closeModalProducto();
+};
 
-async function eliminarProducto(id) {
+window.eliminarProducto = async function(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar productos');
         return;
@@ -962,9 +635,9 @@ async function eliminarProducto(id) {
     productos = productos.filter(p => p.id !== id);
     await guardarProductos();
     actualizarInventario();
-}
+};
 
-function showModalStock(productoId) {
+window.showModalStock = function(productoId) {
     const producto = productos.find(p => p.id === productoId);
     if (!producto) return;
     
@@ -973,14 +646,14 @@ function showModalStock(productoId) {
     document.getElementById('stockActual').textContent = producto.stock;
     document.getElementById('stockAjuste').value = '';
     document.getElementById('modalStock').classList.add('show');
-}
+};
 
-function closeModalStock() {
+window.closeModalStock = function() {
     document.getElementById('modalStock').classList.remove('show');
     productoEditando = null;
-}
+};
 
-async function ajustarStock() {
+window.ajustarStock = async function() {
     const ajuste = parseInt(document.getElementById('stockAjuste').value);
     
     if (isNaN(ajuste) || ajuste === 0) {
@@ -998,8 +671,8 @@ async function ajustarStock() {
     productoEditando.stock = nuevoStock;
     await guardarProductos();
     actualizarInventario();
-    closeModalStock();
-}
+    window.closeModalStock();
+};
 
 function actualizarInventario() {
     const grid = document.getElementById('inventarioGrid');
@@ -1042,8 +715,8 @@ function actualizarInventario() {
     }).join('');
 }
 
-// ========== REPORTES ==========
-function generarReporte() {
+// REPORTES
+window.generarReporte = function() {
     const periodo = document.getElementById('reportePeriodo').value;
     const ahora = new Date();
     let ventasFiltradas = [];
@@ -1092,10 +765,9 @@ function generarReporte() {
             </tr>
         `).join('');
     }
-}
+};
 
-// ========== DESCARGAR REPORTES ==========
-function descargarReporteExcel() {
+window.descargarReporteExcel = function() {
     const periodo = document.getElementById('reportePeriodo').value;
     const ahora = new Date();
     let ventasFiltradas = [];
@@ -1132,7 +804,6 @@ function descargarReporteExcel() {
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
     
-    // Crear CSV
     let csv = 'REPORTE DE VENTAS - ' + nombrePeriodo + '\n\n';
     csv += 'RESUMEN\n';
     csv += 'Total Ventas,S/ ' + totalVentas.toFixed(2) + '\n';
@@ -1147,7 +818,6 @@ function descargarReporteExcel() {
         csv += `"${v.fecha}","${v.tipo}","${v.usuario}",${v.monto.toFixed(2)}\n`;
     });
     
-    // Descargar
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -1155,9 +825,9 @@ function descargarReporteExcel() {
     link.click();
     
     debugLog('sistema', '📥 Reporte Excel descargado', { periodo, ventas: ventasFiltradas.length });
-}
+};
 
-function descargarReportePDF() {
+window.descargarReportePDF = function() {
     const periodo = document.getElementById('reportePeriodo').value;
     const ahora = new Date();
     let ventasFiltradas = [];
@@ -1194,7 +864,6 @@ function descargarReportePDF() {
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
     
-    // Crear HTML para PDF
     const html = `
         <!DOCTYPE html>
         <html>
@@ -1268,19 +937,6 @@ function descargarReportePDF() {
         </html>
     `;
     
-    // Abrir en nueva ventana para imprimir/guardar como PDF
-    const ventana = window.open('', '_blank');
-    ventana.document.write(html);
-    ventana.document.close();
-    
-    // Esperar a que cargue y abrir diálogo de impresión
-    setTimeout(() => {
-        ventana.print();
-    }, 500);
-    
-    debugLog('sistema', '📄 Reporte PDF generado', { periodo, ventas: ventasFiltradas.length });
-}
-    
     try {
         const ventana = window.open('', '_blank');
         if (!ventana) {
@@ -1298,17 +954,21 @@ function descargarReportePDF() {
         debugLog('sistema', '📄 Reporte PDF generado', { periodo, ventas: ventasFiltradas.length });
     } catch (error) {
         console.error('Error generando PDF:', error);
-// ========== SISTEMA DE ERRORES ==========
-function showModalError() {
+        alert('Error al generar el PDF');
+    }
+};
+
+// ERRORES
+window.showModalError = function() {
     document.getElementById('modalError').classList.add('show');
     document.getElementById('errorMensaje').value = '';
-}
+};
 
-function closeModalError() {
+window.closeModalError = function() {
     document.getElementById('modalError').classList.remove('show');
-}
+};
 
-async function reportarError() {
+window.reportarError = async function() {
     const mensaje = document.getElementById('errorMensaje').value.trim();
     
     if (!mensaje) {
@@ -1326,26 +986,26 @@ async function reportarError() {
     
     erroresReportados.push(error);
     await guardarErrores();
-    closeModalError();
+    window.closeModalError();
     alert('Error reportado correctamente. El administrador lo revisará.');
-}
+};
 
-async function marcarErrorResuelto(id) {
+window.marcarErrorResuelto = async function(id) {
     const error = erroresReportados.find(e => e.id === id);
     if (error) {
         error.resuelto = true;
         await guardarErrores();
         actualizarErrores();
     }
-}
+};
 
-async function eliminarError(id) {
+window.eliminarError = async function(id) {
     if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
     
     erroresReportados = erroresReportados.filter(e => e.id !== id);
     await guardarErrores();
     actualizarErrores();
-}
+};
 
 function actualizarErrores() {
     const container = document.getElementById('erroresContainer');
@@ -1378,8 +1038,8 @@ function actualizarErrores() {
     `).join('');
 }
 
-// ========== GESTIÓN DE USUARIOS ==========
-function toggleUsuarios() {
+// USUARIOS
+window.toggleUsuarios = function() {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores tienen acceso a la gestión de usuarios.');
         return;
@@ -1391,16 +1051,16 @@ function toggleUsuarios() {
     if (!panel.classList.contains('hidden')) {
         actualizarTablaUsuarios();
     }
-}
+};
 
-function showModalUsuarioId(id) {
+window.showModalUsuarioId = function(id) {
     const usuario = usuarios.find(u => u.id === id);
     if (usuario) {
-        showModalUsuario(usuario);
+        window.showModalUsuario(usuario);
     }
-}
+};
 
-function showModalUsuario(usuario = null) {
+window.showModalUsuario = function(usuario = null) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden gestionar usuarios');
         return;
@@ -1427,14 +1087,14 @@ function showModalUsuario(usuario = null) {
     }
     
     modal.classList.add('show');
-}
+};
 
-function closeModalUsuario() {
+window.closeModalUsuario = function() {
     document.getElementById('modalUsuario').classList.remove('show');
     usuarioEditando = null;
-}
+};
 
-async function crearUsuario() {
+window.crearUsuario = async function() {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden gestionar usuarios');
         return;
@@ -1503,10 +1163,10 @@ async function crearUsuario() {
     
     await guardarUsuarios();
     actualizarTablaUsuarios();
-    closeModalUsuario();
-}
+    window.closeModalUsuario();
+};
 
-async function eliminarUsuario(id) {
+window.eliminarUsuario = async function(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar usuarios');
         return;
@@ -1522,7 +1182,7 @@ async function eliminarUsuario(id) {
     usuarios = usuarios.filter(u => u.id !== id);
     await guardarUsuarios();
     actualizarTablaUsuarios();
-}
+};
 
 function actualizarTablaUsuarios() {
     const tbody = document.getElementById('usuariosTable');
@@ -1553,8 +1213,8 @@ function actualizarTablaUsuarios() {
     }).join('');
 }
 
-// ========== MESAS DE CONSUMO ==========
-async function agregarMesaConsumo() {
+// MESAS DE CONSUMO
+window.agregarMesaConsumo = async function() {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden agregar mesas');
         return;
@@ -1569,9 +1229,9 @@ async function agregarMesaConsumo() {
     });
     await guardarMesasConsumo();
     actualizarMesasConsumo();
-}
+};
 
-async function eliminarMesaConsumo(id) {
+window.eliminarMesaConsumo = async function(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar mesas');
         return;
@@ -1589,7 +1249,7 @@ async function eliminarMesaConsumo(id) {
     await guardarMesasConsumo();
     actualizarMesasConsumo();
     debugLog('sistema', '🗑️ Mesa de consumo eliminada', { id });
-}
+};
 
 function actualizarMesasConsumo() {
     const container = document.getElementById('mesasConsumoContainer');
@@ -1638,15 +1298,15 @@ function actualizarMesasConsumo() {
     }).join('');
 }
 
-async function iniciarMesaConsumo(id) {
+window.iniciarMesaConsumo = async function(id) {
     const mesa = mesasConsumo.find(m => m.id === id);
     mesa.ocupada = true;
     mesa.consumos = [];
     await guardarMesasConsumo();
     actualizarMesasConsumo();
-}
+};
 
-function abrirModalConsumo(mesaId, tipo) {
+window.abrirModalConsumo = function(mesaId, tipo) {
     mesaConsumoActual = mesaId;
     tipoMesaActual = tipo;
     
@@ -1656,7 +1316,7 @@ function abrirModalConsumo(mesaId, tipo) {
     renderProductosConsumo();
     actualizarCuentaActual();
     document.getElementById('modalConsumo').classList.add('show');
-}
+};
 
 function renderProductosConsumo() {
     const grid = document.getElementById('productosConsumoGrid');
@@ -1674,7 +1334,7 @@ function renderProductosConsumo() {
     `).join('');
 }
 
-async function agregarConsumoMesa(productoId) {
+window.agregarConsumoMesa = async function(productoId) {
     const producto = productos.find(p => p.id === productoId);
     if (!producto || producto.stock <= 0) {
         mostrarError('Producto sin stock disponible');
@@ -1718,204 +1378,247 @@ async function agregarConsumoMesa(productoId) {
     actualizarCuentaActual();
     actualizarMesasConsumo();
     actualizarInventario();
-}
+};
 
 function actualizarCuentaActual() {
     const mesa = tipoMesaActual === 'billar' 
         ? mesas.find(m => m.id === mesaConsumoActual)
         : mesasConsumo.find(m => m.id === mesaConsumoActual);
     
-    if (!mesa) return;
-    if (!mesa.consumos) mesa.consumos = [];
-    
     const lista = document.getElementById('cuentaActualLista');
-    const total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    const totalEl = document.getElementById('totalCuentaActual');
     
-    if (mesa.consumos.length === 0) {
-        lista.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Sin consumos</p>';
-    } else {
-        lista.innerHTML = mesa.consumos.map(c => `
-            <div style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #ddd;">
-                <span>${c.cantidad}x ${c.nombre}</span>
-                <span>S/ ${(c.precio * c.cantidad).toFixed(2)}</span>
-            </div>
-        `).join('');
+    if (!mesa || !mesa.consumos || mesa.consumos.length === 0) {
+        lista.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No hay consumos agregados</div>';
+        totalEl.textContent = 'S/ 0.00';
+        return;
     }
     
-    document.getElementById('totalCuentaActual').textContent = `S/ ${total.toFixed(2)}`;
+    const total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    
+    lista.innerHTML = mesa.consumos.map(c => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: white; border-radius: 8px; margin-bottom: 8px;">
+            <div>
+                <div style="font-weight: 600;">${c.nombre}</div>
+                <div style="font-size: 13px; color: #666;">S/ ${c.precio.toFixed(2)} c/u</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 18px; font-weight: 600;">x${c.cantidad}</span>
+                <span style="font-size: 16px; font-weight: bold; color: #2d7a4d;">S/ ${(c.precio * c.cantidad).toFixed(2)}</span>
+                <button class="btn-small btn-red" onclick="eliminarConsumoMesa(${c.id})" style="padding: 5px 10px;">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    totalEl.textContent = `S/ ${total.toFixed(2)}`;
 }
 
-async function aplicarConsumos() {
+window.eliminarConsumoMesa = async function(productoId) {
     const mesa = tipoMesaActual === 'billar' 
         ? mesas.find(m => m.id === mesaConsumoActual)
         : mesasConsumo.find(m => m.id === mesaConsumoActual);
     
-    if (!mesa || !mesa.consumos || mesa.consumos.length === 0) {
-        mostrarError('No hay consumos para agregar');
-        return;
+    const consumo = mesa.consumos.find(c => c.id === productoId);
+    if (!consumo) return;
+    
+    const producto = productos.find(p => p.id === productoId);
+    if (producto) {
+        producto.stock += consumo.cantidad;
     }
     
-    cerrarModalConsumo();
-    actualizarMesasConsumo();
-    actualizarMesas();
+    mesa.consumos = mesa.consumos.filter(c => c.id !== productoId);
     
-    alert('✅ Consumos agregados correctamente');
-}
+    await guardarProductos();
+    if (tipoMesaActual === 'billar') {
+        await guardarMesas();
+    } else {
+        await guardarMesasConsumo();
+    }
+    
+    renderProductosConsumo();
+    actualizarCuentaActual();
+    actualizarMesasConsumo();
+    actualizarInventario();
+};
 
-function cerrarModalConsumo() {
+window.closeModalConsumo = function() {
     document.getElementById('modalConsumo').classList.remove('show');
     mesaConsumoActual = null;
     tipoMesaActual = null;
-}
+};
 
-async function finalizarMesaConsumo(id) {
+window.finalizarMesaConsumo = async function(id) {
     const mesa = mesasConsumo.find(m => m.id === id);
     if (!mesa || !mesa.ocupada) return;
     
     const total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
     
-    if (total === 0) {
-        if (!confirm('No hay consumos registrados. ¿Deseas cerrar la mesa de todos modos?')) {
-            return;
-        }
+    if (total <= 0) {
+        mostrarError('No hay consumos para cobrar');
+        return;
     }
     
-    if (total > 0) {
-        const venta = {
-            id: Date.now(),
-            tipo: `Mesa Consumo ${id}`,
-            monto: total,
-            fecha: new Date().toLocaleString(),
-            usuario: usuarioActual.nombre
-        };
-        
-        ventas.push(venta);
-        await guardarVentas();
-    }
+    const venta = {
+        id: Date.now(),
+        tipo: `Mesa Consumo ${id}`,
+        monto: total,
+        fecha: new Date().toLocaleString(),
+        usuario: usuarioActual.nombre
+    };
+    
+    ventas.push(venta);
+    await guardarVentas();
     
     mesa.ocupada = false;
     mesa.consumos = [];
     mesa.total = 0;
-    
     await guardarMesasConsumo();
+    
     actualizarMesasConsumo();
     actualizarTablaVentas();
     calcularTotal();
     
-    if (total > 0) {
-        alert(`✅ Venta cobrada: S/ ${total.toFixed(2)}`);
-    } else {
-        alert('✅ Mesa cerrada sin consumos');
+    alert(`Mesa ${id} cobrada.\nTotal: S/ ${total.toFixed(2)}`);
+};
+
+// FIREBASE / ALMACENAMIENTO
+async function guardarMesas() {
+    try {
+        localStorage.setItem('billar_mesas', JSON.stringify(mesas));
+        debugLog('firebase', '💾 Mesas guardadas', { cantidad: mesas.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando mesas', error);
     }
 }
 
-// ========== UTILIDADES ==========
-function showLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.classList.remove('hidden');
+async function guardarMesasConsumo() {
+    try {
+        localStorage.setItem('billar_mesas_consumo', JSON.stringify(mesasConsumo));
+        debugLog('firebase', '💾 Mesas de consumo guardadas', { cantidad: mesasConsumo.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando mesas de consumo', error);
     }
 }
 
-function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-        overlay.classList.add('hidden');
+async function guardarVentas() {
+    try {
+        localStorage.setItem('billar_ventas', JSON.stringify(ventas));
+        debugLog('firebase', '💾 Ventas guardadas', { cantidad: ventas.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando ventas', error);
     }
 }
 
-// ========== EXPONER FUNCIONES REALES ==========
-function asignarFuncionesReales() {
-    window.handleLogin = handleLogin;
-    window.handleLogout = handleLogout;
-    window.changeTab = changeTab;
-    window.agregarMesa = agregarMesa;
-    window.eliminarMesa = eliminarMesa;
-    window.toggleMesa = toggleMesa;
-    window.showModalVentaManual = showModalVentaManual;
-    window.closeModalVentaManual = closeModalVentaManual;
-    window.agregarVentaManual = agregarVentaManual;
-    window.showModalVentaProductos = showModalVentaProductos;
-    window.closeModalVentaProductos = closeModalVentaProductos;
-    window.agregarVentaProducto = agregarVentaProducto;
-    window.eliminarVenta = eliminarVenta;
-    window.showModalProducto = showModalProducto;
-    window.closeModalProducto = closeModalProducto;
-    window.guardarProducto = guardarProducto;
-    window.eliminarProducto = eliminarProducto;
-    window.showModalStock = showModalStock;
-    window.closeModalStock = closeModalStock;
-    window.ajustarStock = ajustarStock;
-    window.generarReporte = generarReporte;
-    window.showModalError = showModalError;
-    window.closeModalError = closeModalError;
-    window.reportarError = reportarError;
-    window.marcarErrorResuelto = marcarErrorResuelto;
-    window.eliminarError = eliminarError;
-    window.toggleUsuarios = toggleUsuarios;
-    window.showModalUsuarioId = showModalUsuarioId;
-    window.showModalUsuario = showModalUsuario;
-    window.closeModalUsuario = closeModalUsuario;
-    window.crearUsuario = crearUsuario;
-    window.eliminarUsuario = eliminarUsuario;
-    window.agregarMesaConsumo = agregarMesaConsumo;
-    window.iniciarMesaConsumo = iniciarMesaConsumo;
-    window.abrirModalConsumo = abrirModalConsumo;
-    window.agregarConsumoMesa = agregarConsumoMesa;
-    window.aplicarConsumos = aplicarConsumos;
-    window.cerrarModalConsumo = cerrarModalConsumo;
-    window.finalizarMesaConsumo = finalizarMesaConsumo;
-    window.guardarConfiguracion = guardarConfiguracion;
-    window.eliminarMesaConsumo = eliminarMesaConsumo;
-    window.descargarReporteExcel = descargarReporteExcel;
-    window.descargarReportePDF = descargarReportePDF;
+async function guardarProductos() {
+    try {
+        localStorage.setItem('billar_productos', JSON.stringify(productos));
+        debugLog('firebase', '💾 Productos guardados', { cantidad: productos.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando productos', error);
+    }
+}
+
+async function guardarUsuarios() {
+    try {
+        localStorage.setItem('billar_usuarios', JSON.stringify(usuarios));
+        debugLog('firebase', '💾 Usuarios guardados', { cantidad: usuarios.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando usuarios', error);
+    }
+}
+
+async function guardarErrores() {
+    try {
+        localStorage.setItem('billar_errores', JSON.stringify(erroresReportados));
+        debugLog('firebase', '💾 Errores guardados', { cantidad: erroresReportados.length });
+    } catch (error) {
+        debugLog('error', '❌ Error guardando errores', error);
+    }
+}
+
+function guardarSesion() {
+    try {
+        if (usuarioActual) {
+            localStorage.setItem('billar_sesion', JSON.stringify(usuarioActual));
+        } else {
+            localStorage.removeItem('billar_sesion');
+        }
+    } catch (error) {
+        debugLog('error', '❌ Error guardando sesión', error);
+    }
+}
+
+function cargarDatos() {
+    try {
+        const mesasGuardadas = localStorage.getItem('billar_mesas');
+        if (mesasGuardadas) {
+            mesas = JSON.parse(mesasGuardadas);
+        }
+        
+        const mesasConsumoGuardadas = localStorage.getItem('billar_mesas_consumo');
+        if (mesasConsumoGuardadas) {
+            mesasConsumo = JSON.parse(mesasConsumoGuardadas);
+        }
+        
+        const ventasGuardadas = localStorage.getItem('billar_ventas');
+        if (ventasGuardadas) {
+            ventas = JSON.parse(ventasGuardadas);
+        }
+        
+        const productosGuardados = localStorage.getItem('billar_productos');
+        if (productosGuardados) {
+            productos = JSON.parse(productosGuardados);
+        }
+        
+        const usuariosGuardados = localStorage.getItem('billar_usuarios');
+        if (usuariosGuardados) {
+            usuarios = JSON.parse(usuariosGuardados);
+        } else {
+            usuarios = [
+                { id: 1, username: 'admin', password: 'admin123', nombre: 'Administrador', rol: 'admin' },
+                { id: 2, username: 'empleado', password: 'emp123', nombre: 'Empleado 1', rol: 'empleado' }
+            ];
+            guardarUsuarios();
+        }
+        
+        const erroresGuardados = localStorage.getItem('billar_errores');
+        if (erroresGuardados) {
+            erroresReportados = JSON.parse(erroresGuardados);
+        }
+        
+        const sesionGuardada = localStorage.getItem('billar_sesion');
+        if (sesionGuardada) {
+            const sesion = JSON.parse(sesionGuardada);
+            const usuario = usuarios.find(u => u.id === sesion.id);
+            if (usuario) {
+                usuarioActual = usuario;
+                mostrarPantallaPrincipal();
+            }
+        }
+        
+        debugLog('firebase', '✅ Datos cargados exitosamente', {
+            mesas: mesas.length,
+            mesasConsumo: mesasConsumo.length,
+            ventas: ventas.length,
+            productos: productos.length,
+            usuarios: usuarios.length
+        });
+    } catch (error) {
+        debugLog('error', '❌ Error cargando datos', error);
+    }
+}
+
+// INICIALIZACIÓN
+document.addEventListener('DOMContentLoaded', function() {
+    debugLog('sistema', '🚀 Iniciando aplicación de billar...');
+    cargarDatos();
     
-    console.log('%c✅ Funciones reales asignadas correctamente', 'color: #28a745; font-weight: bold;');
-}
-
-// ========== MANEJO DE ERRORES GLOBALES ==========
-window.addEventListener('error', async function(event) {
-    debugLog('error', '🚨 Error no capturado', {
-        mensaje: event.message,
-        archivo: event.filename,
-        linea: event.lineno
-    });
-    
-    if (usuarioActual) {
-        const errorLog = {
-            id: Date.now(),
-            mensaje: `Error del sistema: ${event.message}`,
-            usuario: usuarioActual.nombre,
-            fecha: new Date().toLocaleString(),
-            resuelto: false
-        };
-        erroresReportados.push(errorLog);
-        await guardarErrores();
+    if (!usuarioActual) {
+        document.getElementById('loginScreen').classList.remove('hidden');
+        document.getElementById('mainScreen').classList.add('hidden');
     }
+    
+    debugLog('sistema', '✅ Aplicación iniciada correctamente');
 });
-
-// ========== PREVENIR PÉRDIDA DE DATOS ==========
-window.addEventListener('beforeunload', function(e) {
-    const mesasOcupadas = mesas.filter(m => m.ocupada).length;
-    const mesasConsumoOcupadas = mesasConsumo.filter(m => m.ocupada).length;
-    
-    if (mesasOcupadas > 0 || mesasConsumoOcupadas > 0) {
-        const mensaje = '⚠️ Hay mesas ocupadas. ¿Estás seguro de cerrar?';
-        e.preventDefault();
-        e.returnValue = mensaje;
-        return mensaje;
-    }
-});
-
-// ========== LOG DE SISTEMA ==========
-console.log('%c🎱 Sistema de Gestión de Billar v2.0 - Firebase Edition', 
-    'background: #2d7a4d; color: white; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 5px;');
-console.log('%c✅ Conectado a Firebase Firestore', 
-    'color: #ffc107; font-size: 14px; font-weight: bold; margin-top: 10px;');
-console.log('%c📡 Datos sincronizados en tiempo real', 
-    'color: #28a745; font-size: 14px; font-weight: bold;');
-    
-if (DEBUG_MODE) {
-    console.log('%c🔧 Modo DEBUG activado', 
-        'background: #fd7e14; color: white; padding: 5px 10px; border-radius: 3px; margin-top: 10px;');
-}
