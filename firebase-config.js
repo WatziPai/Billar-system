@@ -14,19 +14,12 @@ import {
 
 // Tu configuración de Firebase
 const firebaseConfig = {
-
   apiKey: "AIzaSyCMJbPKQ434-pSvCXnleNkancO1RN7kn_Y",
-
   authDomain: "billar-system.firebaseapp.com",
-
   projectId: "billar-system",
-
   storageBucket: "billar-system.firebasestorage.app",
-
   messagingSenderId: "503671587493",
-
   appId: "1:503671587493:web:88e1a1ddfb7bd21ba4c34c"
-
 };
 
 // Inicializar Firebase
