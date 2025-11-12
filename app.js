@@ -13,7 +13,7 @@ function debugLog(categoria, mensaje, datos = null) {
         firebase: 'background: #ffc107; color: black; padding: 2px 5px; border-radius: 3px;'
     };
     
-    console.log(`%c${categoria.toUpperCase()}`, estilos[categoria] || '', mensaje, datos || '');
+     console.log(`%c${categoria.toUpperCase()}`, estilos[categoria] || '', mensaje, datos || '');
 }
 
 
