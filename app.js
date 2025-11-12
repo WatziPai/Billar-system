@@ -787,7 +787,6 @@ window.ajustarStock = async function() {
     actualizarInventario();
     window.closeModalStock();
 };
-
 function actualizarInventario() {
     const grid = document.getElementById('inventarioGrid');
     if (!grid) return;
@@ -831,8 +830,14 @@ function actualizarInventario() {
 
 // ========== REPORTES ==========
 function generarReporte() {
+    debugLog('sistema', '📊 Generando reporte...');
+    
     const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
     const cantidadVentas = ventas.length;
+    
+    // Separar ventas por tipo
+    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     
     const ventasPorUsuario = {};
     ventas.forEach(v => {
@@ -843,25 +848,60 @@ function generarReporte() {
         ventasPorUsuario[v.usuario].total += v.monto;
     });
     
+    // Actualizar cards del reporte (usando los IDs correctos del HTML)
     const totalEl = document.getElementById('reporteTotalVentas');
-    const cantidadEl = document.getElementById('reporteCantidadVentas');
-    const tbody = document.getElementById('reporteUsuariosTable');
+    const mesasEl = document.getElementById('reporteVentasMesas');
+    const productosEl = document.getElementById('reporteVentasProductos');
+    const transaccionesEl = document.getElementById('reporteTransacciones');
+    const detalleTable = document.getElementById('reporteDetalleTable');
     
-    if (totalEl) totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
-    if (cantidadEl) cantidadEl.textContent = cantidadVentas;
+    if (!totalEl || !mesasEl || !productosEl || !transaccionesEl || !detalleTable) {
+        debugLog('error', '⚠️ Elementos del reporte no encontrados en el DOM');
+        console.error('Elementos faltantes:', {
+            totalEl: !!totalEl,
+            mesasEl: !!mesasEl,
+            productosEl: !!productosEl,
+            transaccionesEl: !!transaccionesEl,
+            detalleTable: !!detalleTable
+        });
+        return;
+    }
     
-    if (tbody) {
-        tbody.innerHTML = Object.entries(ventasPorUsuario).map(([usuario, datos]) => `
+    totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
+    mesasEl.textContent = `S/ ${ventasMesas.toFixed(2)}`;
+    productosEl.textContent = `S/ ${ventasProductos.toFixed(2)}`;
+    transaccionesEl.textContent = cantidadVentas;
+    
+    // Tabla de detalle
+    if (ventas.length === 0) {
+        detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
+    } else {
+        const ventasOrdenadas = [...ventas].reverse();
+        detalleTable.innerHTML = ventasOrdenadas.map(v => `
             <tr>
-                <td>${usuario}</td>
-                <td style="text-align: center;">${datos.cantidad}</td>
-                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${datos.total.toFixed(2)}</td>
+                <td style="font-size: 13px;">${v.fecha}</td>
+                <td>${v.tipo}</td>
+                <td style="font-size: 13px; color: #666;">${v.usuario}</td>
+                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
             </tr>
         `).join('');
     }
     
-    debugLog('sistema', '📊 Reporte generado', { totalVentas, cantidadVentas, usuarios: Object.keys(ventasPorUsuario).length });
+    debugLog('sistema', '✅ Reporte generado correctamente', { 
+        totalVentas, 
+        cantidadVentas, 
+        ventasMesas,
+        ventasProductos
+    });
 }
+
+window.descargarReporteExcel = function() {
+    mostrarError('Función de descarga Excel en desarrollo');
+};
+
+window.descargarReportePDF = function() {
+    mostrarError('Función de descarga PDF en desarrollo');
+};
 
 window.exportarReporte = function() {
     const fecha = new Date().toLocaleString().replace(/[/:]/g, '-');
@@ -891,17 +931,17 @@ window.exportarReporte = function() {
 };
 
 // ========== ERRORES ==========
-window.showModalReportarError = function() {
-    document.getElementById('modalReportarError').classList.add('show');
-    document.getElementById('errorDescripcion').value = '';
+window.showModalError = function() {
+    document.getElementById('modalError').classList.add('show');
+    document.getElementById('errorMensaje').value = '';
 };
 
-window.closeModalReportarError = function() {
-    document.getElementById('modalReportarError').classList.remove('show');
+window.closeModalError = function() {
+    document.getElementById('modalError').classList.remove('show');
 };
 
 window.reportarError = async function() {
-    const descripcion = document.getElementById('errorDescripcion').value.trim();
+    const descripcion = document.getElementById('errorMensaje').value.trim();
     
     if (!descripcion) {
         mostrarError('Por favor describe el error');
@@ -920,7 +960,9 @@ window.reportarError = async function() {
     await guardarErrores();
     
     alert('Error reportado correctamente. Gracias por tu reporte.');
-    window.closeModalReportarError();
+    window.closeModalError();
+    
+    debugLog('sistema', '⚠️ Error reportado', { descripcion });
 };
 
 window.toggleEstadoError = async function(id) {
@@ -941,34 +983,43 @@ window.eliminarError = async function(id) {
 };
 
 function actualizarErrores() {
-    const tbody = document.getElementById('erroresTable');
-    if (!tbody) return;
+    const container = document.getElementById('erroresContainer');
+    if (!container) {
+        debugLog('error', '⚠️ Contenedor de errores no encontrado');
+        return;
+    }
     
     if (erroresReportados.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 30px; color: #999;">No hay errores reportados</td></tr>';
+        container.innerHTML = '<div style="text-align: center; padding: 50px; color: #999;"><p style="font-size: 48px; margin: 0;">✅</p><p style="margin-top: 10px;">No hay errores reportados</p></div>';
         return;
     }
     
     const erroresOrdenados = [...erroresReportados].reverse();
     
-    tbody.innerHTML = erroresOrdenados.map(e => `
-        <tr>
-            <td style="font-size: 13px;">${e.fecha}</td>
-            <td>${e.descripcion}</td>
-            <td style="font-size: 13px; color: #666;">${e.usuario}</td>
-            <td style="text-align: center;">
+    container.innerHTML = erroresOrdenados.map(e => `
+        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}">
+            <div class="error-header">
                 <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}">
                     ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
                 </span>
-            </td>
-            <td style="text-align: center;">
-                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="margin-right: 5px;">
-                    ${e.estado === 'pendiente' ? '✓' : '↻'}
+                <span style="font-size: 13px; color: #666;">${e.fecha}</span>
+            </div>
+            <div class="error-body">
+                <p><strong>Descripción:</strong> ${e.descripcion}</p>
+                <p style="margin-top: 8px; color: #666;"><strong>Reportado por:</strong> ${e.usuario}</p>
+            </div>
+            <div class="error-actions">
+                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})">
+                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
                 </button>
-                <button class="btn-small btn-red" onclick="eliminarError(${e.id})">🗑️</button>
-            </td>
-        </tr>
+                <button class="btn-small btn-red" onclick="eliminarError(${e.id})">
+                    🗑️ Eliminar
+                </button>
+            </div>
+        </div>
     `).join('');
+    
+    debugLog('sistema', '⚠️ Errores actualizados', { total: erroresReportados.length });
 }
 
 // ========== USUARIOS ==========
@@ -1213,6 +1264,7 @@ window.abrirModalConsumo = function(mesaId, tipo) {
     tipoMesaActual = tipo;
     
     document.getElementById('modalConsumo').classList.add('show');
+    document.getElementById('consumoModalTitle').textContent = `Consumo - ${tipo === 'billar' ? 'Mesa de Billar' : 'Mesa de Consumo'} ${mesaId}`;
     renderProductosConsumo();
     actualizarListaConsumos();
 };
@@ -1224,10 +1276,15 @@ window.closeModalConsumo = function() {
 };
 
 function renderProductosConsumo() {
-    const container = document.getElementById('productosConsumoContainer');
+    const container = document.getElementById('productosConsumoGrid');
+    
+    if (!container) {
+        debugLog('error', '⚠️ Contenedor de productos de consumo no encontrado');
+        return;
+    }
     
     if (productos.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay productos disponibles.</p>';
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No hay productos disponibles.</p>';
         return;
     }
     
@@ -1235,17 +1292,20 @@ function renderProductosConsumo() {
         const disponible = p.stock > 0;
         
         return `
-            <div class="producto-consumo-item ${!disponible ? 'no-stock' : ''}">
-                <div>
-                    <div style="font-weight: 600;">${p.nombre}</div>
-                    <div style="font-size: 14px; color: #666;">S/ ${p.precio.toFixed(2)} | Stock: ${p.stock}</div>
+            <div class="producto-consumo-card ${!disponible ? 'no-stock' : ''}">
+                <div class="producto-consumo-info">
+                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">${p.nombre}</div>
+                    <div style="font-size: 14px; color: #666; margin-bottom: 5px;">S/ ${p.precio.toFixed(2)}</div>
+                    <div style="font-size: 13px; color: ${p.stock <= 5 ? '#dc3545' : '#28a745'};">
+                        Stock: ${p.stock}
+                    </div>
                 </div>
                 ${disponible ? `
-                    <button class="btn btn-green btn-small" onclick="agregarConsumo(${p.id})">
-                        Agregar
+                    <button class="btn btn-green btn-small" onclick="agregarConsumo(${p.id})" style="width: 100%;">
+                        ➕ Agregar
                     </button>
                 ` : `
-                    <button class="btn btn-red btn-small" disabled>
+                    <button class="btn btn-red btn-small" disabled style="width: 100%;">
                         Agotado
                     </button>
                 `}
@@ -1377,3 +1437,4 @@ function actualizarListaConsumos() {
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
 }
+
