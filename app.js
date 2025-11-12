@@ -19,17 +19,15 @@ function debugLog(categoria, mensaje, datos = null) {
 // ========== IMPORTAR FIREBASE ==========
 import { db } from './firebase-config.js';
 import { 
-    collection, 
-    doc, 
-    getDocs, 
-    getDoc,
-    setDoc, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc,
-    query,
-    orderBy,
-    onSnapshot
+    collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  addDoc,      // si usas addDoc también agrégalo aquí
+  updateDoc,
+  deleteDoc,
+  onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== VARIABLES GLOBALES ==========
