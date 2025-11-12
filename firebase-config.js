@@ -26,7 +26,6 @@ export {
   setDoc,
   getDoc,
   getDocs,
-  addDoc,      // si usas addDoc también agrégalo aquí
   updateDoc,
   deleteDoc,
   onSnapshot
