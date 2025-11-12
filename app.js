@@ -16,18 +16,7 @@ function debugLog(categoria, mensaje, datos = null) {
     console.log(`%c${categoria.toUpperCase()}`, estilos[categoria] || '', mensaje, datos || '');
 }
 
-// ========== IMPORTAR FIREBASE ==========
-import { db } from './firebase-config.js';
-import { 
-    collection,
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  updateDoc,
-  deleteDoc,
-  onSnapshot
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
 
 // ========== VARIABLES GLOBALES ==========
 let usuarioActual = null;
