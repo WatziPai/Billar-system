@@ -36,12 +36,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación...');
     showLoading();
     
-    // Esperar a que Firebase esté listo
     await esperarFirebase();
-    
     await cargarDatos();
     
-    // Enter en login
     const loginPassword = document.getElementById('loginPassword');
     if (loginPassword) {
         loginPassword.addEventListener('keypress', function(e) {
@@ -53,7 +50,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '✅ Aplicación iniciada correctamente');
 });
 
-// Esperar a que Firebase esté disponible
 function esperarFirebase() {
     return new Promise((resolve) => {
         const checkFirebase = setInterval(() => {
@@ -64,7 +60,6 @@ function esperarFirebase() {
             }
         }, 100);
         
-        // Timeout de seguridad
         setTimeout(() => {
             clearInterval(checkFirebase);
             if (!window.firebaseDB) {
@@ -81,7 +76,6 @@ async function cargarDatos() {
     debugLog('firebase', '📂 Cargando datos desde Firebase...');
     
     try {
-        // Cargar usuarios
         const usuariosData = await window.firebaseDB.get('usuarios', 'todos');
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
@@ -97,14 +91,12 @@ async function cargarDatos() {
             await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
         }
         
-        // Cargar configuración
         const config = await window.firebaseDB.get('configuracion', 'general');
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
         
-        // Verificar sesión activa
         const sesion = localStorage.getItem('sesion');
         if (sesion) {
             const { usuarioId } = JSON.parse(sesion);
@@ -115,19 +107,15 @@ async function cargarDatos() {
             }
         }
         
-        // Cargar ventas
         const ventasData = await window.firebaseDB.get('ventas', 'todas');
         ventas = (ventasData && ventasData.lista) ? ventasData.lista : [];
         
-        // Cargar productos
         const productosData = await window.firebaseDB.get('productos', 'todos');
         productos = (productosData && productosData.lista) ? productosData.lista : [];
         
-        // Cargar errores
         const erroresData = await window.firebaseDB.get('errores', 'todos');
         erroresReportados = (erroresData && erroresData.lista) ? erroresData.lista : [];
         
-        // Cargar mesas
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
@@ -141,7 +129,6 @@ async function cargarDatos() {
             await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
         }
         
-        // Cargar mesas de consumo
         const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
         if (mesasConsumoData && mesasConsumoData.lista) {
             mesasConsumo = mesasConsumoData.lista;
@@ -445,19 +432,53 @@ async function finalizarMesa(id) {
     const mesa = mesas.find(m => m.id === id);
     if (!mesa || !mesa.ocupada) return;
     
-    const resultado = calcularCostoTiempo(mesa.tiempoTranscurrido);
-    let totalFinal = resultado.costo;
+    const horaInicio = new Date(mesa.inicio).toLocaleString('es-PE', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+    const horaFin = new Date().toLocaleString('es-PE', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
     
+    const resultado = calcularCostoTiempo(mesa.tiempoTranscurrido);
+    const costoTiempo = resultado.costo;
+    
+    let totalConsumos = 0;
+    let detalleConsumos = [];
     if (mesa.consumos && mesa.consumos.length > 0) {
-        totalFinal += mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+        mesa.consumos.forEach(c => {
+            const subtotal = c.precio * c.cantidad;
+            totalConsumos += subtotal;
+            detalleConsumos.push({
+                producto: c.nombre,
+                cantidad: c.cantidad,
+                precioUnitario: c.precio,
+                subtotal: subtotal
+            });
+        });
     }
+    
+    const totalFinal = costoTiempo + totalConsumos;
     
     const venta = {
         id: Date.now(),
-        tipo: `Mesa ${mesa.id} (${resultado.minutos} min)`,
+        tipo: 'Mesa Billar',
+        tipoDetalle: `Mesa ${mesa.id}`,
         monto: totalFinal,
         fecha: new Date().toLocaleString(),
-        usuario: usuarioActual.nombre
+        usuario: usuarioActual.nombre,
+        detalle: {
+            mesaId: mesa.id,
+            horaInicio: horaInicio,
+            horaFin: horaFin,
+            tiempoMinutos: resultado.minutos,
+            tiempoHoras: resultado.horas,
+            tiempoMinutosExtra: resultado.minutosExtra,
+            costoTiempo: costoTiempo,
+            consumos: detalleConsumos,
+            totalConsumos: totalConsumos
+        }
     };
     
     ventas.push(venta);
@@ -472,7 +493,7 @@ async function finalizarMesa(id) {
     mesa.consumos = [];
     await guardarMesas();
     
-    alert(`Mesa ${id} finalizada.\nTiempo: ${resultado.minutos} minutos\nTotal: S/ ${totalFinal.toFixed(2)}`);
+    alert(`Mesa ${id} finalizada.\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
     
     actualizarMesas();
     actualizarTablaVentas();
@@ -525,7 +546,8 @@ window.agregarVentaManual = async function() {
     
     const venta = {
         id: Date.now(),
-        tipo: descripcion,
+        tipo: 'Venta Manual',
+        tipoDetalle: descripcion,
         monto: monto,
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre
@@ -606,10 +628,20 @@ window.agregarVentaProducto = async function(productoId) {
     
     const venta = {
         id: Date.now(),
-        tipo: `${producto.nombre} x${cantidad}`,
+        tipo: 'Venta Directa',
+        tipoDetalle: `${producto.nombre} x${cantidad}`,
         monto: montoTotal,
         fecha: new Date().toLocaleString(),
-        usuario: usuarioActual.nombre
+        usuario: usuarioActual.nombre,
+        detalle: {
+            consumos: [{
+                producto: producto.nombre,
+                cantidad: cantidad,
+                precioUnitario: producto.precio,
+                subtotal: montoTotal
+            }],
+            totalConsumos: montoTotal
+        }
     };
     
     ventas.push(venta);
@@ -657,7 +689,7 @@ function actualizarTablaVentas() {
     tbody.innerHTML = ventasOrdenadas.map(v => `
         <tr>
             <td style="font-size: 13px;">${v.fecha}</td>
-            <td>${v.tipo}</td>
+            <td>${v.tipoDetalle || v.tipo}</td>
             <td style="font-size: 13px; color: #666;">${v.usuario}</td>
             <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
             <td style="text-align: center;">
@@ -787,6 +819,7 @@ window.ajustarStock = async function() {
     actualizarInventario();
     window.closeModalStock();
 };
+
 function actualizarInventario() {
     const grid = document.getElementById('inventarioGrid');
     if (!grid) return;
@@ -835,20 +868,11 @@ function generarReporte() {
     const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
     const cantidadVentas = ventas.length;
     
-    // Separar ventas por tipo
-    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
+    const ventasConsumo = ventas.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
+    const ventasManuales = ventas.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
     
-    const ventasPorUsuario = {};
-    ventas.forEach(v => {
-        if (!ventasPorUsuario[v.usuario]) {
-            ventasPorUsuario[v.usuario] = { cantidad: 0, total: 0 };
-        }
-        ventasPorUsuario[v.usuario].cantidad++;
-        ventasPorUsuario[v.usuario].total += v.monto;
-    });
-    
-    // Actualizar cards del reporte (usando los IDs correctos del HTML)
     const totalEl = document.getElementById('reporteTotalVentas');
     const mesasEl = document.getElementById('reporteVentasMesas');
     const productosEl = document.getElementById('reporteVentasProductos');
@@ -857,34 +881,73 @@ function generarReporte() {
     
     if (!totalEl || !mesasEl || !productosEl || !transaccionesEl || !detalleTable) {
         debugLog('error', '⚠️ Elementos del reporte no encontrados en el DOM');
-        console.error('Elementos faltantes:', {
-            totalEl: !!totalEl,
-            mesasEl: !!mesasEl,
-            productosEl: !!productosEl,
-            transaccionesEl: !!transaccionesEl,
-            detalleTable: !!detalleTable
-        });
         return;
     }
     
     totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
     mesasEl.textContent = `S/ ${ventasMesas.toFixed(2)}`;
-    productosEl.textContent = `S/ ${ventasProductos.toFixed(2)}`;
+    productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
     
-    // Tabla de detalle
     if (ventas.length === 0) {
         detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
     } else {
         const ventasOrdenadas = [...ventas].reverse();
-        detalleTable.innerHTML = ventasOrdenadas.map(v => `
-            <tr>
-                <td style="font-size: 13px;">${v.fecha}</td>
-                <td>${v.tipo}</td>
-                <td style="font-size: 13px; color: #666;">${v.usuario}</td>
-                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
-            </tr>
-        `).join('');
+        detalleTable.innerHTML = ventasOrdenadas.map(v => {
+            let detalleHTML = '';
+            
+            if (v.detalle) {
+                if (v.tipo === 'Mesa Billar') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🎱 ${v.tipoDetalle}</strong><br>
+                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)<br>
+                            💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                            ${v.detalle.consumos.length > 0 ? `
+                                <br><strong style="margin-top: 5px; display: block;">🛒 Consumos:</strong>
+                                ${v.detalle.consumos.map(c => 
+                                    `• ${c.producto} x${c.cantidad} = S/ ${c.subtotal.toFixed(2)}`
+                                ).join('<br>')}
+                                <br><strong>Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}</strong>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Mesa Consumo') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🍺 ${v.tipoDetalle}</strong><br>
+                            <strong>🛒 Consumos:</strong><br>
+                            ${v.detalle.consumos.map(c => 
+                                `• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}`
+                            ).join('<br>')}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Venta Directa') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🛒 ${v.tipoDetalle}</strong><br>
+                            ${v.detalle.consumos.map(c => 
+                                `${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = S/ ${c.subtotal.toFixed(2)}`
+                            ).join('<br>')}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Venta Manual') {
+                    detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">📝 ${v.tipoDetalle}</div>`;
+                }
+            } else {
+                detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">${v.tipo}</div>`;
+            }
+            
+            return `
+                <tr>
+                    <td style="font-size: 13px;">${v.fecha}</td>
+                    <td>${detalleHTML}</td>
+                    <td style="font-size: 13px; color: #666;">${v.usuario}</td>
+                    <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+                </tr>
+            `;
+        }).join('');
     }
     
     debugLog('sistema', '✅ Reporte generado correctamente', { 
@@ -897,108 +960,294 @@ function generarReporte() {
 
 window.descargarReporteExcel = function() {
     const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
     
-    // Crear CSV
-    let csv = 'REPORTE DE VENTAS\n\n';
-    csv += `Total Ventas,S/ ${totalVentas.toFixed(2)}\n`;
-    csv += `Ventas Mesas,S/ ${ventasMesas.toFixed(2)}\n`;
-    csv += `Ventas Productos,S/ ${ventasProductos.toFixed(2)}\n`;
-    csv += `Total Transacciones,${ventas.length}\n\n`;
-    csv += 'Fecha,Descripción,Usuario,Monto\n';
+    const BOM = '\uFEFF';
+    let csv = BOM + 'REPORTE DETALLADO DE VENTAS\n\n';
+    csv += 'Concepto,Monto\n';
+    csv += `"Total Ventas","S/ ${totalVentas.toFixed(2)}"\n`;
+    csv += `"Ventas Mesas Billar","S/ ${ventasMesas.toFixed(2)}"\n`;
+    csv += `"Ventas Productos/Consumo","S/ ${ventasProductos.toFixed(2)}"\n`;
+    csv += `"Total Transacciones","${ventas.length}"\n\n`;
+    
+    csv += 'DETALLE COMPLETO DE VENTAS\n';
+    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
     
     ventas.forEach(v => {
-        csv += `"${v.fecha}","${v.tipo}","${v.usuario}",${v.monto.toFixed(2)}\n`;
+        let descripcion = '';
+        
+        if (v.detalle) {
+            if (v.tipo === 'Mesa Billar') {
+                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
+                if (v.detalle.consumos.length > 0) {
+                    descripcion += ` | Consumos: `;
+                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
+                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
+                }
+            } else if (v.detalle.consumos) {
+                descripcion = v.detalle.consumos.map(c => 
+                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
+                ).join(' | ');
+            }
+        } else {
+            descripcion = v.tipoDetalle || v.tipo;
+        }
+        
+        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
     });
     
-    // Descargar
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const fecha = new Date().toLocaleString().replace(/[/:]/g, '-');
+    const fecha = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const hora = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
     a.href = url;
-    a.download = `reporte-${fecha}.csv`;
+    a.download = `Reporte_Detallado_${fecha}_${hora}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    debugLog('sistema', '📊 Reporte Excel descargado');
+    alert('✅ Reporte Excel DETALLADO descargado\n\n📌 Contiene hora inicio/fin y detalle de consumos');
+    debugLog('sistema', '📊 Reporte Excel detallado descargado');
 };
 
 window.descargarReportePDF = function() {
-    // Versión texto simple (sin librerías externas)
-    const fecha = new Date().toLocaleString();
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
-    
-    let contenido = `═══════════════════════════════════════════════════════════════
-    REPORTE DE VENTAS
-    ${fecha}
-═══════════════════════════════════════════════════════════════
-
-RESUMEN GENERAL
-───────────────────────────────────────────────────────────────
-Total Ventas:           S/ ${totalVentas.toFixed(2)}
-Ventas Mesas:           S/ ${ventasMesas.toFixed(2)}
-Ventas Productos:       S/ ${ventasProductos.toFixed(2)}
-Total Transacciones:    ${ventas.length}
-
-DETALLE DE VENTAS
-═══════════════════════════════════════════════════════════════
-Fecha                | Descripción              | Usuario    | Monto
-─────────────────────┼──────────────────────────┼────────────┼──────────
-`;
-    
-    ventas.forEach(v => {
-        const fechaStr = v.fecha.padEnd(20);
-        const tipoStr = v.tipo.substring(0, 24).padEnd(24);
-        const usuarioStr = v.usuario.substring(0, 10).padEnd(10);
-        const montoStr = `S/ ${v.monto.toFixed(2)}`;
-        contenido += `${fechaStr} | ${tipoStr} | ${usuarioStr} | ${montoStr}\n`;
+    const fecha = new Date().toLocaleString('es-PE', { 
+        dateStyle: 'full', 
+        timeStyle: 'short' 
     });
-    
-    contenido += `═══════════════════════════════════════════════════════════════
-Fin del Reporte
-`;
-    
-    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const fechaArchivo = new Date().toLocaleString().replace(/[/:]/g, '-');
-    a.href = url;
-    a.download = `reporte-${fechaArchivo}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    debugLog('sistema', '📄 Reporte PDF (txt) descargado');
-};
-
-window.exportarReporte = function() {
-    const fecha = new Date().toLocaleString().replace(/[/:]/g, '-');
     const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
     
-    let contenido = `REPORTE DE VENTAS - ${fecha}\n\n`;
-    contenido += `Total Ventas: S/ ${totalVentas.toFixed(2)}\n`;
-    contenido += `Cantidad de Ventas: ${ventas.length}\n\n`;
-    contenido += `DETALLE DE VENTAS:\n`;
-    contenido += `${'='.repeat(80)}\n`;
-    contenido += `Fecha                | Descripción                    | Usuario        | Monto\n`;
-    contenido += `${'-'.repeat(80)}\n`;
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
     
-    ventas.forEach(v => {
-        contenido += `${v.fecha.padEnd(20)} | ${v.tipo.padEnd(30)} | ${v.usuario.padEnd(14)} | S/ ${v.monto.toFixed(2)}\n`;
-    });
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Ventas</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 40px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 20px;
+                    margin-bottom: 30px;
+                }
+                h1 {
+                    color: #2d7a4d;
+                    font-size: 32px;
+                    margin-bottom: 10px;
+                }
+                .fecha {
+                    color: #666;
+                    font-size: 14px;
+                }
+                .resumen {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                }
+                .resumen-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                    margin-top: 15px;
+                }
+                .resumen-item {
+                    background: white;
+                    padding: 15px;
+                    border-radius: 5px;
+                    border-left: 4px solid #2d7a4d;
+                }
+                .resumen-item label {
+                    display: block;
+                    color: #666;
+                    font-size: 12px;
+                    margin-bottom: 5px;
+                }
+                .resumen-item .valor {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #2d7a4d;
+                }
+                h2 {
+                    color: #2d7a4d;
+                    font-size: 20px;
+                    margin: 30px 0 15px 0;
+                    border-bottom: 2px solid #e0e0e0;
+                    padding-bottom: 8px;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 15px;
+                    background: white;
+                }
+                th {
+                    background: #2d7a4d;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    font-weight: 600;
+                }
+                td {
+                    padding: 10px 12px;
+                    border-bottom: 1px solid #e0e0e0;
+                    font-size: 12px;
+                }
+                tr:hover {
+                    background: #f8f9fa;
+                }
+                .monto {
+                    text-align: right;
+                    font-weight: 600;
+                    color: #2d7a4d;
+                }
+                .detalle {
+                    font-size: 11px;
+                    color: #666;
+                    margin-top: 3px;
+                }
+                .footer {
+                    margin-top: 40px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 12px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 20px;
+                }
+                @media print {
+                    body { padding: 20px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #2d7a4d;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    margin: 20px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #1f5436;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>🎱 REPORTE DE VENTAS</h1>
+                <p class="fecha">${fecha}</p>
+            </div>
+            
+            <div class="resumen">
+                <h2 style="margin-top: 0; border: none;">📊 Resumen General</h2>
+                <div class="resumen-grid">
+                    <div class="resumen-item">
+                        <label>Total Ventas</label>
+                        <div class="valor">S/ ${totalVentas.toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item">
+                        <label>Total Transacciones</label>
+                        <div class="valor">${ventas.length}</div>
+                    </div>
+                    <div class="resumen-item">
+                        <label>Ventas Mesas</label>
+                        <div class="valor">S/ ${ventasMesas.toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item">
+                        <label>Ventas Productos</label>
+                        <div class="valor">S/ ${ventasProductos.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h2>📋 Detalle de Ventas</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Usuario</th>
+                        <th style="text-align: right;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${ventas.map(v => {
+                        let detalleHTML = '';
+                        
+                        if (v.detalle) {
+                            if (v.tipo === 'Mesa Billar') {
+                                detalleHTML = `
+                                    <strong>🎱 ${v.tipoDetalle}</strong><br>
+                                    <small class="detalle">⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} (${v.detalle.tiempoMinutos} min)</small><br>
+                                    <small class="detalle">💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}</small>
+                                    ${v.detalle.consumos.length > 0 ? `
+                                        <br><small class="detalle"><strong>Consumos:</strong> ${v.detalle.consumos.map(c => 
+                                            `${c.producto} x${c.cantidad}`
+                                        ).join(', ')} = S/ ${v.detalle.totalConsumos.toFixed(2)}</small>
+                                    ` : ''}
+                                `;
+                            } else if (v.tipo === 'Mesa Consumo') {
+                                detalleHTML = `
+                                    <strong>🍺 ${v.tipoDetalle}</strong><br>
+                                    <small class="detalle">${v.detalle.consumos.map(c => 
+                                        `${c.producto} x${c.cantidad} = S/ ${c.subtotal.toFixed(2)}`
+                                    ).join('<br>')}</small>
+                                `;
+                            } else if (v.tipo === 'Venta Directa') {
+                                detalleHTML = `<strong>🛒 ${v.tipoDetalle}</strong>`;
+                            } else {
+                                detalleHTML = `<strong>📝 ${v.tipoDetalle}</strong>`;
+                            }
+                        } else {
+                            detalleHTML = v.tipo;
+                        }
+                        
+                        return `
+                            <tr>
+                                <td><small>${v.fecha}</small></td>
+                                <td>${detalleHTML}</td>
+                                <td>${v.usuario}</td>
+                                <td class="monto">S/ ${v.monto.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Generado automáticamente</p>
+            </div>
+        </body>
+        </html>
+    `);
     
-    const blob = new Blob([contenido], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte-${fecha}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    ventanaImpresion.document.close();
     
-    debugLog('sistema', '📄 Reporte exportado');
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 Ventana de impresión PDF abierta');
 };
 
 // ========== ERRORES ==========
@@ -1142,7 +1391,6 @@ window.guardarUsuario = async function() {
     const rol = document.getElementById('nuevoRol').value;
     const errorDiv = document.getElementById('usuarioError');
     
-    // Al editar, la contraseña es opcional
     if (!nombre || !username || (!usuarioEditando && !password)) {
         errorDiv.textContent = 'Por favor completa todos los campos';
         errorDiv.classList.remove('hidden');
@@ -1159,7 +1407,6 @@ window.guardarUsuario = async function() {
     if (usuarioEditando) {
         usuarioEditando.nombre = nombre;
         usuarioEditando.username = username;
-        // Solo actualizar contraseña si se ingresó una nueva
         if (password) {
             usuarioEditando.password = password;
         }
@@ -1315,12 +1562,30 @@ async function finalizarMesaConsumo(id) {
     if (!mesa || !mesa.ocupada) return;
     
     if (mesa.total > 0) {
+        let detalleConsumos = [];
+        if (mesa.consumos && mesa.consumos.length > 0) {
+            mesa.consumos.forEach(c => {
+                const subtotal = c.precio * c.cantidad;
+                detalleConsumos.push({
+                    producto: c.nombre,
+                    cantidad: c.cantidad,
+                    precioUnitario: c.precio,
+                    subtotal: subtotal
+                });
+            });
+        }
+        
         const venta = {
             id: Date.now(),
-            tipo: `Mesa Consumo ${mesa.id}`,
+            tipo: 'Mesa Consumo',
+            tipoDetalle: `Mesa Consumo ${mesa.id}`,
             monto: mesa.total,
             fecha: new Date().toLocaleString(),
-            usuario: usuarioActual.nombre
+            usuario: usuarioActual.nombre,
+            detalle: {
+                consumos: detalleConsumos,
+                totalConsumos: mesa.total
+            }
         };
         
         ventas.push(venta);
@@ -1518,4 +1783,3 @@ function actualizarListaConsumos() {
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
 }
-
