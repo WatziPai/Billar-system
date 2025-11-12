@@ -1053,6 +1053,12 @@ function generarReporte() {
         nombrePeriodo = `${meses[ahora.getMonth()]}_${ahora.getFullYear()}`;
     }
     
+    // VERIFICAR SI HAY VENTAS
+    if (ventasFiltradas.length === 0) {
+        alert('⚠️ No hay ventas registradas en el periodo seleccionado');
+        return;
+    }
+    
     const totalVentas = ventasFiltradas.reduce((sum, v) => sum + v.monto, 0);
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
@@ -1073,13 +1079,23 @@ function generarReporte() {
     });
     
     // Descargar
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Reporte_Billar_${nombrePeriodo}.csv`;
-    link.click();
-    
-    debugLog('sistema', '📥 Reporte Excel descargado', { periodo, ventas: ventasFiltradas.length });
+    try {
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = `Reporte_Billar_${nombrePeriodo}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        alert('✅ Reporte descargado correctamente');
+        debugLog('sistema', '📥 Reporte Excel descargado', { periodo, ventas: ventasFiltradas.length });
+    } catch (error) {
+        console.error('Error descargando:', error);
+        alert('❌ Error al descargar el reporte: ' + error.message);
+    }
 }
 
 function descargarReportePDF() {
@@ -1115,6 +1131,12 @@ function descargarReportePDF() {
         nombrePeriodo = `${meses[ahora.getMonth()]} ${ahora.getFullYear()}`;
     }
     
+    // VERIFICAR SI HAY VENTAS
+    if (ventasFiltradas.length === 0) {
+        alert('⚠️ No hay ventas registradas en el periodo seleccionado');
+        return;
+    }
+    
     const totalVentas = ventasFiltradas.reduce((sum, v) => sum + v.monto, 0);
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
@@ -1139,6 +1161,9 @@ function descargarReportePDF() {
                 td { padding: 10px; border-bottom: 1px solid #ddd; }
                 tr:hover { background: #f8f9fa; }
                 .total { text-align: right; font-weight: bold; color: #2d7a4d; }
+                @media print {
+                    body { padding: 0; }
+                }
             </style>
         </head>
         <body>
@@ -1192,6 +1217,29 @@ function descargarReportePDF() {
         </body>
         </html>
     `;
+    
+    // Abrir en nueva ventana para imprimir/guardar como PDF
+    try {
+        const ventana = window.open('', '_blank');
+        if (!ventana) {
+            alert('❌ El navegador bloqueó la ventana emergente. Permite ventanas emergentes para este sitio.');
+            return;
+        }
+        
+        ventana.document.write(html);
+        ventana.document.close();
+        
+        // Esperar a que cargue y abrir diálogo de impresión
+        setTimeout(() => {
+            ventana.print();
+        }, 500);
+        
+        debugLog('sistema', '📄 Reporte PDF generado', { periodo, ventas: ventasFiltradas.length });
+    } catch (error) {
+        console.error('Error generando PDF:', error);
+        alert('❌ Error al generar el PDF: ' + error.message);
+    }
+}
     
     // Abrir en nueva ventana para imprimir/guardar como PDF
     const ventana = window.open('', '_blank');
