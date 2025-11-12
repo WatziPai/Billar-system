@@ -26,16 +26,20 @@
                 <input type="password" id="loginPassword" placeholder="Ingresa tu contraseña" autocomplete="current-password">
             </div>
             
-            <!-- ELIMINAMOS EL onclick AQUI -->
-            <button class="btn btn-primary" style="width: 100%;" id="btnLogin">
+            <!-- ✅ AGREGADO ONCLICK -->
+            <button class="btn btn-primary" style="width: 100%;" id="btnLogin" onclick="handleLogin()">
                 Iniciar Sesión
             </button>
             
-            
+            <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px; font-size: 13px;">
+                <strong>Usuarios de prueba:</strong><br>
+                Admin: <code>admin</code> / <code>admin123</code><br>
+                Empleado: <code>empleado</code> / <code>emp123</code>
+            </div>
         </div>
     </div>
 
-    <!-- PANTALLA PRINCIPAL (El resto del contenido...) -->
+    <!-- PANTALLA PRINCIPAL -->
     <div id="mainScreen" class="container hidden">
         <!-- HEADER -->
         <div class="header">
@@ -85,11 +89,11 @@
             <div class="config-grid">
                 <div class="config-box" style="background: #cfe2ff;">
                     <label>Tarifa por Hora Completa (S/)</label>
-                    <input type="number" id="tarifaHora" value="5.00" step="0.50" min="0" onchange="guardarConfiguracion()">
+                    <input type="number" id="tarifaHora" value="5.00" step="0.50" min="0">
                 </div>
                 <div class="config-box" style="background: #fff3cd;">
                     <label>Tarifa cada 5 min extra (S/)</label>
-                    <input type="number" id="tarifaExtra5Min" value="0.50" step="0.10" min="0" onchange="guardarConfiguracion()">
+                    <input type="number" id="tarifaExtra5Min" value="0.50" step="0.10" min="0">
                 </div>
                 <div class="config-box total-box">
                     <label>Total del Día</label>
@@ -199,21 +203,21 @@
                 <h2 style="margin-bottom: 20px;">Reportes y Estadísticas</h2>
                 
                 <div class="reporte-filters">
-            <select id="reportePeriodo" onchange="generarReporte()">
-                <option value="hoy">Hoy</option>
-                <option value="semana">Esta Semana</option>
-                <option value="mes">Este Mes</option>
-            </select>
-            <button class="btn-small btn-teal" onclick="generarReporte()">
-                🔄 Actualizar
-            </button>
-            <button class="btn-small btn-green" onclick="descargarReporteExcel()">
-                📥 Descargar Excel
-            </button>
-            <button class="btn-small btn-blue" onclick="descargarReportePDF()">
-                📄 Descargar PDF
-            </button>
-        </div>
+                    <select id="reportePeriodo" onchange="generarReporte()">
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Esta Semana</option>
+                        <option value="mes">Este Mes</option>
+                    </select>
+                    <button class="btn-small btn-teal" onclick="generarReporte()">
+                        🔄 Actualizar
+                    </button>
+                    <button class="btn-small btn-green" onclick="descargarReporteExcel()">
+                        📥 Descargar Excel
+                    </button>
+                    <button class="btn-small btn-blue" onclick="descargarReportePDF()">
+                        📄 Descargar PDF
+                    </button>
+                </div>
 
                 <div class="reporte-grid">
                     <div class="reporte-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
@@ -262,7 +266,7 @@
         </div>
     </div>
 
-    <!-- MODALES (igual que antes, los mismos...) -->
+    <!-- MODALES -->
     
     <!-- Modal: Usuario -->
     <div id="modalUsuario" class="modal">
@@ -406,23 +410,14 @@
             </div>
             
             <div class="modal-buttons">
-                <button class="btn btn-green btn-full" onclick="aplicarConsumos()">
-                    ✅ Agregar a la Mesa
-                </button>
-                <button class="btn btn-gray btn-full" onclick="cerrarModalConsumo()">
-                    ❌ Cancelar
+                <button class="btn btn-gray btn-full" onclick="closeModalConsumo()">
+                    Cerrar
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="loading-spinner"></div>
-        <p>Conectando con Firebase...</p>
-    </div>
-
-    <!-- IMPORTANTE: Cargar Firebase PRIMERO, luego app.js -->
+    <!-- SCRIPTS: Primero Firebase, luego la app -->
     <script type="module" src="firebase-config.js"></script>
     <script src="app.js"></script>
 </body>
