@@ -16,7 +16,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Exponer funciones globalmente para que funcionen con onclick
+// Exportar db para uso en otros módulos (¡ESTO ES CLAVE!)
+export { db };
+
+// (Opcional: también puedes exportar otras utilidades si usas sus imports en app.js)
+export {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot
+};
+
+// También puedes seguir exponiendo utilidades globales si quieres:
 window.firebaseDB = {
   // Guardar documento
   async set(coleccion, id, data) {
