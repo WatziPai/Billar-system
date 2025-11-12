@@ -30,6 +30,8 @@ let usuarioEditando = null;
 let mesaConsumoActual = null;
 let tipoMesaActual = null;
 let tabActual = 'mesas';
+let cierres = [];
+let ultimoCierre = null;
 
 // ========== INICIALIZACIÓN ==========
 document.addEventListener('DOMContentLoaded', async function() {
@@ -116,6 +118,15 @@ async function cargarDatos() {
         const erroresData = await window.firebaseDB.get('errores', 'todos');
         erroresReportados = (erroresData && erroresData.lista) ? erroresData.lista : [];
         
+        // Cargar cierres
+        const cierresData = await window.firebaseDB.get('cierres', 'historial');
+        cierres = (cierresData && cierresData.lista) ? cierresData.lista : [];
+        
+        // Determinar último cierre
+        if (cierres.length > 0) {
+            ultimoCierre = cierres[cierres.length - 1].timestamp;
+        }
+        
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
@@ -162,6 +173,10 @@ async function guardarProductos() {
 
 async function guardarErrores() {
     await window.firebaseDB.set('errores', 'todos', { lista: erroresReportados });
+}
+
+async function guardarCierres() {
+    await window.firebaseDB.set('cierres', 'historial', { lista: cierres });
 }
 
 async function guardarMesas() {
@@ -865,13 +880,18 @@ function actualizarInventario() {
 function generarReporte() {
     debugLog('sistema', '📊 Generando reporte...');
     
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const cantidadVentas = ventas.length;
+    // Filtrar ventas desde el último cierre
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
     
-    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
-    const ventasConsumo = ventas.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
-    const ventasManuales = ventas.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
+    const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    const cantidadVentas = ventasActuales.length;
+    
+    const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventasActuales.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
+    const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
+    const ventasManuales = ventasActuales.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
     
     const totalEl = document.getElementById('reporteTotalVentas');
     const mesasEl = document.getElementById('reporteVentasMesas');
@@ -889,11 +909,21 @@ function generarReporte() {
     productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
     
-    if (ventas.length === 0) {
+    // Mostrar info del último cierre
+    let infoCierre = '';
+    if (ultimoCierre) {
+        const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
+        infoCierre = `<div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+            <strong>📊 Ventas desde último cierre:</strong> ${fechaCierre}
+        </div>`;
+    }
+    
+    if (ventasActuales.length === 0) {
         detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
     } else {
-        const ventasOrdenadas = [...ventas].reverse();
-        detalleTable.innerHTML = ventasOrdenadas.map(v => {
+        const ventasOrdenadas = [...ventasActuales].reverse();
+        const htmlDetalle = infoCierre + '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Fecha</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Descripción</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Usuario</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: right;">Monto</th></tr></thead><tbody>' + 
+            ventasOrdenadas.map(v => {
             let detalleHTML = '';
             
             if (v.detalle) {
@@ -940,15 +970,20 @@ function generarReporte() {
             }
             
             return `
-                <tr>
-                    <td style="font-size: 13px;">${v.fecha}</td>
-                    <td>${detalleHTML}</td>
-                    <td style="font-size: 13px; color: #666;">${v.usuario}</td>
-                    <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+                <tr style="border-bottom: 1px solid #e0e0e0;">
+                    <td style="padding: 10px; font-size: 13px;">${v.fecha}</td>
+                    <td style="padding: 10px;">${detalleHTML}</td>
+                    <td style="padding: 10px; font-size: 13px; color: #666;">${v.usuario}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
                 </tr>
             `;
-        }).join('');
+        }).join('') + '</tbody></table>';
+        
+        detalleTable.parentElement.innerHTML = htmlDetalle;
     }
+    
+    // Actualizar historial de cierres
+    actualizarHistorialCierres();
     
     debugLog('sistema', '✅ Reporte generado correctamente', { 
         totalVentas, 
@@ -957,6 +992,215 @@ function generarReporte() {
         ventasProductos
     });
 }
+
+window.cerrarDia = async function() {
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
+    
+    if (ventasActuales.length === 0) {
+        alert('⚠️ No hay ventas nuevas para cerrar');
+        return;
+    }
+    
+    const totalCierre = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    
+    const confirmar = confirm(
+        `¿Cerrar turno/día?\n\n` +
+        `📊 Ventas: ${ventasActuales.length}\n` +
+        `💰 Total: S/ ${totalCierre.toFixed(2)}\n\n` +
+        `Se generará un reporte y las ventas quedarán archivadas.`
+    );
+    
+    if (!confirmar) return;
+    
+    const cierre = {
+        id: Date.now(),
+        timestamp: Date.now(),
+        fecha: new Date().toLocaleString('es-PE'),
+        usuario: usuarioActual.nombre,
+        cantidadVentas: ventasActuales.length,
+        total: totalCierre,
+        ventas: ventasActuales.map(v => ({...v})),
+        ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
+        ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0)
+    };
+    
+    cierres.push(cierre);
+    ultimoCierre = cierre.timestamp;
+    
+    await guardarCierres();
+    
+    // Generar y descargar reporte automáticamente
+    descargarReporteCierre(cierre);
+    
+    alert(`✅ Cierre registrado correctamente\n\n📄 Se descargó el reporte automáticamente`);
+    
+    generarReporte();
+};
+
+function descargarReporteCierre(cierre) {
+    const BOM = '\uFEFF';
+    let csv = BOM + `CIERRE DE CAJA - ${cierre.fecha}\n\n`;
+    csv += `Usuario que cierra,${cierre.usuario}\n`;
+    csv += `Fecha y hora,${cierre.fecha}\n\n`;
+    csv += 'Concepto,Monto\n';
+    csv += `"Total del Cierre","S/ ${cierre.total.toFixed(2)}"\n`;
+    csv += `"Ventas Mesas","S/ ${cierre.ventasMesas.toFixed(2)}"\n`;
+    csv += `"Ventas Productos/Consumo","S/ ${cierre.ventasProductos.toFixed(2)}"\n`;
+    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n\n`;
+    
+    csv += 'DETALLE DE VENTAS\n';
+    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
+    
+    cierre.ventas.forEach(v => {
+        let descripcion = '';
+        
+        if (v.detalle) {
+            if (v.tipo === 'Mesa Billar') {
+                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
+                if (v.detalle.consumos.length > 0) {
+                    descripcion += ` | Consumos: `;
+                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
+                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
+                }
+            } else if (v.detalle.consumos) {
+                descripcion = v.detalle.consumos.map(c => 
+                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
+                ).join(' | ');
+            }
+        } else {
+            descripcion = v.tipoDetalle || v.tipo;
+        }
+        
+        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fechaArchivo = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const horaArchivo = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
+    a.href = url;
+    a.download = `Cierre_${fechaArchivo}_${horaArchivo}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function actualizarHistorialCierres() {
+    const container = document.getElementById('historialCierresContainer');
+    if (!container) return;
+    
+    if (cierres.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay cierres registrados</p>';
+        return;
+    }
+    
+    const cierresOrdenados = [...cierres].reverse();
+    
+    container.innerHTML = cierresOrdenados.map(c => `
+        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                <div>
+                    <div style="font-weight: 600; font-size: 14px; color: #2d7a4d;">🔒 Cierre #${c.id}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 3px;">📅 ${c.fecha}</div>
+                    <div style="font-size: 12px; color: #666;">👤 ${c.usuario}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
+                    <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ventas</div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
+                <div style="font-size: 12px;">
+                    <span style="color: #666;">Mesas:</span> <strong>S/ ${c.ventasMesas.toFixed(2)}</strong>
+                </div>
+                <div style="font-size: 12px;">
+                    <span style="color: #666;">Productos:</span> <strong>S/ ${c.ventasProductos.toFixed(2)}</strong>
+                </div>
+            </div>
+            <div style="margin-top: 10px;">
+                <button class="btn btn-blue btn-small" onclick="verDetalleCierre(${c.id})" style="width: 48%; margin-right: 4%;">
+                    👁️ Ver Detalle
+                </button>
+                <button class="btn btn-green btn-small" onclick="descargarCierreEspecifico(${c.id})" style="width: 48%;">
+                    📥 Descargar
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+window.verDetalleCierre = function(cierreId) {
+    const cierre = cierres.find(c => c.id === cierreId);
+    if (!cierre) return;
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.style.zIndex = '10000';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>🔒 Detalle del Cierre #${cierre.id}</h2>
+                <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <small style="color: #666;">Fecha y Hora</small>
+                            <div style="font-weight: 600;">${cierre.fecha}</div>
+                        </div>
+                        <div>
+                            <small style="color: #666;">Usuario</small>
+                            <div style="font-weight: 600;">${cierre.usuario}</div>
+                        </div>
+                        <div>
+                            <small style="color: #666;">Total</small>
+                            <div style="font-size: 24px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.total.toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <small style="color: #666;">Transacciones</small>
+                            <div style="font-size: 24px; font-weight: bold;">${cierre.cantidadVentas}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 15px; color: #2d7a4d;">📋 Ventas del Cierre</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #2d7a4d; color: white;">
+                            <th style="padding: 10px; text-align: left;">Fecha</th>
+                            <th style="padding: 10px; text-align: left;">Descripción</th>
+                            <th style="padding: 10px; text-align: right;">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cierre.ventas.map(v => `
+                            <tr style="border-bottom: 1px solid #e0e0e0;">
+                                <td style="padding: 8px; font-size: 12px;">${v.fecha}</td>
+                                <td style="padding: 8px;">${v.tipoDetalle || v.tipo}</td>
+                                <td style="padding: 8px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+};
+
+window.descargarCierreEspecifico = function(cierreId) {
+    const cierre = cierres.find(c => c.id === cierreId);
+    if (!cierre) return;
+    
+    descargarReporteCierre(cierre);
+    alert('✅ Reporte del cierre descargado');
+};
 
 window.descargarReporteExcel = function() {
     const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
