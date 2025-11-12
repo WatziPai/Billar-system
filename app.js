@@ -843,17 +843,24 @@ function generarReporte() {
         ventasPorUsuario[v.usuario].total += v.monto;
     });
     
-    document.getElementById('reporteTotalVentas').textContent = `S/ ${totalVentas.toFixed(2)}`;
-    document.getElementById('reporteCantidadVentas').textContent = cantidadVentas;
-    
+    const totalEl = document.getElementById('reporteTotalVentas');
+    const cantidadEl = document.getElementById('reporteCantidadVentas');
     const tbody = document.getElementById('reporteUsuariosTable');
-    tbody.innerHTML = Object.entries(ventasPorUsuario).map(([usuario, datos]) => `
-        <tr>
-            <td>${usuario}</td>
-            <td style="text-align: center;">${datos.cantidad}</td>
-            <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${datos.total.toFixed(2)}</td>
-        </tr>
-    `).join('');
+    
+    if (totalEl) totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
+    if (cantidadEl) cantidadEl.textContent = cantidadVentas;
+    
+    if (tbody) {
+        tbody.innerHTML = Object.entries(ventasPorUsuario).map(([usuario, datos]) => `
+            <tr>
+                <td>${usuario}</td>
+                <td style="text-align: center;">${datos.cantidad}</td>
+                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${datos.total.toFixed(2)}</td>
+            </tr>
+        `).join('');
+    }
+    
+    debugLog('sistema', '📊 Reporte generado', { totalVentas, cantidadVentas, usuarios: Object.keys(ventasPorUsuario).length });
 }
 
 window.exportarReporte = function() {
@@ -965,6 +972,11 @@ function actualizarErrores() {
 }
 
 // ========== USUARIOS ==========
+window.toggleUsuarios = function() {
+    changeTab('usuarios');
+    actualizarUsuarios();
+};
+
 window.showModalUsuario = function(usuario = null) {
     if (usuarioActual.rol !== 'admin') return;
     
@@ -1050,7 +1062,15 @@ window.eliminarUsuario = async function(id) {
 
 function actualizarUsuarios() {
     const tbody = document.getElementById('usuariosTable');
-    if (!tbody) return;
+    if (!tbody) {
+        debugLog('error', '⚠️ Elemento usuariosTable no encontrado');
+        return;
+    }
+    
+    if (usuarios.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay usuarios registrados</td></tr>';
+        return;
+    }
     
     tbody.innerHTML = usuarios.map(u => {
         const usuarioJSON = JSON.stringify(u).replace(/"/g, '&quot;');
@@ -1070,539 +1090,8 @@ function actualizarUsuarios() {
             </tr>
         `;
     }).join('');
-}
-
-// ========== MESAS DE CONSUMO ==========
-window.agregarMesaConsumo = async function() {
-    if (usuarioActual.rol !== 'admin') {
-        mostrarError('Solo los administradores pueden agregar mesas');
-        return;
-    }
     
-    const nuevoId = mesasConsumo.length > 0 ? Math.max(...mesasConsumo.map(m => m.id)) + 1 : 1;
-    mesasConsumo.push({
-        id: nuevoId,
-        ocupada: false,
-        consumos: [],
-        total: 0
-    });
-    await guardarMesasConsumo();
-    actualizarMesasConsumo();
-    debugLog('sistema', '➕ Mesa de consumo agregada', { id: nuevoId });
-};
-
-window.eliminarMesaConsumo = async function(id) {
-    if (usuarioActual.rol !== 'admin') {
-        mostrarError('Solo los administradores pueden eliminar mesas');
-        return;
-    }
-    
-    const mesa = mesasConsumo.find(m => m.id === id);
-    if (mesa && mesa.ocupada) {
-        mostrarError('No puedes eliminar una mesa ocupada. Finalízala primero.');
-        return;
-    }
-    
-    if (!confirm('¿Estás seguro de eliminar esta mesa?')) return;
-    
-    mesasConsumo = mesasConsumo.filter(m => m.id !== id);
-    await guardarMesasConsumo();
-    actualizarMesasConsumo();
-    debugLog('sistema', '🗑️ Mesa de consumo eliminada', { id });
-};
-
-function actualizarMesasConsumo() {
-    const container = document.getElementById('mesasConsumoContainer');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    mesasConsumo.forEach(mesa => {
-        const mesaDiv = document.createElement('div');
-        mesaDiv.className = `mesa-card ${mesa.ocupada ? 'mesa-ocupada' : 'mesa-disponible'}`;
-        
-        mesaDiv.innerHTML = `
-            ${usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesaConsumo(${mesa.id})">×</button>` : ''}
-            <h3>Mesa ${mesa.id}</h3>
-            <span class="mesa-status ${mesa.ocupada ? 'status-ocupada' : 'status-disponible'}">
-                ${mesa.ocupada ? 'OCUPADA' : 'DISPONIBLE'}
-            </span>
-            <div class="costo-display" style="margin: 15px 0;">S/ ${mesa.total.toFixed(2)}</div>
-            <button class="btn ${mesa.ocupada ? 'btn-red' : 'btn-primary'}" onclick="toggleMesaConsumo(${mesa.id})" style="width: 100%; margin-bottom: 8px;">
-                ${mesa.ocupada ? '⏹️ Finalizar' : '▶️ Iniciar'}
-            </button>
-            ${mesa.ocupada ? `<button class="btn btn-blue" onclick="abrirModalConsumo(${mesa.id}, 'consumo')" style="width: 100%;">🛒 Consumo</button>` : ''}
-        `;
-        container.appendChild(mesaDiv);
-    });
-}
-
-window.toggleMesaConsumo = function(id) {
-    const mesa = mesasConsumo.find(m => m.id === id);
-    if (!mesa) return;
-    
-    if (mesa.ocupada) finalizarMesaConsumo(id);
-    else iniciarMesaConsumo(id);
-};
-
-async function iniciarMesaConsumo(id) {
-    const mesa = mesasConsumo.find(m => m.id === id);
-    mesa.ocupada = true;
-    mesa.consumos = [];
-    mesa.total = 0;
-    await guardarMesasConsumo();
-    
-    debugLog('sistema', '▶️ Mesa de consumo iniciada', { id });
-    actualizarMesasConsumo();
-}
-
-async function finalizarMesaConsumo(id) {
-    const mesa = mesasConsumo.find(m => m.id === id);
-    if (!mesa || !mesa.ocupada) return;
-    
-    if (mesa.total > 0) {
-        const venta = {
-            id: Date.now(),
-            tipo: `Mesa Consumo ${mesa.id}`,
-            monto: mesa.total,
-            fecha: new Date().toLocaleString(),
-            usuario: usuarioActual.nombre
-        };
-        
-        ventas.push(venta);
-        await guardarVentas();
-    }
-    
-    mesa.ocupada = false;
-    mesa.consumos = [];
-    mesa.total = 0;
-    await guardarMesasConsumo();
-    
-    alert(`Mesa ${id} finalizada.\nTotal: S/ ${mesa.total.toFixed(2)}`);
-    
-    actualizarMesasConsumo();
-    actualizarTablaVentas();
-    calcularTotal();
-}
-
-// ========== CONSUMOS ==========
-window.abrirModalConsumo = function(mesaId, tipo) {
-    mesaConsumoActual = mesaId;
-    tipoMesaActual = tipo;
-    
-    document.getElementById('modalConsumo').classList.add('show');
-    renderProductosConsumo();
-    actualizarListaConsumos();
-};
-
-window.closeModalConsumo = function() {
-    document.getElementById('modalConsumo').classList.remove('show');
-    mesaConsumoActual = null;
-    tipoMesaActual = null;
-};
-
-function renderProductosConsumo() {
-    const container = document.getElementById('productosConsumoContainer');
-    
-    if (productos.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay productos disponibles.</p>';
-        return;
-    }
-    
-    container.innerHTML = productos.map(p => {
-        const disponible = p.stock > 0;
-        
-        return `
-            <div class="producto-consumo-item ${!disponible ? 'no-stock' : ''}">
-                <div>
-                    <div style="font-weight: 600;">${p.nombre}</div>
-                    <div style="font-size: 14px; color: #666;">S/ ${p.precio.toFixed(2)} | Stock: ${p.stock}</div>
-                </div>
-                ${disponible ? `
-                    <button class="btn btn-green btn-small" onclick="agregarConsumo(${p.id})">
-                        Agregar
-                    </button>
-                ` : `
-                    <button class="btn btn-red btn-small" disabled>
-                        Agotado
-                    </button>
-                `}
-            </div>
-        `;
-    }).join('');
-}
-
-window.agregarConsumo = async function(productoId) {
-    const producto = productos.find(p => p.id === productoId);
-    if (!producto || producto.stock <= 0) {
-        mostrarError('Producto no disponible');
-        return;
-    }
-    
-    let mesa;
-    if (tipoMesaActual === 'billar') {
-        mesa = mesas.find(m => m.id === mesaConsumoActual);
-    } else {
-        mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
-    }
-    
-    if (!mesa || !mesa.ocupada) {
-        mostrarError('La mesa no está ocupada');
-        return;
-    }
-    
-    if (!mesa.consumos) mesa.consumos = [];
-    
-    const existente = mesa.consumos.find(c => c.id === productoId);
-    if (existente) {
-        existente.cantidad++;
-    } else {
-        mesa.consumos.push({
-            id: productoId,
-            nombre: producto.nombre,
-            precio: producto.precio,
-            cantidad: 1
-        });
-    }
-    
-    producto.stock--;
-    
-    if (tipoMesaActual === 'consumo') {
-        mesa.total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
-    }
-    
-    await guardarProductos();
-    if (tipoMesaActual === 'billar') {
-        await guardarMesas();
-    } else {
-        await guardarMesasConsumo();
-        actualizarMesasConsumo();
-    }
-    
-    renderProductosConsumo();
-    actualizarListaConsumos();
-    actualizarInventario();
-};
-
-window.eliminarConsumo = async function(productoId) {
-    let mesa;
-    if (tipoMesaActual === 'billar') {
-        mesa = mesas.find(m => m.id === mesaConsumoActual);
-    } else {
-        mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
-    }
-    
-    if (!mesa) return;
-    
-    const consumo = mesa.consumos.find(c => c.id === productoId);
-    if (!consumo) return;
-    
-    const producto = productos.find(p => p.id === productoId);
-    if (producto) {
-        producto.stock += consumo.cantidad;
-    }
-    
-    mesa.consumos = mesa.consumos.filter(c => c.id !== productoId);
-    
-    if (tipoMesaActual === 'consumo') {
-        mesa.total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
-    }
-    
-    await guardarProductos();
-    if (tipoMesaActual === 'billar') {
-        await guardarMesas();
-    } else {
-        await guardarMesasConsumo();
-        actualizarMesasConsumo();
-    }
-    
-    renderProductosConsumo();
-    actualizarListaConsumos();
-    actualizarInventario();
-};
-
-function actualizarInventario() {
-    const grid = document.getElementById('inventarioGrid');
-    if (!grid) return;
-    
-    if (productos.length === 0) {
-        grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 40px; color: #999;">No hay productos en el inventario</p>';
-        return;
-    }
-    
-    grid.innerHTML = productos.map(p => {
-        const stockBajo = p.stock <= p.stockMin;
-        const productoJSON = JSON.stringify(p).replace(/"/g, '&quot;');
-        return `
-            <div class="producto-card">
-                <h4>${p.nombre}</h4>
-                <div class="producto-precio">S/ ${p.precio.toFixed(2)}</div>
-                <div class="producto-info">
-                    <div>
-                        <small style="display: block; color: #666;">Stock:</small>
-                        <div class="producto-stock ${stockBajo ? 'stock-bajo' : ''}">${p.stock}</div>
-                    </div>
-                    <div style="display: flex; gap: 5px;">
-                        <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;">
-                            📊
-                        </button>
-                        ${usuarioActual.rol === 'admin' ? `
-                            <button class="btn-small btn-green" onclick='showModalProducto(${productoJSON})' style="padding: 5px 10px; font-size: 12px;">
-                                ✏️
-                            </button>
-                            <button class="btn-small btn-red" onclick="eliminarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;">
-                                🗑️
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-                ${stockBajo ? '<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;">⚠️ Stock bajo</div>' : ''}
-            </div>
-        `;
-    }).join('');
-}
-
-// ========== REPORTES ==========
-function generarReporte() {
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const cantidadVentas = ventas.length;
-    
-    const ventasPorUsuario = {};
-    ventas.forEach(v => {
-        if (!ventasPorUsuario[v.usuario]) {
-            ventasPorUsuario[v.usuario] = { cantidad: 0, total: 0 };
-        }
-        ventasPorUsuario[v.usuario].cantidad++;
-        ventasPorUsuario[v.usuario].total += v.monto;
-    });
-    
-    document.getElementById('reporteTotalVentas').textContent = `S/ ${totalVentas.toFixed(2)}`;
-    document.getElementById('reporteCantidadVentas').textContent = cantidadVentas;
-    
-    const tbody = document.getElementById('reporteUsuariosTable');
-    tbody.innerHTML = Object.entries(ventasPorUsuario).map(([usuario, datos]) => `
-        <tr>
-            <td>${usuario}</td>
-            <td style="text-align: center;">${datos.cantidad}</td>
-            <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${datos.total.toFixed(2)}</td>
-        </tr>
-    `).join('');
-}
-
-window.exportarReporte = function() {
-    const fecha = new Date().toLocaleString().replace(/[/:]/g, '-');
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    
-    let contenido = `REPORTE DE VENTAS - ${fecha}\n\n`;
-    contenido += `Total Ventas: S/ ${totalVentas.toFixed(2)}\n`;
-    contenido += `Cantidad de Ventas: ${ventas.length}\n\n`;
-    contenido += `DETALLE DE VENTAS:\n`;
-    contenido += `${'='.repeat(80)}\n`;
-    contenido += `Fecha                | Descripción                    | Usuario        | Monto\n`;
-    contenido += `${'-'.repeat(80)}\n`;
-    
-    ventas.forEach(v => {
-        contenido += `${v.fecha.padEnd(20)} | ${v.tipo.padEnd(30)} | ${v.usuario.padEnd(14)} | S/ ${v.monto.toFixed(2)}\n`;
-    });
-    
-    const blob = new Blob([contenido], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte-${fecha}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    debugLog('sistema', '📄 Reporte exportado');
-};
-
-// ========== ERRORES ==========
-window.showModalReportarError = function() {
-    document.getElementById('modalReportarError').classList.add('show');
-    document.getElementById('errorDescripcion').value = '';
-};
-
-window.closeModalReportarError = function() {
-    document.getElementById('modalReportarError').classList.remove('show');
-};
-
-window.reportarError = async function() {
-    const descripcion = document.getElementById('errorDescripcion').value.trim();
-    
-    if (!descripcion) {
-        mostrarError('Por favor describe el error');
-        return;
-    }
-    
-    const error = {
-        id: Date.now(),
-        descripcion,
-        fecha: new Date().toLocaleString(),
-        usuario: usuarioActual.nombre,
-        estado: 'pendiente'
-    };
-    
-    erroresReportados.push(error);
-    await guardarErrores();
-    
-    alert('Error reportado correctamente. Gracias por tu reporte.');
-    window.closeModalReportarError();
-};
-
-window.toggleEstadoError = async function(id) {
-    const error = erroresReportados.find(e => e.id === id);
-    if (!error) return;
-    
-    error.estado = error.estado === 'pendiente' ? 'resuelto' : 'pendiente';
-    await guardarErrores();
-    actualizarErrores();
-};
-
-window.eliminarError = async function(id) {
-    if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
-    
-    erroresReportados = erroresReportados.filter(e => e.id !== id);
-    await guardarErrores();
-    actualizarErrores();
-};
-
-function actualizarErrores() {
-    const tbody = document.getElementById('erroresTable');
-    if (!tbody) return;
-    
-    if (erroresReportados.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 30px; color: #999;">No hay errores reportados</td></tr>';
-        return;
-    }
-    
-    const erroresOrdenados = [...erroresReportados].reverse();
-    
-    tbody.innerHTML = erroresOrdenados.map(e => `
-        <tr>
-            <td style="font-size: 13px;">${e.fecha}</td>
-            <td>${e.descripcion}</td>
-            <td style="font-size: 13px; color: #666;">${e.usuario}</td>
-            <td style="text-align: center;">
-                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}">
-                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
-                </span>
-            </td>
-            <td style="text-align: center;">
-                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="margin-right: 5px;">
-                    ${e.estado === 'pendiente' ? '✓' : '↻'}
-                </button>
-                <button class="btn-small btn-red" onclick="eliminarError(${e.id})">🗑️</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// ========== USUARIOS ==========
-window.showModalUsuario = function(usuario = null) {
-    if (usuarioActual.rol !== 'admin') return;
-    
-    usuarioEditando = usuario;
-    const modal = document.getElementById('modalUsuario');
-    const title = document.getElementById('usuarioModalTitle');
-    
-    if (usuario) {
-        title.textContent = 'Editar Usuario';
-        document.getElementById('usuarioUsername').value = usuario.username;
-        document.getElementById('usuarioPassword').value = usuario.password;
-        document.getElementById('usuarioNombre').value = usuario.nombre;
-        document.getElementById('usuarioRol').value = usuario.rol;
-    } else {
-        title.textContent = 'Agregar Usuario';
-        document.getElementById('usuarioUsername').value = '';
-        document.getElementById('usuarioPassword').value = '';
-        document.getElementById('usuarioNombre').value = '';
-        document.getElementById('usuarioRol').value = 'empleado';
-    }
-    
-    document.getElementById('usuarioError').classList.add('hidden');
-    modal.classList.add('show');
-};
-
-window.closeModalUsuario = function() {
-    document.getElementById('modalUsuario').classList.remove('show');
-    usuarioEditando = null;
-};
-
-window.guardarUsuario = async function() {
-    const username = document.getElementById('usuarioUsername').value.trim();
-    const password = document.getElementById('usuarioPassword').value;
-    const nombre = document.getElementById('usuarioNombre').value.trim();
-    const rol = document.getElementById('usuarioRol').value;
-    const errorDiv = document.getElementById('usuarioError');
-    
-    if (!username || !password || !nombre) {
-        errorDiv.textContent = 'Por favor completa todos los campos';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
-    if (existente) {
-        errorDiv.textContent = 'El nombre de usuario ya existe';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    if (usuarioEditando) {
-        usuarioEditando.username = username;
-        usuarioEditando.password = password;
-        usuarioEditando.nombre = nombre;
-        usuarioEditando.rol = rol;
-    } else {
-        usuarios.push({
-            id: Date.now(),
-            username,
-            password,
-            nombre,
-            rol
-        });
-    }
-    
-    await guardarUsuarios();
-    actualizarUsuarios();
-    window.closeModalUsuario();
-};
-
-window.eliminarUsuario = async function(id) {
-    if (usuarioActual.id === id) {
-        mostrarError('No puedes eliminar tu propio usuario');
-        return;
-    }
-    
-    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
-    
-    usuarios = usuarios.filter(u => u.id !== id);
-    await guardarUsuarios();
-    actualizarUsuarios();
-};
-
-function actualizarUsuarios() {
-    const tbody = document.getElementById('usuariosTable');
-    if (!tbody) return;
-    
-    tbody.innerHTML = usuarios.map(u => {
-        const usuarioJSON = JSON.stringify(u).replace(/"/g, '&quot;');
-        return `
-            <tr>
-                <td>${u.username}</td>
-                <td>${u.nombre}</td>
-                <td style="text-align: center;">
-                    <span class="badge ${u.rol === 'admin' ? 'badge-success' : 'badge-info'}">
-                        ${u.rol.toUpperCase()}
-                    </span>
-                </td>
-                <td style="text-align: center;">
-                    <button class="btn-small btn-green" onclick='showModalUsuario(${usuarioJSON})' style="margin-right: 5px;">✏️</button>
-                    ${usuarioActual.id !== u.id ? `<button class="btn-small btn-red" onclick="eliminarUsuario(${u.id})">🗑️</button>` : ''}
-                </td>
-            </tr>
-        `;
-    }).join('');
+    debugLog('sistema', '👥 Tabla de usuarios actualizada', { total: usuarios.length });
 }
 
 // ========== MESAS DE CONSUMO ==========
