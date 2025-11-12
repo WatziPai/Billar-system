@@ -1461,170 +1461,41 @@ function actualizarMesasConsumo() {
 // ...existing code...
 {
     // NUEVAS FUNCIONES PARA MESAS DE CONSUMO
-    window.abrirModalConsumo = function(id, tipo) {
-        tipoMesaActual = tipo || 'consumo';
-        mesaConsumoActual = mesasConsumo.find(m => m.id === id);
-        if (!mesaConsumoActual) return;
-        
-        // Preparar modal
-        document.getElementById('modalConsumo').classList.add('show');
-        renderConsumosModal();
-        debugLog('sistema', '🛒 Abriendo modal consumo', { mesa: id });
-    };
-    
-    window.cerrarModalConsumo = function() {
-        document.getElementById('modalConsumo').classList.remove('show');
-        mesaConsumoActual = null;
-        tipoMesaActual = null;
-    };
-    
-    function renderConsumosModal() {
-        const listaEl = document.getElementById('consumosMesaList');
-        const selectEl = document.getElementById('consumoProductosSelect');
-        const qtyEl = document.getElementById('consumoQty');
-        const totalEl = document.getElementById('consumoTotalDisplay');
-        if (!listaEl) return;
-        
-        const consumos = mesaConsumoActual.consumos || [];
-        listaEl.innerHTML = consumos.length === 0 ? '<p style="color:#999; text-align:center; padding:12px;">Sin consumos</p>' : consumos.map((c, i) => `
-            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
-                <div>
-                    <div style="font-weight:600;">${c.nombre}</div>
-                    <div style="font-size:12px; color:#666;">${c.cantidad} x S/ ${c.precio.toFixed(2)}</div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-weight:700; color:#2d7a4d;">S/ ${(c.precio * c.cantidad).toFixed(2)}</div>
-                </div>
-            </div>
-        `).join('');
-        
-        // Rellenar select de productos si existe
-        if (selectEl) {
-            selectEl.innerHTML = productos.length === 0 ? '<option value="">No hay productos</option>' : productos.map(p => `<option value="${p.id}">${p.nombre} - S/ ${p.precio.toFixed(2)} (stk ${p.stock})</option>`).join('');
-            if (qtyEl) qtyEl.value = 1;
+   window.abrirModalConsumo = async function(id, tipo) {
+    tipoMesaActual = tipo || 'consumo';
+    mesaConsumoActual = mesasConsumo.find(m => m.id === id);
+    if (!mesaConsumoActual) return;
+
+    // Si la mesa no está marcada como ocupada, marcarla al abrir el modal
+    if (!mesaConsumoActual.ocupada) {
+        mesaConsumoActual.ocupada = true;
+        try {
+            await updateDoc(doc(db, 'mesas_consumo', mesaConsumoActual.id), { ocupada: true });
+            debugLog('sistema', '▶️ Mesa de consumo marcada como ocupada al abrir modal', { mesa: mesaConsumoActual.id });
+        } catch (error) {
+            console.error('Error marcando mesa como ocupada:', error);
+            mostrarError('Error al abrir la mesa');
+            return;
         }
-        
-        const total = consumos.reduce((s, c) => s + (c.precio * c.cantidad), 0);
-        if (totalEl) totalEl.textContent = `S/ ${total.toFixed(2)}`;
     }
-    
-    window.agregarConsumoMesa = async function(productoId) {
-        if (!mesaConsumoActual) return;
-        const qtyInput = document.getElementById('consumoQty');
-        const cantidad = parseInt(qtyInput ? qtyInput.value : 1);
-        const producto = productos.find(p => p.id === productoId);
-        
-        if (!producto) {
-            mostrarError('Producto no encontrado');
-            return;
-        }
-        if (isNaN(cantidad) || cantidad <= 0) {
-            mostrarError('Cantidad inválida');
-            return;
-        }
-        if (cantidad > producto.stock) {
-            mostrarError(`Stock insuficiente. Quedan ${producto.stock}`);
-            return;
-        }
-        
-        try {
-            // agregar consumo en memoria
-            mesaConsumoActual.ocupada = true;
-            mesaConsumoActual.consumos = mesaConsumoActual.consumos || [];
-            mesaConsumoActual.consumos.push({
-                nombre: producto.nombre,
-                precio: producto.precio,
-                cantidad
-            });
-            mesaConsumoActual.total = mesaConsumoActual.consumos.reduce((s, c) => s + (c.precio * c.cantidad), 0);
-            
-            // actualizar producto stock
-            producto.stock -= cantidad;
-            await updateDoc(doc(db, 'productos', producto.id), { stock: producto.stock });
-            await updateDoc(doc(db, 'mesas_consumo', mesaConsumoActual.id), {
-                consumos: mesaConsumoActual.consumos,
-                total: mesaConsumoActual.total,
-                ocupada: true
-            });
-            
-            renderConsumosModal();
-            actualizarMesasConsumo();
-            actualizarInventario();
-            
-            debugLog('venta', '➕ Consumo agregado', { mesa: mesaConsumoActual.id, producto: producto.nombre, cantidad });
-        } catch (error) {
-            console.error('Error agregando consumo a mesa:', error);
-            mostrarError('Error al agregar consumo');
-        }
-    };
-    
-    window.agregarConsumoManualMesa = async function() {
-        if (!mesaConsumoActual) return;
-        const nombre = document.getElementById('consumoManualNombre').value.trim();
-        const precio = parseFloat(document.getElementById('consumoManualPrecio').value);
-        const cantidad = parseInt(document.getElementById('consumoManualQty').value);
-        
-        if (!nombre || isNaN(precio) || precio <= 0 || isNaN(cantidad) || cantidad <= 0) {
-            mostrarError('Por favor completa los datos del consumo manual correctamente');
-            return;
-        }
-        
-        try {
-            mesaConsumoActual.ocupada = true;
-            mesaConsumoActual.consumos = mesaConsumoActual.consumos || [];
-            mesaConsumoActual.consumos.push({ nombre, precio, cantidad });
-            mesaConsumoActual.total = mesaConsumoActual.consumos.reduce((s, c) => s + (c.precio * c.cantidad), 0);
-            
-            await updateDoc(doc(db, 'mesas_consumo', mesaConsumoActual.id), {
-                consumos: mesaConsumoActual.consumos,
-                total: mesaConsumoActual.total,
-                ocupada: true
-            });
-            
-            renderConsumosModal();
-            actualizarMesasConsumo();
-            
-            debugLog('venta', '➕ Consumo manual agregado', { mesa: mesaConsumoActual.id, nombre, precio, cantidad });
-        } catch (error) {
-            console.error('Error agregando consumo manual:', error);
-            mostrarError('Error al agregar consumo manual');
-        }
-    };
-    
-    window.eliminarConsumoMesa = async function(mesaId, index) {
-        const mesa = mesasConsumo.find(m => m.id === mesaId);
-        if (!mesa) return;
-        if (!confirm('¿Eliminar este consumo?')) return;
-        
-        try {
-            const eliminado = mesa.consumos.splice(index, 1);
-            mesa.total = mesa.consumos.reduce((s, c) => s + (c.precio * c.cantidad), 0);
-            // no restablecemos stock automáticamente si el consumo vino de inventario (opcional)
-            await updateDoc(doc(db, 'mesas_consumo', mesa.id), {
-                consumos: mesa.consumos,
-                total: mesa.total
-            });
-            
-            if (mesaConsumoActual && mesaConsumoActual.id === mesa.id) renderConsumosModal();
-            actualizarMesasConsumo();
-            debugLog('sistema', '🗑️ Consumo eliminado', { mesa: mesa.id, index });
-        } catch (error) {
-            console.error('Error eliminando consumo:', error);
-            mostrarError('Error al eliminar el consumo');
-        }
-    };
-    
-    window.cerrarMesaConsumo = async function(id) {
-        const mesa = mesasConsumo.find(m => m.id === id);
-        if (!mesa || (!mesa.ocupada && (mesa.consumos || []).length === 0)) {
-            mostrarError('La mesa no tiene consumos para cobrar');
-            return;
-        }
-        
-        if (!confirm('Confirmar cobro y cierre de la mesa?')) return;
-        
-        try {
-            const monto = (mesa.total || 0);
+
+    // Preparar modal
+    document.getElementById('modalConsumo').classList.add('show');
+    renderConsumosModal();
+    debugLog('sistema', '🛒 Abriendo modal consumo', { mesa: id });
+};
+// ...existing code...
+window.cerrarMesaConsumo = async function(id) {
+    const mesa = mesasConsumo.find(m => m.id === id);
+    if (!mesa) return;
+
+    if (!confirm('Confirmar cobro y cierre de la mesa?')) return;
+
+    try {
+        const monto = (mesa.total || 0);
+
+        // Si hay monto > 0, registrar venta; si es 0, sólo cerrar sin crear venta
+        if (monto > 0) {
             const ventaData = {
                 tipo: `Mesa Consumo ${mesasConsumo.indexOf(mesa) + 1}`,
                 monto,
@@ -1635,28 +1506,33 @@ function actualizarMesasConsumo() {
             const docRef = await addDoc(collection(db, 'ventas'), ventaData);
             ventaData.id = docRef.id;
             ventas.push(ventaData);
-            
-            // resetear mesa
-            await updateDoc(doc(db, 'mesas_consumo', mesa.id), {
-                ocupada: false,
-                consumos: [],
-                total: 0
-            });
-            mesa.ocupada = false;
-            mesa.consumos = [];
-            mesa.total = 0;
-            
-            actualizarMesasConsumo();
+            debugLog('venta', '💳 Mesa de consumo cobrada', { mesa: mesa.id, monto });
+        } else {
+            debugLog('sistema', '🧾 Mesa cerrada sin consumos', { mesa: mesa.id });
+        }
+
+        // Resetear mesa en BD y memoria
+        await updateDoc(doc(db, 'mesas_consumo', mesa.id), {
+            ocupada: false,
+            consumos: [],
+            total: 0
+        });
+        mesa.ocupada = false;
+        mesa.consumos = [];
+        mesa.total = 0;
+
+        actualizarMesasConsumo();
+        if (monto > 0) {
             actualizarTablaVentas();
             calcularTotal();
-            if (mesaConsumoActual && mesaConsumoActual.id === mesa.id) cerrarModalConsumo();
-            
-            alert(`Mesa cobrada por S/ ${monto.toFixed(2)}`);
-            debugLog('venta', '💳 Mesa de consumo cobrada', { mesa: mesa.id, monto });
-        } catch (error) {
-            console.error('Error cerrando mesa de consumo:', error);
-            mostrarError('Error al cerrar la mesa');
         }
-    };
+        if (mesaConsumoActual && mesaConsumoActual.id === mesa.id) cerrarModalConsumo();
+
+        alert(monto > 0 ? `Mesa cobrada por S/ ${monto.toFixed(2)}` : 'Mesa cerrada correctamente');
+    } catch (error) {
+        console.error('Error cerrando mesa de consumo:', error);
+        mostrarError('Error al cerrar la mesa');
+    }
+};
 }
 // ...existing code...
