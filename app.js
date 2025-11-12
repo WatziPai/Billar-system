@@ -1669,7 +1669,7 @@ function actualizarMesasConsumo() {
             }
             if (mesaConsumoActual && mesaConsumoActual.id === mesa.id) cerrarModalConsumo();
 
-            alert(monto > 0 ? `Mesa cobrada por S/ ${monto.toFixed(2)}` : 'Mesa cerrada correctamente');
+            alert(monto >= 0 ? `Mesa cobrada por S/ ${monto.toFixed(2)}` : 'Mesa cerrada correctamente');
         } catch (error) {
             console.error('Error cerrando mesa de consumo:', error);
             mostrarError('Error al cerrar la mesa');
