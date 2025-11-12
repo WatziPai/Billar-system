@@ -31,6 +31,52 @@ let mesaConsumoActual = null;
 let tipoMesaActual = null;
 let tabActual = 'mesas';
 
+// ========== EXPONER FUNCIONES INMEDIATAMENTE ==========
+// Esto debe ir ANTES del DOMContentLoaded para que estén disponibles en los onclick
+window.handleLogin = function() { console.log('handleLogin llamado (placeholder)'); };
+window.handleLogout = function() { console.log('handleLogout llamado (placeholder)'); };
+window.changeTab = function() { console.log('changeTab llamado (placeholder)'); };
+window.agregarMesa = function() { console.log('agregarMesa llamado (placeholder)'); };
+window.eliminarMesa = function() { console.log('eliminarMesa llamado (placeholder)'); };
+window.toggleMesa = function() { console.log('toggleMesa llamado (placeholder)'); };
+window.showModalVentaManual = function() { console.log('showModalVentaManual llamado (placeholder)'); };
+window.closeModalVentaManual = function() { console.log('closeModalVentaManual llamado (placeholder)'); };
+window.agregarVentaManual = function() { console.log('agregarVentaManual llamado (placeholder)'); };
+window.showModalVentaProductos = function() { console.log('showModalVentaProductos llamado (placeholder)'); };
+window.closeModalVentaProductos = function() { console.log('closeModalVentaProductos llamado (placeholder)'); };
+window.agregarVentaProducto = function() { console.log('agregarVentaProducto llamado (placeholder)'); };
+window.eliminarVenta = function() { console.log('eliminarVenta llamado (placeholder)'); };
+window.showModalProducto = function() { console.log('showModalProducto llamado (placeholder)'); };
+window.closeModalProducto = function() { console.log('closeModalProducto llamado (placeholder)'); };
+window.guardarProducto = function() { console.log('guardarProducto llamado (placeholder)'); };
+window.eliminarProducto = function() { console.log('eliminarProducto llamado (placeholder)'); };
+window.showModalStock = function() { console.log('showModalStock llamado (placeholder)'); };
+window.closeModalStock = function() { console.log('closeModalStock llamado (placeholder)'); };
+window.ajustarStock = function() { console.log('ajustarStock llamado (placeholder)'); };
+window.generarReporte = function() { console.log('generarReporte llamado (placeholder)'); };
+window.showModalError = function() { console.log('showModalError llamado (placeholder)'); };
+window.closeModalError = function() { console.log('closeModalError llamado (placeholder)'); };
+window.reportarError = function() { console.log('reportarError llamado (placeholder)'); };
+window.marcarErrorResuelto = function() { console.log('marcarErrorResuelto llamado (placeholder)'); };
+window.eliminarError = function() { console.log('eliminarError llamado (placeholder)'); };
+window.toggleUsuarios = function() { console.log('toggleUsuarios llamado (placeholder)'); };
+window.showModalUsuarioId = function() { console.log('showModalUsuarioId llamado (placeholder)'); };
+window.showModalUsuario = function() { console.log('showModalUsuario llamado (placeholder)'); };
+window.closeModalUsuario = function() { console.log('closeModalUsuario llamado (placeholder)'); };
+window.crearUsuario = function() { console.log('crearUsuario llamado (placeholder)'); };
+window.eliminarUsuario = function() { console.log('eliminarUsuario llamado (placeholder)'); };
+window.agregarMesaConsumo = function() { console.log('agregarMesaConsumo llamado (placeholder)'); };
+window.iniciarMesaConsumo = function() { console.log('iniciarMesaConsumo llamado (placeholder)'); };
+window.abrirModalConsumo = function() { console.log('abrirModalConsumo llamado (placeholder)'); };
+window.agregarConsumoMesa = function() { console.log('agregarConsumoMesa llamado (placeholder)'); };
+window.aplicarConsumos = function() { console.log('aplicarConsumos llamado (placeholder)'); };
+window.cerrarModalConsumo = function() { console.log('cerrarModalConsumo llamado (placeholder)'); };
+window.finalizarMesaConsumo = function() { console.log('finalizarMesaConsumo llamado (placeholder)'); };
+window.guardarConfiguracion = function() { console.log('guardarConfiguracion llamado (placeholder)'); };
+window.eliminarMesaConsumo = function() { console.log('eliminarMesaConsumo llamado (placeholder)'); };
+window.descargarReporteExcel = function() { console.log('descargarReporteExcel llamado (placeholder)'); };
+window.descargarReportePDF = function() { console.log('descargarReportePDF llamado (placeholder)'); };
+
 // ========== INICIALIZACIÓN ==========
 document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación con Firebase...');
@@ -48,6 +94,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (e.key === 'Enter') handleLogin();
         });
     }
+    
+    // REEMPLAZAR PLACEHOLDERS CON FUNCIONES REALES
+    asignarFuncionesReales();
     
     hideLoading();
     debugLog('sistema', '✅ Aplicación iniciada correctamente');
@@ -1020,7 +1069,32 @@ function generarReporte() {
                    fechaVenta.getFullYear() === ahora.getFullYear();
         });
     }
-    function descargarReporteExcel() {
+    
+    const totalVentas = ventasFiltradas.reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = totalVentas - ventasMesas;
+    
+    document.getElementById('reporteTotalVentas').textContent = `S/ ${totalVentas.toFixed(2)}`;
+    document.getElementById('reporteVentasMesas').textContent = `S/ ${ventasMesas.toFixed(2)}`;
+    document.getElementById('reporteVentasProductos').textContent = `S/ ${ventasProductos.toFixed(2)}`;
+    document.getElementById('reporteTransacciones').textContent = ventasFiltradas.length;
+    
+    const tbody = document.getElementById('reporteDetalleTable');
+    if (ventasFiltradas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas en este período</td></tr>';
+    } else {
+        tbody.innerHTML = [...ventasFiltradas].reverse().map(v => `
+            <tr>
+                <td style="font-size: 13px;">${v.fecha}</td>
+                <td>${v.tipo}</td>
+                <td style="font-size: 13px; color: #666;">${v.usuario}</td>
+                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+            </tr>
+        `).join('');
+    }
+}
+
+function descargarReporteExcel() {
     const periodo = document.getElementById('reportePeriodo').value;
     const ahora = new Date();
     let ventasFiltradas = [];
@@ -1053,7 +1127,6 @@ function generarReporte() {
         nombrePeriodo = `${meses[ahora.getMonth()]}_${ahora.getFullYear()}`;
     }
     
-    // VERIFICAR SI HAY VENTAS
     if (ventasFiltradas.length === 0) {
         alert('⚠️ No hay ventas registradas en el periodo seleccionado');
         return;
@@ -1063,7 +1136,6 @@ function generarReporte() {
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
     
-    // Crear CSV
     let csv = 'REPORTE DE VENTAS - ' + nombrePeriodo + '\n\n';
     csv += 'RESUMEN\n';
     csv += 'Total Ventas,S/ ' + totalVentas.toFixed(2) + '\n';
@@ -1078,7 +1150,6 @@ function generarReporte() {
         csv += `"${v.fecha}","${v.tipo}","${v.usuario}",${v.monto.toFixed(2)}\n`;
     });
     
-    // Descargar
     try {
         const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
@@ -1131,7 +1202,6 @@ function descargarReportePDF() {
         nombrePeriodo = `${meses[ahora.getMonth()]} ${ahora.getFullYear()}`;
     }
     
-    // VERIFICAR SI HAY VENTAS
     if (ventasFiltradas.length === 0) {
         alert('⚠️ No hay ventas registradas en el periodo seleccionado');
         return;
@@ -1141,7 +1211,6 @@ function descargarReportePDF() {
     const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = totalVentas - ventasMesas;
     
-    // Crear HTML para PDF
     const html = `
         <!DOCTYPE html>
         <html>
@@ -1218,7 +1287,6 @@ function descargarReportePDF() {
         </html>
     `;
     
-    // Abrir en nueva ventana para imprimir/guardar como PDF
     try {
         const ventana = window.open('', '_blank');
         if (!ventana) {
@@ -1229,7 +1297,6 @@ function descargarReportePDF() {
         ventana.document.write(html);
         ventana.document.close();
         
-        // Esperar a que cargue y abrir diálogo de impresión
         setTimeout(() => {
             ventana.print();
         }, 500);
@@ -1237,47 +1304,6 @@ function descargarReportePDF() {
         debugLog('sistema', '📄 Reporte PDF generado', { periodo, ventas: ventasFiltradas.length });
     } catch (error) {
         console.error('Error generando PDF:', error);
-        alert('❌ Error al generar el PDF: ' + error.message);
-    }
-}
-    
-    // Abrir en nueva ventana para imprimir/guardar como PDF
-    const ventana = window.open('', '_blank');
-    ventana.document.write(html);
-    ventana.document.close();
-    
-    // Esperar a que cargue y abrir diálogo de impresión
-    setTimeout(() => {
-        ventana.print();
-    }, 500);
-    
-    debugLog('sistema', '📄 Reporte PDF generado', { periodo, ventas: ventasFiltradas.length });
-}
-    
-    const totalVentas = ventasFiltradas.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventasFiltradas.filter(v => v.tipo.startsWith('Mesa')).reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = totalVentas - ventasMesas;
-    
-    document.getElementById('reporteTotalVentas').textContent = `S/ ${totalVentas.toFixed(2)}`;
-    document.getElementById('reporteVentasMesas').textContent = `S/ ${ventasMesas.toFixed(2)}`;
-    document.getElementById('reporteVentasProductos').textContent = `S/ ${ventasProductos.toFixed(2)}`;
-    document.getElementById('reporteTransacciones').textContent = ventasFiltradas.length;
-    
-    const tbody = document.getElementById('reporteDetalleTable');
-    if (ventasFiltradas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas en este período</td></tr>';
-    } else {
-        tbody.innerHTML = [...ventasFiltradas].reverse().map(v => `
-            <tr>
-                <td style="font-size: 13px;">${v.fecha}</td>
-                <td>${v.tipo}</td>
-                <td style="font-size: 13px; color: #666;">${v.usuario}</td>
-                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
-            </tr>
-        `).join('');
-    }
-}
-
 // ========== SISTEMA DE ERRORES ==========
 function showModalError() {
     document.getElementById('modalError').classList.add('show');
@@ -1550,6 +1576,7 @@ async function agregarMesaConsumo() {
     await guardarMesasConsumo();
     actualizarMesasConsumo();
 }
+
 async function eliminarMesaConsumo(id) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar mesas');
@@ -1803,6 +1830,55 @@ function hideLoading() {
     }
 }
 
+// ========== EXPONER FUNCIONES REALES ==========
+function asignarFuncionesReales() {
+    window.handleLogin = handleLogin;
+    window.handleLogout = handleLogout;
+    window.changeTab = changeTab;
+    window.agregarMesa = agregarMesa;
+    window.eliminarMesa = eliminarMesa;
+    window.toggleMesa = toggleMesa;
+    window.showModalVentaManual = showModalVentaManual;
+    window.closeModalVentaManual = closeModalVentaManual;
+    window.agregarVentaManual = agregarVentaManual;
+    window.showModalVentaProductos = showModalVentaProductos;
+    window.closeModalVentaProductos = closeModalVentaProductos;
+    window.agregarVentaProducto = agregarVentaProducto;
+    window.eliminarVenta = eliminarVenta;
+    window.showModalProducto = showModalProducto;
+    window.closeModalProducto = closeModalProducto;
+    window.guardarProducto = guardarProducto;
+    window.eliminarProducto = eliminarProducto;
+    window.showModalStock = showModalStock;
+    window.closeModalStock = closeModalStock;
+    window.ajustarStock = ajustarStock;
+    window.generarReporte = generarReporte;
+    window.showModalError = showModalError;
+    window.closeModalError = closeModalError;
+    window.reportarError = reportarError;
+    window.marcarErrorResuelto = marcarErrorResuelto;
+    window.eliminarError = eliminarError;
+    window.toggleUsuarios = toggleUsuarios;
+    window.showModalUsuarioId = showModalUsuarioId;
+    window.showModalUsuario = showModalUsuario;
+    window.closeModalUsuario = closeModalUsuario;
+    window.crearUsuario = crearUsuario;
+    window.eliminarUsuario = eliminarUsuario;
+    window.agregarMesaConsumo = agregarMesaConsumo;
+    window.iniciarMesaConsumo = iniciarMesaConsumo;
+    window.abrirModalConsumo = abrirModalConsumo;
+    window.agregarConsumoMesa = agregarConsumoMesa;
+    window.aplicarConsumos = aplicarConsumos;
+    window.cerrarModalConsumo = cerrarModalConsumo;
+    window.finalizarMesaConsumo = finalizarMesaConsumo;
+    window.guardarConfiguracion = guardarConfiguracion;
+    window.eliminarMesaConsumo = eliminarMesaConsumo;
+    window.descargarReporteExcel = descargarReporteExcel;
+    window.descargarReportePDF = descargarReportePDF;
+    
+    console.log('%c✅ Funciones reales asignadas correctamente', 'color: #28a745; font-weight: bold;');
+}
+
 // ========== MANEJO DE ERRORES GLOBALES ==========
 window.addEventListener('error', async function(event) {
     debugLog('error', '🚨 Error no capturado', {
@@ -1849,49 +1925,3 @@ if (DEBUG_MODE) {
     console.log('%c🔧 Modo DEBUG activado', 
         'background: #fd7e14; color: white; padding: 5px 10px; border-radius: 3px; margin-top: 10px;');
 }
-// ========== EXPONER FUNCIONES GLOBALMENTE PARA onclick ==========
-window.handleLogin = handleLogin;
-window.handleLogout = handleLogout;
-window.changeTab = changeTab;
-window.agregarMesa = agregarMesa;
-window.eliminarMesa = eliminarMesa;
-window.toggleMesa = toggleMesa;
-window.showModalVentaManual = showModalVentaManual;
-window.closeModalVentaManual = closeModalVentaManual;
-window.agregarVentaManual = agregarVentaManual;
-window.showModalVentaProductos = showModalVentaProductos;
-window.closeModalVentaProductos = closeModalVentaProductos;
-window.agregarVentaProducto = agregarVentaProducto;
-window.eliminarVenta = eliminarVenta;
-window.showModalProducto = showModalProducto;
-window.closeModalProducto = closeModalProducto;
-window.guardarProducto = guardarProducto;
-window.eliminarProducto = eliminarProducto;
-window.showModalStock = showModalStock;
-window.closeModalStock = closeModalStock;
-window.ajustarStock = ajustarStock;
-window.generarReporte = generarReporte;
-window.showModalError = showModalError;
-window.closeModalError = closeModalError;
-window.reportarError = reportarError;
-window.marcarErrorResuelto = marcarErrorResuelto;
-window.eliminarError = eliminarError;
-window.toggleUsuarios = toggleUsuarios;
-window.showModalUsuarioId = showModalUsuarioId;
-window.showModalUsuario = showModalUsuario;
-window.closeModalUsuario = closeModalUsuario;
-window.crearUsuario = crearUsuario;
-window.eliminarUsuario = eliminarUsuario;
-window.agregarMesaConsumo = agregarMesaConsumo;
-window.iniciarMesaConsumo = iniciarMesaConsumo;
-window.abrirModalConsumo = abrirModalConsumo;
-window.agregarConsumoMesa = agregarConsumoMesa;
-window.aplicarConsumos = aplicarConsumos;
-window.cerrarModalConsumo = cerrarModalConsumo;
-window.finalizarMesaConsumo = finalizarMesaConsumo;
-window.guardarConfiguracion = guardarConfiguracion;
-window.eliminarMesaConsumo = eliminarMesaConsumo;
-window.descargarReporteExcel = descargarReporteExcel;
-window.descargarReportePDF = descargarReportePDF;
-
-console.log('%c✅ Todas las funciones expuestas globalmente', 'color: #28a745; font-weight: bold;');
