@@ -896,11 +896,82 @@ function generarReporte() {
 }
 
 window.descargarReporteExcel = function() {
-    mostrarError('Función de descarga Excel en desarrollo');
+    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    
+    // Crear CSV
+    let csv = 'REPORTE DE VENTAS\n\n';
+    csv += `Total Ventas,S/ ${totalVentas.toFixed(2)}\n`;
+    csv += `Ventas Mesas,S/ ${ventasMesas.toFixed(2)}\n`;
+    csv += `Ventas Productos,S/ ${ventasProductos.toFixed(2)}\n`;
+    csv += `Total Transacciones,${ventas.length}\n\n`;
+    csv += 'Fecha,Descripción,Usuario,Monto\n';
+    
+    ventas.forEach(v => {
+        csv += `"${v.fecha}","${v.tipo}","${v.usuario}",${v.monto.toFixed(2)}\n`;
+    });
+    
+    // Descargar
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fecha = new Date().toLocaleString().replace(/[/:]/g, '-');
+    a.href = url;
+    a.download = `reporte-${fecha}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    debugLog('sistema', '📊 Reporte Excel descargado');
 };
 
 window.descargarReportePDF = function() {
-    mostrarError('Función de descarga PDF en desarrollo');
+    // Versión texto simple (sin librerías externas)
+    const fecha = new Date().toLocaleString();
+    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventas.filter(v => v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventas.filter(v => !v.tipo.includes('Mesa')).reduce((sum, v) => sum + v.monto, 0);
+    
+    let contenido = `═══════════════════════════════════════════════════════════════
+    REPORTE DE VENTAS
+    ${fecha}
+═══════════════════════════════════════════════════════════════
+
+RESUMEN GENERAL
+───────────────────────────────────────────────────────────────
+Total Ventas:           S/ ${totalVentas.toFixed(2)}
+Ventas Mesas:           S/ ${ventasMesas.toFixed(2)}
+Ventas Productos:       S/ ${ventasProductos.toFixed(2)}
+Total Transacciones:    ${ventas.length}
+
+DETALLE DE VENTAS
+═══════════════════════════════════════════════════════════════
+Fecha                | Descripción              | Usuario    | Monto
+─────────────────────┼──────────────────────────┼────────────┼──────────
+`;
+    
+    ventas.forEach(v => {
+        const fechaStr = v.fecha.padEnd(20);
+        const tipoStr = v.tipo.substring(0, 24).padEnd(24);
+        const usuarioStr = v.usuario.substring(0, 10).padEnd(10);
+        const montoStr = `S/ ${v.monto.toFixed(2)}`;
+        contenido += `${fechaStr} | ${tipoStr} | ${usuarioStr} | ${montoStr}\n`;
+    });
+    
+    contenido += `═══════════════════════════════════════════════════════════════
+Fin del Reporte
+`;
+    
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fechaArchivo = new Date().toLocaleString().replace(/[/:]/g, '-');
+    a.href = url;
+    a.download = `reporte-${fechaArchivo}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    debugLog('sistema', '📄 Reporte PDF (txt) descargado');
 };
 
 window.exportarReporte = function() {
@@ -1024,8 +1095,14 @@ function actualizarErrores() {
 
 // ========== USUARIOS ==========
 window.toggleUsuarios = function() {
-    changeTab('usuarios');
-    actualizarUsuarios();
+    const panel = document.getElementById('usuariosPanel');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        actualizarUsuarios();
+    } else {
+        panel.classList.add('hidden');
+    }
 };
 
 window.showModalUsuario = function(usuario = null) {
@@ -1037,16 +1114,16 @@ window.showModalUsuario = function(usuario = null) {
     
     if (usuario) {
         title.textContent = 'Editar Usuario';
-        document.getElementById('usuarioUsername').value = usuario.username;
-        document.getElementById('usuarioPassword').value = usuario.password;
-        document.getElementById('usuarioNombre').value = usuario.nombre;
-        document.getElementById('usuarioRol').value = usuario.rol;
+        document.getElementById('nuevoNombre').value = usuario.nombre;
+        document.getElementById('nuevoUsername').value = usuario.username;
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = usuario.rol;
     } else {
         title.textContent = 'Agregar Usuario';
-        document.getElementById('usuarioUsername').value = '';
-        document.getElementById('usuarioPassword').value = '';
-        document.getElementById('usuarioNombre').value = '';
-        document.getElementById('usuarioRol').value = 'empleado';
+        document.getElementById('nuevoNombre').value = '';
+        document.getElementById('nuevoUsername').value = '';
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = 'empleado';
     }
     
     document.getElementById('usuarioError').classList.add('hidden');
@@ -1059,13 +1136,14 @@ window.closeModalUsuario = function() {
 };
 
 window.guardarUsuario = async function() {
-    const username = document.getElementById('usuarioUsername').value.trim();
-    const password = document.getElementById('usuarioPassword').value;
-    const nombre = document.getElementById('usuarioNombre').value.trim();
-    const rol = document.getElementById('usuarioRol').value;
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const username = document.getElementById('nuevoUsername').value.trim();
+    const password = document.getElementById('nuevoPassword').value;
+    const rol = document.getElementById('nuevoRol').value;
     const errorDiv = document.getElementById('usuarioError');
     
-    if (!username || !password || !nombre) {
+    // Al editar, la contraseña es opcional
+    if (!nombre || !username || (!usuarioEditando && !password)) {
         errorDiv.textContent = 'Por favor completa todos los campos';
         errorDiv.classList.remove('hidden');
         return;
@@ -1079,9 +1157,12 @@ window.guardarUsuario = async function() {
     }
     
     if (usuarioEditando) {
-        usuarioEditando.username = username;
-        usuarioEditando.password = password;
         usuarioEditando.nombre = nombre;
+        usuarioEditando.username = username;
+        // Solo actualizar contraseña si se ingresó una nueva
+        if (password) {
+            usuarioEditando.password = password;
+        }
         usuarioEditando.rol = rol;
     } else {
         usuarios.push({
