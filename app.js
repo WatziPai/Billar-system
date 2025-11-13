@@ -1251,7 +1251,6 @@ function actualizarHistorialCierres() {
                         </button>
                     `}
                 </div>
-```
 
 ---
 
