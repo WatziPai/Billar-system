@@ -32,6 +32,7 @@ let tipoMesaActual = null;
 let tabActual = 'mesas';
 let cierres = [];
 let ultimoCierre = null;
+let consumosDueno = [];
 
 // ========== INICIALIZACIÓN ==========
 document.addEventListener('DOMContentLoaded', async function() {
@@ -177,6 +178,10 @@ async function guardarCierres() {
     await window.firebaseDB.set('cierres', 'historial', { lista: cierres });
 }
 
+async function guardarConsumosDueno() {
+    await window.firebaseDB.set('consumos', 'dueno', { lista: consumosDueno });
+}
+
 async function guardarMesas() {
     await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
 }
@@ -282,6 +287,7 @@ function mostrarPantallaPrincipal() {
         document.getElementById('tabErrores').classList.remove('hidden');
         document.getElementById('btnReportarError').classList.add('hidden');
         document.getElementById('btnAgregarProducto').classList.remove('hidden');
+        document.getElementById('tabConsumoDueno').classList.remove('hidden');
     } else {
         document.getElementById('btnUsuarios').classList.add('hidden');
         document.getElementById('btnAgregarMesa').classList.add('hidden');
@@ -289,6 +295,7 @@ function mostrarPantallaPrincipal() {
         document.getElementById('tabErrores').classList.add('hidden');
         document.getElementById('btnReportarError').classList.remove('hidden');
         document.getElementById('btnAgregarProducto').classList.add('hidden');
+        document.getElementById('tabConsumoDueno').classList.add('hidden');
     }
     
     actualizarMesas();
@@ -314,6 +321,7 @@ window.changeTab = function(tab, event) {
     if (tab === 'reportes') generarReporte();
     else if (tab === 'errores') actualizarErrores();
     else if (tab === 'inventario') actualizarInventario();
+    else if (tab === 'consumoDueno') actualizarConsumoDueno();
 };
 
 // ========== GESTIÓN DE MESAS ==========
@@ -804,6 +812,17 @@ window.showModalStock = function(productoId) {
     document.getElementById('stockProductoNombre').textContent = producto.nombre;
     document.getElementById('stockActual').textContent = producto.stock;
     document.getElementById('stockAjuste').value = '';
+    
+    // Cambiar el placeholder según el rol
+    const inputAjuste = document.getElementById('stockAjuste');
+    if (usuarioActual.rol === 'admin') {
+        inputAjuste.placeholder = 'Ej: +10 o -5';
+        inputAjuste.setAttribute('min', '');
+    } else {
+        inputAjuste.placeholder = 'Ej: +10 (solo positivos)';
+        inputAjuste.setAttribute('min', '1');
+    }
+    
     document.getElementById('modalStock').classList.add('show');
 };
 
@@ -817,6 +836,27 @@ window.ajustarStock = async function() {
     
     if (isNaN(ajuste) || ajuste === 0) {
         mostrarError('Por favor ingresa un valor válido');
+        return;
+    }
+    
+    // Validar que empleados solo puedan agregar (positivo)
+    if (usuarioActual.rol !== 'admin' && ajuste < 0) {
+        mostrarError('Los empleados solo pueden agregar stock (números positivos)');
+        return;
+    }
+    
+    const nuevoStock = productoEditando.stock + ajuste;
+    
+    if (nuevoStock < 0) {
+        mostrarError('El stock no puede ser negativo');
+        return;
+    }
+    
+    productoEditando.stock = nuevoStock;
+    await guardarProductos();
+    actualizarInventario();
+    window.closeModalStock();
+};mostrarError('Por favor ingresa un valor válido');
         return;
     }
     
@@ -855,17 +895,21 @@ function actualizarInventario() {
                         <div class="producto-stock ${stockBajo ? 'stock-bajo' : ''}">${p.stock}</div>
                     </div>
                     <div style="display: flex; gap: 5px;">
-                        <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;">
-                            📊
-                        </button>
                         ${usuarioActual.rol === 'admin' ? `
-                            <button class="btn-small btn-green" onclick='showModalProducto(${productoJSON})' style="padding: 5px 10px; font-size: 12px;">
+                            <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
+                                📊
+                            </button>
+                            <button class="btn-small btn-green" onclick='showModalProducto(${productoJSON})' style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
                                 ✏️
                             </button>
-                            <button class="btn-small btn-red" onclick="eliminarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;">
+                            <button class="btn-small btn-red" onclick="eliminarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Eliminar Producto">
                                 🗑️
                             </button>
-                        ` : ''}
+                        ` : `
+                            <button class="btn-small btn-green" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Agregar Stock">
+                                ➕ Stock
+                            </button>
+                        `}
                     </div>
                 </div>
                 ${stockBajo ? '<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;">⚠️ Stock bajo</div>' : ''}
@@ -890,6 +934,13 @@ function generarReporte() {
     const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
     const ventasManuales = ventasActuales.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
     
+    // Calcular total de consumos del dueño desde último cierre
+    const consumosDuenoActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    
     const totalEl = document.getElementById('reporteTotalVentas');
     const mesasEl = document.getElementById('reporteVentasMesas');
     const productosEl = document.getElementById('reporteVentasProductos');
@@ -905,6 +956,12 @@ function generarReporte() {
     mesasEl.textContent = `S/ ${ventasMesas.toFixed(2)}`;
     productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
+    
+    // Mostrar consumos del dueño
+    const consumoDuenoEl = document.getElementById('reporteConsumoDueno');
+    if (consumoDuenoEl) {
+        consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
+    }
     
     let infoCierre = '';
     if (ultimoCierre) {
@@ -1018,7 +1075,9 @@ window.cerrarDia = async function() {
         total: totalCierre,
         ventas: ventasActuales.map(v => ({...v})),
         ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
-        ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0)
+        ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
+        consumosDueno: consumosDuenoActuales.map(c => ({...c})),
+        totalConsumosDueno: totalConsumosDueno
     };
     
     cierres.push(cierre);
@@ -1042,7 +1101,8 @@ function descargarReporteCierre(cierre) {
     csv += `"Total del Cierre","S/ ${cierre.total.toFixed(2)}"\n`;
     csv += `"Ventas Mesas","S/ ${cierre.ventasMesas.toFixed(2)}"\n`;
     csv += `"Ventas Productos/Consumo","S/ ${cierre.ventasProductos.toFixed(2)}"\n`;
-    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n\n`;
+    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n`;
+    csv += `"Consumo Dueño (No Cobrado)","S/ ${cierre.totalConsumosDueno.toFixed(2)}"\n\n`;
     
     csv += 'DETALLE DE VENTAS\n';
     csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
@@ -1069,6 +1129,17 @@ function descargarReporteCierre(cierre) {
         
         csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
     });
+    
+    // Agregar consumos del dueño
+    if (cierre.consumosDueno && cierre.consumosDueno.length > 0) {
+        csv += '\nCONSUMO DEL DUEÑO (NO COBRADO)\n';
+        csv += 'Fecha,Productos,Total\n';
+        
+        cierre.consumosDueno.forEach(c => {
+            const productosDesc = c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ');
+            csv += `"${c.fecha}","${productosDesc}","S/ ${c.total.toFixed(2)}"\n`;
+        });
+    }
     
     const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1439,6 +1510,10 @@ window.descargarCierrePDF = function(cierreId) {
                         <label>🛒 Ventas Productos</label>
                         <div class="valor" style="font-size: 16px;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
                     </div>
+                    <div class="info-item">
+                        <label>🍽️ Consumo Dueño (No Cobrado)</label>
+                        <div class="valor" style="font-size: 16px; color: #ff9800;">S/ ${cierre.totalConsumosDueno.toFixed(2)}</div>
+                    </div>
                 </div>
             </div>
             
@@ -1518,6 +1593,26 @@ window.descargarCierrePDF = function(cierreId) {
                     </div>
                 `;
             }).join('')}
+            
+            ${cierre.consumosDueno && cierre.consumosDueno.length > 0 ? `
+                <h2>🍽️ Consumo del Dueño (No Cobrado)</h2>
+                ${cierre.consumosDueno.map((c, index) => `
+                    <div class="venta-item" style="border-left: 4px solid #ff9800;">
+                        <div class="venta-fecha">🍽️ ${c.fecha}</div>
+                        <div class="venta-header">
+                            <div class="venta-titulo">Consumo Personal</div>
+                            <div class="venta-monto" style="color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                            ${c.productos.map(p => `
+                                <div style="padding: 3px 0;">
+                                    • ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u) = S/ ${(p.precio * p.cantidad).toFixed(2)}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            ` : ''}
             
             <div class="footer">
                 <p>Sistema de Gestión de Billar • Cierre generado automáticamente</p>
@@ -2116,4 +2211,259 @@ function actualizarListaConsumos() {
     `).join('');
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
+}
+
+// ========== CONSUMO DEL DUEÑO ==========
+window.showModalConsumoDueno = function() {
+    document.getElementById('modalConsumoDueno').classList.add('show');
+    renderProductosConsumoDueno();
+    actualizarCarritoConsumoDueno();
 };
+
+window.closeModalConsumoDueno = function() {
+    document.getElementById('modalConsumoDueno').classList.remove('show');
+};
+
+let carritoConsumoDueno = [];
+
+function renderProductosConsumoDueno() {
+    const container = document.getElementById('productosConsumoDuenoGrid');
+    
+    if (!container) return;
+    
+    if (productos.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No hay productos disponibles.</p>';
+        return;
+    }
+    
+    container.innerHTML = productos.map(p => {
+        const disponible = p.stock > 0;
+        
+        return `
+            <div class="producto-consumo-card ${!disponible ? 'no-stock' : ''}">
+                <div class="producto-consumo-info">
+                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">${p.nombre}</div>
+                    <div style="font-size: 14px; color: #666; margin-bottom: 5px;">S/ ${p.precio.toFixed(2)}</div>
+                    <div style="font-size: 13px; color: ${p.stock <= 5 ? '#dc3545' : '#28a745'};">
+                        Stock: ${p.stock}
+                    </div>
+                </div>
+                ${disponible ? `
+                    <button class="btn btn-primary btn-small" onclick="agregarProductoConsumoDueno(${p.id})" style="width: 100%;">
+                        ➕ Agregar
+                    </button>
+                ` : `
+                    <button class="btn btn-red btn-small" disabled style="width: 100%;">
+                        Agotado
+                    </button>
+                `}
+            </div>
+        `;
+    }).join('');
+}
+
+window.agregarProductoConsumoDueno = function(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto || producto.stock <= 0) {
+        mostrarError('Producto no disponible');
+        return;
+    }
+    
+    const existente = carritoConsumoDueno.find(c => c.id === productoId);
+    if (existente) {
+        if (existente.cantidad < producto.stock) {
+            existente.cantidad++;
+        } else {
+            mostrarError('No hay suficiente stock');
+            return;
+        }
+    } else {
+        carritoConsumoDueno.push({
+            id: productoId,
+            nombre: producto.nombre,
+            precio: producto.precio,
+            cantidad: 1
+        });
+    }
+    
+    actualizarCarritoConsumoDueno();
+};
+
+window.quitarProductoConsumoDueno = function(productoId) {
+    carritoConsumoDueno = carritoConsumoDueno.filter(c => c.id !== productoId);
+    actualizarCarritoConsumoDueno();
+};
+
+function actualizarCarritoConsumoDueno() {
+    const container = document.getElementById('carritoConsumoDuenoContainer');
+    const totalEl = document.getElementById('totalConsumoDueno');
+    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
+    
+    if (!container || !totalEl) return;
+    
+    if (carritoConsumoDueno.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay productos en el carrito</p>';
+        totalEl.textContent = 'S/ 0.00';
+        if (btnGuardar) btnGuardar.disabled = true;
+        return;
+    }
+    
+    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    
+    container.innerHTML = carritoConsumoDueno.map(c => `
+        <div class="consumo-item">
+            <div>
+                <div style="font-weight: 600;">${c.nombre}</div>
+                <div style="font-size: 14px; color: #666;">S/ ${c.precio.toFixed(2)} x ${c.cantidad}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-weight: 600; color: #ff9800;">S/ ${(c.precio * c.cantidad).toFixed(2)}</div>
+                <button class="btn btn-red btn-small" onclick="quitarProductoConsumoDueno(${c.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+    
+    totalEl.textContent = `S/ ${total.toFixed(2)}`;
+    if (btnGuardar) btnGuardar.disabled = false;
+}
+
+window.guardarConsumoDueno = async function() {
+    if (carritoConsumoDueno.length === 0) {
+        mostrarError('El carrito está vacío');
+        return;
+    }
+    
+    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
+    if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = 'Guardando...';
+    }
+    
+    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    
+    const consumo = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString('es-PE'),
+        productos: carritoConsumoDueno.map(c => ({
+            nombre: c.nombre,
+            precio: c.precio,
+            cantidad: c.cantidad
+        })),
+        total: total
+    };
+    
+    // Descontar stock
+    carritoConsumoDueno.forEach(c => {
+        const producto = productos.find(p => p.id === c.id);
+        if (producto) {
+            producto.stock -= c.cantidad;
+        }
+    });
+    
+    consumosDueno.push(consumo);
+    
+    await guardarConsumosDueno();
+    await guardarProductos();
+    
+    alert(`✅ Consumo registrado por S/ ${total.toFixed(2)}\n\nNota: Este consumo NO se cobra pero se descuenta del stock.`);
+    
+    carritoConsumoDueno = [];
+    window.closeModalConsumoDueno();
+    actualizarInventario();
+    
+    if (btnGuardar) {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = 'Guardar Consumo';
+    }
+};
+
+function actualizarConsumoDueno() {
+    const container = document.getElementById('consumoDuenoContainer');
+    if (!container) return;
+    
+    const consumosActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    if (consumosActuales.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 50px; color: #999;"><p style="font-size: 48px; margin: 0;">🍽️</p><p style="margin-top: 10px;">No hay consumos registrados desde el último cierre</p></div>';
+        return;
+    }
+    
+    const consumosOrdenados = [...consumosActuales].reverse();
+    const totalGeneral = consumosOrdenados.reduce((sum, c) => sum + c.total, 0);
+    
+    container.innerHTML = `
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 16px; color: #856404;">📊 Total Consumido (No Cobrado)</strong>
+                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                        ${consumosOrdenados.length} ${consumosOrdenados.length === 1 ? 'registro' : 'registros'}
+                    </div>
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
+                    S/ ${totalGeneral.toFixed(2)}
+                </div>
+            </div>
+        </div>
+        
+        ${consumosOrdenados.map((c, index) => `
+            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; border-left: 4px solid #ff9800;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px; color: #999; margin-bottom: 8px;">
+                            🍽️ ${c.fecha}
+                        </div>
+                        <div style="background: #fff3cd; padding: 10px; border-radius: 6px;">
+                            <strong style="font-size: 12px; color: #856404;">Productos:</strong>
+                            <div style="margin-top: 8px;">
+                                ${c.productos.map(p => `
+                                    <div style="font-size: 12px; color: #856404; padding: 3px 0; display: flex; justify-content: space-between;">
+                                        <span>• ${p.nombre} x${p.cantidad}</span>
+                                        <span><strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong></span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-left: 20px;">
+                        <div style="font-size: 22px; font-weight: bold; color: #ff9800;">
+                            S/ ${c.total.toFixed(2)}
+                        </div>
+                    </div>
+                </div>
+                ${usuarioActual.rol === 'admin' ? `
+                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})" style="width: 100%;">
+                        🗑️ Eliminar Registro
+                    </button>
+                ` : ''}
+            </div>
+        `).join('')}
+    `;
+}
+
+window.eliminarConsumoDueno = async function(consumoId) {
+    if (!confirm('¿Estás seguro de eliminar este registro de consumo?')) return;
+    
+    const consumo = consumosDueno.find(c => c.id === consumoId);
+    if (!consumo) return;
+    
+    // Devolver stock
+    consumo.productos.forEach(p => {
+        const producto = productos.find(prod => prod.nombre === p.nombre);
+        if (producto) {
+            producto.stock += p.cantidad;
+        }
+    });
+    
+    consumosDueno = consumosDueno.filter(c => c.id !== consumoId);
+    
+    await guardarConsumosDueno();
+    await guardarProductos();
+    
+    actualizarConsumoDueno();
+    actualizarInventario();
+    
+    alert('✅ Registro eliminado y stock devuelto');
+};;
