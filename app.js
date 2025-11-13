@@ -118,11 +118,9 @@ async function cargarDatos() {
         const erroresData = await window.firebaseDB.get('errores', 'todos');
         erroresReportados = (erroresData && erroresData.lista) ? erroresData.lista : [];
         
-        // Cargar cierres
         const cierresData = await window.firebaseDB.get('cierres', 'historial');
         cierres = (cierresData && cierresData.lista) ? cierresData.lista : [];
         
-        // Determinar último cierre
         if (cierres.length > 0) {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
@@ -880,7 +878,6 @@ function actualizarInventario() {
 function generarReporte() {
     debugLog('sistema', '📊 Generando reporte...');
     
-    // Filtrar ventas desde el último cierre
     const ventasActuales = ultimoCierre 
         ? ventas.filter(v => v.id > ultimoCierre)
         : ventas;
@@ -909,7 +906,6 @@ function generarReporte() {
     productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
     
-    // Mostrar info del último cierre
     let infoCierre = '';
     if (ultimoCierre) {
         const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
@@ -982,7 +978,6 @@ function generarReporte() {
         detalleTable.parentElement.innerHTML = htmlDetalle;
     }
     
-    // Actualizar historial de cierres
     actualizarHistorialCierres();
     
     debugLog('sistema', '✅ Reporte generado correctamente', { 
@@ -1031,7 +1026,6 @@ window.cerrarDia = async function() {
     
     await guardarCierres();
     
-    // Generar y descargar reporte automáticamente
     descargarReporteCierre(cierre);
     
     alert(`✅ Cierre registrado correctamente\n\n📄 Se descargó el reporte automáticamente`);
@@ -1102,7 +1096,6 @@ function actualizarHistorialCierres() {
     
     container.innerHTML = cierresOrdenados.map((c, index) => `
         <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
-            <!-- Header del cierre (siempre visible) -->
             <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
                 <div style="flex: 1;">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
@@ -1127,9 +1120,7 @@ function actualizarHistorialCierres() {
                 </div>
             </div>
             
-            <!-- Detalle desplegable (inicialmente oculto) -->
             <div id="cierre-${c.id}" style="display: none; border-top: 1px solid #e0e0e0;">
-                <!-- Resumen -->
                 <div style="padding: 15px; background: #f8f9fa;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #2d7a4d;">
@@ -1143,7 +1134,6 @@ function actualizarHistorialCierres() {
                     </div>
                 </div>
                 
-                <!-- Lista de ventas -->
                 <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
                     <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
                     ${c.ventas.map((v, vIndex) => {
@@ -1236,7 +1226,6 @@ function actualizarHistorialCierres() {
                     }).join('')}
                 </div>
                 
-               <!-- Botones de acción -->
                 <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
                     ${usuarioActual.rol === 'admin' ? `
                         <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 48%; padding: 12px; margin-right: 4%;">
@@ -1251,23 +1240,6 @@ function actualizarHistorialCierres() {
                         </button>
                     `}
                 </div>
-
----
-
-## ✨ **Cómo quedará:**
-
-### **Para Empleados:**
-```
-┌─────────────────────────────────────┐
-│  [📄 Descargar PDF]                │
-└─────────────────────────────────────┘
-```
-
-### **Para Administradores:**
-```
-┌─────────────────────────────────────┐
-│  [📄 Descargar PDF] [🗑️ Eliminar]  │
-└─────────────────────────────────────┘
             </div>
         </div>
     `).join('');
@@ -1564,245 +1536,6 @@ window.descargarCierrePDF = function(cierreId) {
     debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
 };
 
-
-window.descargarReportePDF = function() {
-    const fecha = new Date().toLocaleString('es-PE', { 
-        dateStyle: 'full', 
-        timeStyle: 'short' 
-    });
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    
-    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
-    
-    ventanaImpresion.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte de Ventas</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    padding: 40px;
-                    background: white;
-                    color: #333;
-                }
-                .header {
-                    text-align: center;
-                    border-bottom: 3px solid #2d7a4d;
-                    padding-bottom: 20px;
-                    margin-bottom: 30px;
-                }
-                h1 {
-                    color: #2d7a4d;
-                    font-size: 32px;
-                    margin-bottom: 10px;
-                }
-                .fecha {
-                    color: #666;
-                    font-size: 14px;
-                }
-                .resumen {
-                    background: #f8f9fa;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 30px;
-                }
-                .resumen-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 15px;
-                    margin-top: 15px;
-                }
-                .resumen-item {
-                    background: white;
-                    padding: 15px;
-                    border-radius: 5px;
-                    border-left: 4px solid #2d7a4d;
-                }
-                .resumen-item label {
-                    display: block;
-                    color: #666;
-                    font-size: 12px;
-                    margin-bottom: 5px;
-                }
-                .resumen-item .valor {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: #2d7a4d;
-                }
-                h2 {
-                    color: #2d7a4d;
-                    font-size: 20px;
-                    margin: 30px 0 15px 0;
-                    border-bottom: 2px solid #e0e0e0;
-                    padding-bottom: 8px;
-                }
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-top: 15px;
-                    background: white;
-                }
-                th {
-                    background: #2d7a4d;
-                    color: white;
-                    padding: 12px;
-                    text-align: left;
-                    font-weight: 600;
-                }
-                td {
-                    padding: 10px 12px;
-                    border-bottom: 1px solid #e0e0e0;
-                    font-size: 12px;
-                }
-                tr:hover {
-                    background: #f8f9fa;
-                }
-                .monto {
-                    text-align: right;
-                    font-weight: 600;
-                    color: #2d7a4d;
-                }
-                .detalle {
-                    font-size: 11px;
-                    color: #666;
-                    margin-top: 3px;
-                }
-                .footer {
-                    margin-top: 40px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 12px;
-                    border-top: 1px solid #e0e0e0;
-                    padding-top: 20px;
-                }
-                @media print {
-                    body { padding: 20px; }
-                    .no-print { display: none; }
-                    @page { margin: 1cm; }
-                }
-                .btn-imprimir {
-                    background: #2d7a4d;
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 16px;
-                    margin: 20px 0;
-                }
-                .btn-imprimir:hover {
-                    background: #1f5436;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="no-print">
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            </div>
-            
-            <div class="header">
-                <h1>🎱 REPORTE DE VENTAS</h1>
-                <p class="fecha">${fecha}</p>
-            </div>
-            
-            <div class="resumen">
-                <h2 style="margin-top: 0; border: none;">📊 Resumen General</h2>
-                <div class="resumen-grid">
-                    <div class="resumen-item">
-                        <label>Total Ventas</label>
-                        <div class="valor">S/ ${totalVentas.toFixed(2)}</div>
-                    </div>
-                    <div class="resumen-item">
-                        <label>Total Transacciones</label>
-                        <div class="valor">${ventas.length}</div>
-                    </div>
-                    <div class="resumen-item">
-                        <label>Ventas Mesas</label>
-                        <div class="valor">S/ ${ventasMesas.toFixed(2)}</div>
-                    </div>
-                    <div class="resumen-item">
-                        <label>Ventas Productos</label>
-                        <div class="valor">S/ ${ventasProductos.toFixed(2)}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <h2>📋 Detalle de Ventas</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Descripción</th>
-                        <th>Usuario</th>
-                        <th style="text-align: right;">Monto</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${ventas.map(v => {
-                        let detalleHTML = '';
-                        
-                        if (v.detalle) {
-                            if (v.tipo === 'Mesa Billar') {
-                                detalleHTML = `
-                                    <strong>🎱 ${v.tipoDetalle}</strong><br>
-                                    <small class="detalle">⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} (${v.detalle.tiempoMinutos} min)</small><br>
-                                    <small class="detalle">💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}</small>
-                                    ${v.detalle.consumos.length > 0 ? `
-                                        <br><small class="detalle"><strong>Consumos:</strong> ${v.detalle.consumos.map(c => 
-                                            `${c.producto} x${c.cantidad}`
-                                        ).join(', ')} = S/ ${v.detalle.totalConsumos.toFixed(2)}</small>
-                                    ` : ''}
-                                `;
-                            } else if (v.tipo === 'Mesa Consumo') {
-                                detalleHTML = `
-                                    <strong>🍺 ${v.tipoDetalle}</strong><br>
-                                    <small class="detalle">${v.detalle.consumos.map(c => 
-                                        `${c.producto} x${c.cantidad} = S/ ${c.subtotal.toFixed(2)}`
-                                    ).join('<br>')}</small>
-                                `;
-                            } else if (v.tipo === 'Venta Directa') {
-                                detalleHTML = `<strong>🛒 ${v.tipoDetalle}</strong>`;
-                            } else {
-                                detalleHTML = `<strong>📝 ${v.tipoDetalle}</strong>`;
-                            }
-                        } else {
-                            detalleHTML = v.tipo;
-                        }
-                        
-                        return `
-                            <tr>
-                                <td><small>${v.fecha}</small></td>
-                                <td>${detalleHTML}</td>
-                                <td>${v.usuario}</td>
-                                <td class="monto">S/ ${v.monto.toFixed(2)}</td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
-            
-            <div class="footer">
-                <p>Sistema de Gestión de Billar • Generado automáticamente</p>
-            </div>
-        </body>
-        </html>
-    `);
-    
-    ventanaImpresion.document.close();
-    
-    setTimeout(() => {
-        ventanaImpresion.focus();
-    }, 250);
-    
-    debugLog('sistema', '📄 Ventana de impresión PDF abierta');
-};
-// Agregar esta función en tu app.js (después de descargarCierrePDF)
-
 window.eliminarCierre = async function(cierreId) {
     if (usuarioActual.rol !== 'admin') {
         mostrarError('Solo los administradores pueden eliminar cierres');
@@ -1823,21 +1556,18 @@ window.eliminarCierre = async function(cierreId) {
     
     if (!confirmar) return;
     
-    // Preguntar si descargó el PDF
     const descargo = confirm(
         `¿Ya descargaste el PDF de este cierre?\n\n` +
         `Si no lo has hecho, haz clic en "Cancelar" y descárgalo primero.`
     );
     
     if (!descargo) {
-        alert('👍 Puedes descargar el PDF haciendo clic en el botón "📄 Descargar PDF del Cierre"');
+        alert('👍 Puedes descargar el PDF haciendo clic en el botón "📄 Descargar PDF"');
         return;
     }
     
-    // Eliminar el cierre
     cierres = cierres.filter(c => c.id !== cierreId);
     
-    // Si eliminamos el último cierre, actualizar ultimoCierre
     if (cierres.length > 0) {
         ultimoCierre = cierres[cierres.length - 1].timestamp;
     } else {
@@ -2386,4 +2116,4 @@ function actualizarListaConsumos() {
     `).join('');
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
-}
+};
