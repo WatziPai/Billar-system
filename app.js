@@ -1236,12 +1236,35 @@ function actualizarHistorialCierres() {
                     }).join('')}
                 </div>
                 
-                <!-- Botón de descarga -->
-                <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
-                    <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
-                        📄 Descargar PDF del Cierre
-                    </button>
-                </div>
+               <!-- Botones de acción -->
+<div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
+    <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: ${usuarioActual.rol === 'admin' ? '48%' : '100%'}; padding: 12px; ${usuarioActual.rol === 'admin' ? 'margin-right: 4%;' : ''}">
+        📄 Descargar PDF
+    </button>
+    ${usuarioActual.rol === 'admin' ? `
+        <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
+            🗑️ Eliminar Cierre
+        </button>
+    ` : ''}
+</div>
+```
+
+---
+
+## ✨ **Cómo quedará:**
+
+### **Para Empleados:**
+```
+┌─────────────────────────────────────┐
+│  [📄 Descargar PDF]                │
+└─────────────────────────────────────┘
+```
+
+### **Para Administradores:**
+```
+┌─────────────────────────────────────┐
+│  [📄 Descargar PDF] [🗑️ Eliminar]  │
+└─────────────────────────────────────┘
             </div>
         </div>
     `).join('');
@@ -1774,6 +1797,58 @@ window.descargarReportePDF = function() {
     }, 250);
     
     debugLog('sistema', '📄 Ventana de impresión PDF abierta');
+};
+// Agregar esta función en tu app.js (después de descargarCierrePDF)
+
+window.eliminarCierre = async function(cierreId) {
+    if (usuarioActual.rol !== 'admin') {
+        mostrarError('Solo los administradores pueden eliminar cierres');
+        return;
+    }
+    
+    const cierre = cierres.find(c => c.id === cierreId);
+    if (!cierre) return;
+    
+    const confirmar = confirm(
+        `⚠️ ¿Eliminar este cierre?\n\n` +
+        `📅 Fecha: ${cierre.fecha}\n` +
+        `💰 Total: S/ ${cierre.total.toFixed(2)}\n` +
+        `📊 Ventas: ${cierre.cantidadVentas}\n\n` +
+        `⚠️ ADVERTENCIA: Esta acción NO se puede deshacer.\n` +
+        `Se recomienda descargar el PDF antes de eliminar.`
+    );
+    
+    if (!confirmar) return;
+    
+    // Preguntar si descargó el PDF
+    const descargo = confirm(
+        `¿Ya descargaste el PDF de este cierre?\n\n` +
+        `Si no lo has hecho, haz clic en "Cancelar" y descárgalo primero.`
+    );
+    
+    if (!descargo) {
+        alert('👍 Puedes descargar el PDF haciendo clic en el botón "📄 Descargar PDF del Cierre"');
+        return;
+    }
+    
+    // Eliminar el cierre
+    cierres = cierres.filter(c => c.id !== cierreId);
+    
+    // Si eliminamos el último cierre, actualizar ultimoCierre
+    if (cierres.length > 0) {
+        ultimoCierre = cierres[cierres.length - 1].timestamp;
+    } else {
+        ultimoCierre = null;
+    }
+    
+    await guardarCierres();
+    
+    alert('✅ Cierre eliminado correctamente');
+    
+    actualizarHistorialCierres();
+    generarReporte();
+    
+    debugLog('sistema', '🗑️ Cierre eliminado', { cierreId });
 };
 
 // ========== ERRORES ==========
