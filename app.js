@@ -1338,9 +1338,54 @@ function actualizarHistorialCierres() {
         return;
     }
     
+    // Agrupar cierres por día
+    const cierresPorDia = {};
+    cierres.forEach(cierre => {
+        const fecha = new Date(cierre.timestamp);
+        const diaKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+        
+        if (!cierresPorDia[diaKey]) {
+            cierresPorDia[diaKey] = {
+                fecha: fecha.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                cierres: []
+            };
+        }
+        cierresPorDia[diaKey].cierres.push(cierre);
+    });
+    
+    const diasOrdenados = Object.keys(cierresPorDia).sort().reverse();
+    
     const cierresOrdenados = [...cierres].reverse();
     
-    container.innerHTML = cierresOrdenados.map((c, index) => `
+    container.innerHTML = `
+        <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <strong style="font-size: 16px; color: #1565c0;">📊 Descargas Agrupadas por Día</strong>
+                    <div style="font-size: 13px; color: #1976d2; margin-top: 5px;">
+                        Descarga todos los cierres de un día en un solo PDF
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    ${diasOrdenados.slice(0, 3).map(dia => {
+                        const info = cierresPorDia[dia];
+                        const totalDia = info.cierres.reduce((sum, c) => sum + c.total, 0);
+                        return `
+                            <button class="btn btn-blue btn-small" onclick="descargarCierrePorDia('${dia}')" style="padding: 8px 15px;">
+                                📅 ${dia} (${info.cierres.length} ${info.cierres.length === 1 ? 'cierre' : 'cierres'}) - S/ ${totalDia.toFixed(2)}
+                            </button>
+                        `;
+                    }).join('')}
+                    ${diasOrdenados.length > 3 ? `
+                        <button class="btn btn-teal btn-small" onclick="mostrarTodosDias()" style="padding: 8px 15px;">
+                            Ver más días...
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+        
+        ${cierresOrdenados.map((c, index) => `
         <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
             <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
                 <div style="flex: 1;">
@@ -2074,6 +2119,245 @@ window.eliminarCierre = async function(cierreId) {
     debugLog('sistema', '🗑️ Cierre eliminado', { cierreId });
 };
 
+window.descargarCierrePorDia = function(diaKey) {
+    const cierresDelDia = cierres.filter(cierre => {
+        const fecha = new Date(cierre.timestamp);
+        const key = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+        return key === diaKey;
+    });
+    
+    if (cierresDelDia.length === 0) {
+        alert('❌ No hay cierres para este día');
+        return;
+    }
+    
+    const totalDia = cierresDelDia.reduce((sum, c) => sum + c.total, 0);
+    const totalVentas = cierresDelDia.reduce((sum, c) => sum + c.cantidadVentas, 0);
+    const totalConsumosDueno = cierresDelDia.reduce((sum, c) => (c.totalConsumosDueno || 0) + sum, 0);
+    const fechaFormateada = new Date(cierresDelDia[0].timestamp).toLocaleDateString('es-PE', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Cierres del ${diaKey}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #2d7a4d;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .info-resumen {
+                    background: #e8f5e9;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    border-left: 4px solid #4caf50;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr 1fr;
+                    gap: 15px;
+                    margin-top: 15px;
+                }
+                .info-item {
+                    background: white;
+                    padding: 12px;
+                    border-radius: 5px;
+                    border-left: 3px solid #4caf50;
+                }
+                .info-item label {
+                    display: block;
+                    color: #666;
+                    font-size: 11px;
+                    margin-bottom: 5px;
+                }
+                .info-item .valor {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #2d7a4d;
+                }
+                h2 {
+                    color: #2d7a4d;
+                    font-size: 18px;
+                    margin: 25px 0 15px 0;
+                    border-bottom: 2px solid #e0e0e0;
+                    padding-bottom: 8px;
+                }
+                .cierre-bloque {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    border-left: 4px solid #2196f3;
+                    page-break-inside: avoid;
+                }
+                .cierre-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid #e0e0e0;
+                }
+                .venta-item {
+                    background: white;
+                    padding: 10px;
+                    border-radius: 4px;
+                    margin-bottom: 8px;
+                    border-left: 2px solid #2d7a4d;
+                    font-size: 12px;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #2d7a4d;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #1f5436;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>📊 CIERRES DEL DÍA</h1>
+                <p style="color: #666; margin-top: 5px; text-transform: capitalize;">${fechaFormateada}</p>
+                <p style="color: #999; margin-top: 5px; font-size: 13px;">${cierresDelDia.length} ${cierresDelDia.length === 1 ? 'cierre registrado' : 'cierres registrados'}</p>
+            </div>
+            
+            <div class="info-resumen">
+                <h3 style="color: #2d7a4d; margin-bottom: 15px;">💰 Resumen del Día</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Total del Día</label>
+                        <div class="valor">S/ ${totalDia.toFixed(2)}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Total de Ventas</label>
+                        <div class="valor">${totalVentas}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Consumo Dueño</label>
+                        <div class="valor" style="color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            ${cierresDelDia.map((cierre, index) => {
+                const totalConsumosCierre = cierre.totalConsumosDueno || 0;
+                return `
+                    <div class="cierre-bloque">
+                        <div class="cierre-header">
+                            <div>
+                                <h3 style="color: #2196f3; margin-bottom: 5px;">
+                                    🔒 Cierre #${cierre.id}
+                                    ${index === 0 ? '<span style="background: #4caf50; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
+                                </h3>
+                                <div style="font-size: 13px; color: #666;">
+                                    ${cierre.fecha} • ${cierre.usuario}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 24px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.total.toFixed(2)}</div>
+                                <div style="font-size: 12px; color: #666;">${cierre.cantidadVentas} ${cierre.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                            <div style="background: white; padding: 10px; border-radius: 4px;">
+                                <div style="font-size: 11px; color: #666;">🎱 Ventas Mesas</div>
+                                <div style="font-size: 16px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                            </div>
+                            <div style="background: white; padding: 10px; border-radius: 4px;">
+                                <div style="font-size: 11px; color: #666;">🛒 Ventas Productos</div>
+                                <div style="font-size: 16px; font-weight: bold; color: #007bff;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        
+                        <h4 style="color: #333; font-size: 14px; margin-bottom: 10px;">Detalle de Ventas:</h4>
+                        ${cierre.ventas.slice(0, 5).map(v => {
+                            let desc = v.tipoDetalle || v.tipo;
+                            if (v.detalle && v.detalle.consumos) {
+                                desc += ' - ' + v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
+                            }
+                            return `
+                                <div class="venta-item">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>${desc}</span>
+                                        <strong style="color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</strong>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                        ${cierre.ventas.length > 5 ? `<div style="text-align: center; color: #999; font-size: 12px; margin-top: 10px;">... y ${cierre.ventas.length - 5} ventas más</div>` : ''}
+                    </div>
+                `;
+            }).join('')}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
+    
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 PDF de cierres por día generado', { dia: diaKey, cantidad: cierresDelDia.length });
+};
+
+window.mostrarTodosDias = function() {
+    alert('📅 Función en desarrollo: Selector de fechas para descargar cierres de cualquier día.');
+};
+
 // ========== ERRORES ==========
 window.showModalError = function() {
     document.getElementById('modalError').classList.add('show');
@@ -2789,7 +3073,15 @@ function actualizarConsumoDueno() {
         : consumosDueno;
     
     if (consumosActuales.length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 50px; color: #999;"><p style="font-size: 48px; margin: 0;">🍽️</p><p style="margin-top: 10px;">No hay consumos registrados desde el último cierre</p></div>';
+        container.innerHTML = `
+            <div style="text-align: center; padding: 50px; color: #999;">
+                <p style="font-size: 48px; margin: 0;">🍽️</p>
+                <p style="margin-top: 10px;">No hay consumos registrados desde el último cierre</p>
+                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 20px; padding: 12px 30px;">
+                    ➕ Registrar Primer Consumo
+                </button>
+            </div>
+        `;
         return;
     }
     
@@ -2797,18 +3089,23 @@ function actualizarConsumoDueno() {
     const totalGeneral = consumosOrdenados.reduce((sum, c) => sum + c.total, 0);
     
     container.innerHTML = `
-        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong style="font-size: 16px; color: #856404;">📊 Total Consumido (No Cobrado)</strong>
-                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                        ${consumosOrdenados.length} ${consumosOrdenados.length === 1 ? 'registro' : 'registros'}
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="background: #fff3cd; padding: 15px 20px; border-radius: 8px; flex: 1; margin-right: 15px; border-left: 4px solid #ff9800;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="font-size: 16px; color: #856404;">📊 Total Consumido (No Cobrado)</strong>
+                        <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                            ${consumosOrdenados.length} ${consumosOrdenados.length === 1 ? 'registro' : 'registros'}
+                        </div>
+                    </div>
+                    <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
+                        S/ ${totalGeneral.toFixed(2)}
                     </div>
                 </div>
-                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                    S/ ${totalGeneral.toFixed(2)}
-                </div>
             </div>
+            <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="padding: 15px 25px; white-space: nowrap;">
+                📄 Descargar PDF
+            </button>
         </div>
         
         ${consumosOrdenados.map((c, index) => `
@@ -2845,6 +3142,154 @@ function actualizarConsumoDueno() {
         `).join('')}
     `;
 }
+
+window.descargarConsumoDuenoPDF = function() {
+    const consumosActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    if (consumosActuales.length === 0) {
+        alert('⚠️ No hay consumos para descargar');
+        return;
+    }
+    
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Consumo del Dueño</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #ff9800;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #ff9800;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .total-box {
+                    background: #fff3cd;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    border-left: 4px solid #ff9800;
+                }
+                .consumo-item {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin-bottom: 12px;
+                    border-left: 4px solid #ff9800;
+                    page-break-inside: avoid;
+                }
+                .consumo-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #ff9800;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #e68900;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>🍽️ CONSUMO DEL DUEÑO</h1>
+                <p style="color: #666; margin-top: 5px;">Generado: ${new Date().toLocaleString('es-PE')}</p>
+                <p style="color: #856404; margin-top: 10px; font-size: 14px;">⚠️ Estos consumos NO fueron cobrados pero se descontaron del stock</p>
+            </div>
+            
+            <div class="total-box">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="font-size: 16px; color: #856404;">Total Consumido</strong>
+                        <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                            ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
+                        </div>
+                    </div>
+                    <div style="font-size: 32px; font-weight: bold; color: #ff9800;">
+                        S/ ${totalGeneral.toFixed(2)}
+                    </div>
+                </div>
+            </div>
+            
+            ${consumosActuales.reverse().map(c => `
+                <div class="consumo-item">
+                    <div class="consumo-header">
+                        <div style="font-weight: bold; color: #333;">${c.fecha}</div>
+                        <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+                    </div>
+                    <div style="background: #fff3cd; padding: 10px; border-radius: 4px;">
+                        ${c.productos.map(p => `
+                            <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
+                                <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
+                                <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('')}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
+    
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 PDF de consumo dueño generado');
+};
 
 window.eliminarConsumoDueno = async function(consumoId) {
     if (!confirm('¿Estás seguro de eliminar este registro de consumo?')) return;
