@@ -28,8 +28,6 @@
             <button class="btn btn-primary" style="width: 100%;" id="btnLogin" onclick="handleLogin()">
                 Iniciar Sesión
             </button>
-            
-            
         </div>
     </div>
 
@@ -85,6 +83,11 @@
                     <label>Tarifa cada 5 min extra (S/)</label>
                     <input type="number" id="tarifaExtra5Min" value="0.50" step="0.10" min="0">
                 </div>
+                <div class="config-box" style="display: flex; align-items: flex-end;">
+                    <button class="btn btn-blue" onclick="guardarConfiguracion()" style="width: 100%; padding: 10px;">
+                        💾 Guardar Configuración
+                    </button>
+                </div>
                 <div class="config-box total-box">
                     <label>Total del Día</label>
                     <div class="total-amount" id="totalDia">S/ 0.00</div>
@@ -107,6 +110,9 @@
             </button>
             <button id="tabErrores" class="tab hidden" onclick="changeTab('errores', event)" data-tab="errores">
                 ⚠️ Errores
+            </button>
+            <button id="tabConsumoDueno" class="tab hidden" onclick="changeTab('consumoDueno', event)" data-tab="consumoDueno">
+                🍽️ Consumo Dueño
             </button>
         </div>
 
@@ -185,23 +191,6 @@
             <div class="section-box">
                 <h2 style="margin-bottom: 20px;">Reportes y Estadísticas</h2>
                 
-                <div class="reporte-filters">
-                    <select id="reportePeriodo" onchange="generarReporte()">
-                        <option value="hoy">Hoy</option>
-                        <option value="semana">Esta Semana</option>
-                        <option value="mes">Este Mes</option>
-                    </select>
-                    <button class="btn-small btn-teal" onclick="generarReporte()">
-                        🔄 Actualizar
-                    </button>
-                    <button class="btn-small btn-green" onclick="descargarReporteExcel()">
-                        📥 Descargar Excel
-                    </button>
-                    <button class="btn-small btn-blue" onclick="descargarReportePDF()">
-                        📄 Descargar PDF
-                    </button>
-                </div>
-
                 <div class="reporte-grid">
                     <div class="reporte-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                         <h3>Total Ventas</h3>
@@ -218,6 +207,10 @@
                     <div class="reporte-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
                         <h3>Transacciones</h3>
                         <div class="valor" id="reporteTransacciones">0</div>
+                    </div>
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <h3>Consumo Dueño</h3>
+                        <div class="valor" id="reporteConsumoDueno" style="font-size: 14px;">S/ 0.00</div>
                     </div>
                 </div>
 
@@ -252,7 +245,6 @@
                     <h3 style="color: #2d7a4d; margin-bottom: 15px;">📁 Historial de Cierres</h3>
                     <div id="historialCierresContainer"></div>
                 </div>
-
             </div>
         </div>
 
@@ -264,8 +256,30 @@
                 <div id="erroresContainer"></div>
             </div>
         </div>
+
+        <div id="tabConsumoDueno" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>🍽️ Consumo del Dueño</h2>
+                    <button class="btn-small btn-primary" onclick="showModalConsumoDueno()">
+                        ➕ Registrar Consumo
+                    </button>
+                </div>
+                <p style="color: #666; margin-bottom: 20px;">
+                    ℹ️ Aquí se registran los consumos personales que NO se cobran, pero se descuentan del stock
+                </p>
+                <div id="consumoDuenoContainer"></div>
+            </div>
+        </div>
     </div>
 
+    <!-- LOADING OVERLAY -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p style="margin-top: 20px; color: white;">Cargando...</p>
+    </div>
+
+    <!-- MODALES -->
     <div id="modalUsuario" class="modal">
         <div class="modal-content">
             <div class="modal-header" id="usuarioModalTitle">Crear Usuario</div>
@@ -290,7 +304,7 @@
                 </select>
             </div>
             <div class="modal-buttons">
-                <button class="btn btn-green btn-full" onclick="crearUsuario()">Guardar</button>
+                <button class="btn btn-green btn-full" onclick="guardarUsuario()">Guardar</button>
                 <button class="btn btn-gray btn-full" onclick="closeModalUsuario()">Cancelar</button>
             </div>
         </div>
@@ -376,7 +390,7 @@
             <div class="modal-header">Reportar Error</div>
             <div class="input-group">
                 <label>Describe el error</label>
-                <textarea id="errorMensaje" placeholder="Describe qué sucedió... Ej: La mesa 2 no calculó bien el tiempo"></textarea>
+                <textarea id="errorMensaje" placeholder="Describe qué sucedió... Ej: La mesa 2 no calculó bien el tiempo" rows="5"></textarea>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-orange btn-full" onclick="reportarError()">Enviar</button>
@@ -390,14 +404,16 @@
             <h3 id="consumoModalTitle" style="margin-bottom: 10px; color: #333;">Agregar Consumo</h3>
             <p style="color: #666; margin-bottom: 20px;">✨ Selecciona los productos para agregar a la mesa</p>
             
-            <div class="productos-grid-modal" id="productosConsumoGrid"></div>
+            <div id="productosConsumoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;"></div>
             
-            <div class="cuenta-actual">
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 2px solid #28a745;">
                 <h4 style="margin-bottom: 15px; color: #155724; display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 24px;">📋</span> Resumen de Consumos
                 </h4>
-                <div id="cuentaActualLista"></div>
-                <div class="total-cuenta" id="totalCuentaActual">S/ 0.00</div>
+                <div id="cuentaActualLista" style="margin-bottom: 15px;"></div>
+                <div style="text-align: right; font-size: 24px; font-weight: bold; color: #28a745; border-top: 2px solid #28a745; padding-top: 15px;" id="totalCuentaActual">
+                    S/ 0.00
+                </div>
             </div>
             
             <div class="modal-buttons">
@@ -408,7 +424,35 @@
         </div>
     </div>
 
+    <div id="modalConsumoDueno" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <h3 style="margin-bottom: 10px; color: #333;">🍽️ Registrar Consumo del Dueño</h3>
+            <p style="color: #666; margin-bottom: 20px;">⚠️ Este consumo NO se cobrará, pero se descontará del inventario</p>
+            
+            <div id="productosConsumoDuenoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;"></div>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 8px; border: 2px solid #ff9800;">
+                <h4 style="margin-bottom: 15px; color: #856404; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 24px;">🛒</span> Carrito de Consumo
+                </h4>
+                <div id="carritoConsumoDuenoContainer" style="margin-bottom: 15px;"></div>
+                <div style="text-align: right; font-size: 24px; font-weight: bold; color: #ff9800; border-top: 2px solid #ff9800; padding-top: 15px;" id="totalConsumoDueno">
+                    S/ 0.00
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn btn-primary btn-full" onclick="guardarConsumoDueno()" id="btnGuardarConsumoDueno">
+                    💾 Guardar Consumo
+                </button>
+                <button class="btn btn-gray btn-full" onclick="closeModalConsumoDueno()">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="firebase-config.js"></script>
-    <script  src="app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
