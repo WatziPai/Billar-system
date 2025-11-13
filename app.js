@@ -1237,16 +1237,20 @@ function actualizarHistorialCierres() {
                 </div>
                 
                <!-- Botones de acción -->
-<div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
-    <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: ${usuarioActual.rol === 'admin' ? '48%' : '100%'}; padding: 12px; ${usuarioActual.rol === 'admin' ? 'margin-right: 4%;' : ''}">
-        📄 Descargar PDF
-    </button>
-    ${usuarioActual.rol === 'admin' ? `
-        <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
-            🗑️ Eliminar Cierre
-        </button>
-    ` : ''}
-</div>
+                <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
+                    ${usuarioActual.rol === 'admin' ? `
+                        <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 48%; padding: 12px; margin-right: 4%;">
+                            📄 Descargar PDF
+                        </button>
+                        <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
+                            🗑️ Eliminar Cierre
+                        </button>
+                    ` : `
+                        <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
+                            📄 Descargar PDF
+                        </button>
+                    `}
+                </div>
 ```
 
 ---
