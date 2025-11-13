@@ -292,14 +292,22 @@ async function guardarMesasConsumo() {
 
 async function guardarConfiguracion() {
     const config = {
-        tarifaHora: document.getElementById('tarifaHora').value,
-        tarifaExtra5Min: document.getElementById('tarifaExtra5Min').value
+        tarifaHora: parseFloat(document.getElementById('tarifaHora').value) || 5.00,
+        tarifaExtra5Min: parseFloat(document.getElementById('tarifaExtra5Min').value) || 0.50
     };
     await window.firebaseDB.set('configuracion', 'general', config);
+    
+    // Actualizar el cálculo de todas las mesas activas
     mesas.forEach(mesa => {
         if (mesa.ocupada) actualizarTimer(mesa.id);
     });
+    
+    alert('✅ Configuración guardada correctamente');
 }
+
+// Alias para que funcione desde el HTML
+window.crearUsuario = window.guardarUsuario;
+window.guardarConfiguracion = guardarConfiguracion;
 
 function guardarSesion() {
     if (usuarioActual) {
@@ -377,35 +385,75 @@ window.handleLogout = function() {
 function mostrarPantallaPrincipal() {
     debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
     
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('mainScreen').classList.remove('hidden');
+    const loginScreen = document.getElementById('loginScreen');
+    const mainScreen = document.getElementById('mainScreen');
     
-    document.getElementById('userName').textContent = usuarioActual.nombre;
-    document.getElementById('userRole').textContent = usuarioActual.rol.toUpperCase();
+    if (!loginScreen || !mainScreen) {
+        debugLog('error', '❌ Elementos de pantalla no encontrados', {
+            loginScreen: !!loginScreen,
+            mainScreen: !!mainScreen
+        });
+        alert('Error: Elementos de la interfaz no encontrados. Recarga la página.');
+        return;
+    }
+    
+    loginScreen.classList.add('hidden');
+    mainScreen.classList.remove('hidden');
+    
+    const userName = document.getElementById('userName');
+    const userRole = document.getElementById('userRole');
+    
+    if (userName) userName.textContent = usuarioActual.nombre;
+    if (userRole) userRole.textContent = usuarioActual.rol.toUpperCase();
     
     iniciarMonitoreoInactividad();
     
+    // Función helper para mostrar/ocultar elementos de forma segura
+    const toggleElement = (id, show) => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (show) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        } else {
+            debugLog('error', `⚠️ Elemento no encontrado: ${id}`);
+        }
+    };
+    
     if (usuarioActual.rol === 'admin') {
-        document.getElementById('btnUsuarios').classList.remove('hidden');
-        document.getElementById('btnAgregarMesa').classList.remove('hidden');
-        document.getElementById('btnAgregarMesaConsumo').classList.remove('hidden');
-        document.getElementById('tabErrores').classList.remove('hidden');
-        document.getElementById('btnReportarError').classList.add('hidden');
-        document.getElementById('btnAgregarProducto').classList.remove('hidden');
-        document.getElementById('tabConsumoDueno').classList.remove('hidden');
+        toggleElement('btnUsuarios', true);
+        toggleElement('btnAgregarMesa', true);
+        toggleElement('btnAgregarMesaConsumo', true);
+        toggleElement('tabErrores', true);
+        toggleElement('btnReportarError', false);
+        toggleElement('btnAgregarProducto', true);
+        toggleElement('tabConsumoDueno', true);
     } else {
-        document.getElementById('btnUsuarios').classList.add('hidden');
-        document.getElementById('btnAgregarMesa').classList.add('hidden');
-        document.getElementById('btnAgregarMesaConsumo').classList.add('hidden');
-        document.getElementById('tabErrores').classList.add('hidden');
-        document.getElementById('btnReportarError').classList.remove('hidden');
-        document.getElementById('btnAgregarProducto').classList.add('hidden');
-        document.getElementById('tabConsumoDueno').classList.add('hidden');
+        toggleElement('btnUsuarios', false);
+        toggleElement('btnAgregarMesa', false);
+        toggleElement('btnAgregarMesaConsumo', false);
+        toggleElement('tabErrores', false);
+        toggleElement('btnReportarError', true);
+        toggleElement('btnAgregarProducto', false);
+        toggleElement('tabConsumoDueno', false);
     }
     
     debugLog('sistema', '🔄 Actualizando todas las vistas...', { mesas: mesas.length });
-    actualizarMesas();
-    actualizarMesasConsumo();
+    
+    // Verificar que los contenedores existen antes de actualizar
+    const mesasContainer = document.getElementById('mesasContainer');
+    const mesasConsumoContainer = document.getElementById('mesasConsumoContainer');
+    
+    if (!mesasContainer) {
+        debugLog('error', '❌ CRÍTICO: mesasContainer no existe en el HTML');
+    } else {
+        debugLog('sistema', '✅ mesasContainer encontrado, actualizando...');
+        actualizarMesas();
+    }
+    
+    if (mesasConsumoContainer) {
+        actualizarMesasConsumo();
+    }
+    
     actualizarTablaVentas();
     actualizarInventario();
     calcularTotal();
@@ -426,10 +474,15 @@ window.changeTab = function(tab, event) {
     
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
     
-    if (tab === 'reportes') generarReporte();
-    else if (tab === 'errores') actualizarErrores();
-    else if (tab === 'inventario') actualizarInventario();
-    else if (tab === 'consumoDueno') actualizarConsumoDueno();
+    if (tab === 'reportes') {
+        generarReporte();
+    } else if (tab === 'errores') {
+        actualizarErrores();
+    } else if (tab === 'inventario') {
+        actualizarInventario();
+    } else if (tab === 'consumoDueno') {
+        actualizarConsumoDueno();
+    }
 };
 
 // ========== GESTIÓN DE MESAS ==========
@@ -1454,7 +1507,17 @@ window.toggleDetalleCierre = function(elementId) {
 
 window.descargarCierrePDF = function(cierreId) {
     const cierre = cierres.find(c => c.id === cierreId);
-    if (!cierre) return;
+    if (!cierre) {
+        alert('❌ No se encontró el cierre');
+        return;
+    }
+    
+    // Validar que existan los datos necesarios
+    const totalConsumosDueno = (cierre.totalConsumosDueno !== undefined && cierre.totalConsumosDueno !== null) 
+        ? cierre.totalConsumosDueno 
+        : 0;
+    
+    const consumosDueno = cierre.consumosDueno || [];
     
     const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
     
@@ -1634,7 +1697,7 @@ window.descargarCierrePDF = function(cierreId) {
                     </div>
                     <div class="info-item">
                         <label>🍽️ Consumo Dueño (No Cobrado)</label>
-                        <div class="valor" style="font-size: 16px; color: #ff9800;">S/ ${cierre.totalConsumosDueno.toFixed(2)}</div>
+                        <div class="valor" style="font-size: 16px; color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
                     </div>
                 </div>
             </div>
@@ -1716,9 +1779,9 @@ window.descargarCierrePDF = function(cierreId) {
                 `;
             }).join('')}
             
-            ${cierre.consumosDueno && cierre.consumosDueno.length > 0 ? `
+            ${consumosDueno.length > 0 ? `
                 <h2>🍽️ Consumo del Dueño (No Cobrado)</h2>
-                ${cierre.consumosDueno.map((c, index) => `
+                ${consumosDueno.map((c, index) => `
                     <div class="venta-item" style="border-left: 4px solid #ff9800;">
                         <div class="venta-fecha">🍽️ ${c.fecha}</div>
                         <div class="venta-header">
@@ -1751,6 +1814,216 @@ window.descargarCierrePDF = function(cierreId) {
     }, 250);
     
     debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
+};
+
+window.descargarReportePDF = function() {
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
+    
+    if (ventasActuales.length === 0) {
+        alert('⚠️ No hay ventas para generar el reporte');
+        return;
+    }
+    
+    const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    
+    const consumosDuenoActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Ventas</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #2d7a4d;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                    margin-bottom: 30px;
+                }
+                .info-item {
+                    background: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    border-left: 4px solid #2d7a4d;
+                }
+                .info-item label {
+                    display: block;
+                    color: #666;
+                    font-size: 12px;
+                    margin-bottom: 5px;
+                }
+                .info-item .valor {
+                    font-size: 20px;
+                    font-weight: bold;
+                    color: #2d7a4d;
+                }
+                h2 {
+                    color: #2d7a4d;
+                    font-size: 18px;
+                    margin: 25px 0 15px 0;
+                    border-bottom: 2px solid #e0e0e0;
+                    padding-bottom: 8px;
+                }
+                .venta-item {
+                    background: #f9f9f9;
+                    padding: 12px;
+                    border-radius: 6px;
+                    margin-bottom: 10px;
+                    border-left: 3px solid #2d7a4d;
+                    page-break-inside: avoid;
+                    font-size: 13px;
+                }
+                .venta-header {
+                    display: flex;
+                    justify-content: space-between;
+                    font-weight: bold;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #2d7a4d;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #1f5436;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>📊 REPORTE DE VENTAS</h1>
+                <p style="color: #666; margin-top: 5px;">Generado: ${new Date().toLocaleString('es-PE')}</p>
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>💰 Total de Ventas</label>
+                    <div class="valor">S/ ${totalVentas.toFixed(2)}</div>
+                </div>
+                <div class="info-item">
+                    <label>📊 Cantidad de Transacciones</label>
+                    <div class="valor">${ventasActuales.length}</div>
+                </div>
+                <div class="info-item">
+                    <label>🎱 Ventas de Mesas</label>
+                    <div class="valor">S/ ${ventasMesas.toFixed(2)}</div>
+                </div>
+                <div class="info-item">
+                    <label>🛒 Ventas de Productos</label>
+                    <div class="valor">S/ ${ventasProductos.toFixed(2)}</div>
+                </div>
+                <div class="info-item">
+                    <label>🍽️ Consumo Dueño (No Cobrado)</label>
+                    <div class="valor" style="color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
+                </div>
+            </div>
+            
+            <h2>📋 Detalle de Ventas</h2>
+            
+            ${ventasActuales.reverse().map(v => {
+                let descripcion = v.tipoDetalle || v.tipo;
+                if (v.detalle && v.detalle.consumos) {
+                    descripcion += ' - ' + v.detalle.consumos.map(c => 
+                        `${c.producto} x${c.cantidad}`
+                    ).join(', ');
+                }
+                
+                return `
+                    <div class="venta-item">
+                        <div class="venta-header">
+                            <span>${v.fecha} - ${descripcion}</span>
+                            <span style="color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</span>
+                        </div>
+                        <div style="color: #666; font-size: 11px; margin-top: 3px;">
+                            Usuario: ${v.usuario}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+            
+            ${consumosDuenoActuales.length > 0 ? `
+                <h2>🍽️ Consumo del Dueño (No Cobrado)</h2>
+                ${consumosDuenoActuales.map(c => `
+                    <div class="venta-item" style="border-left-color: #ff9800;">
+                        <div class="venta-header">
+                            <span>${c.fecha}</span>
+                            <span style="color: #ff9800;">S/ ${c.total.toFixed(2)}</span>
+                        </div>
+                        <div style="color: #666; font-size: 11px; margin-top: 3px;">
+                            ${c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ')}
+                        </div>
+                    </div>
+                `).join('')}
+            ` : ''}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
+    
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 PDF de reporte generado');
+};
+
+window.descargarReporteExcel = function() {
+    alert('📊 Función de descarga Excel próximamente. Por ahora usa el PDF o el cierre de caja que genera CSV.');
 };
 
 window.eliminarCierre = async function(cierreId) {
@@ -2308,8 +2581,17 @@ function actualizarListaConsumos() {
         mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
     }
     
-    const container = document.getElementById('consumosActualesContainer');
-    const totalEl = document.getElementById('totalConsumos');
+    // Usar los IDs correctos del HTML
+    const container = document.getElementById('cuentaActualLista');
+    const totalEl = document.getElementById('totalCuentaActual');
+    
+    if (!container || !totalEl) {
+        debugLog('error', '⚠️ Elementos de consumo no encontrados en el HTML', {
+            container: !!container,
+            totalEl: !!totalEl
+        });
+        return;
+    }
     
     if (!mesa || !mesa.consumos || mesa.consumos.length === 0) {
         container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay consumos agregados</p>';
