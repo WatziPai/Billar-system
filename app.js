@@ -1385,7 +1385,7 @@ function actualizarHistorialCierres() {
             </div>
         </div>
         
-        ${cierresOrdenados.map((c, index) => 
+        ${cierresOrdenados.map((c, index) => `
         <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
             <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
                 <div style="flex: 1;">
