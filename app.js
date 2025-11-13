@@ -1100,162 +1100,444 @@ function actualizarHistorialCierres() {
     
     const cierresOrdenados = [...cierres].reverse();
     
-    container.innerHTML = cierresOrdenados.map(c => `
-        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                <div>
-                    <div style="font-weight: 600; font-size: 14px; color: #2d7a4d;">🔒 Cierre #${c.id}</div>
-                    <div style="font-size: 12px; color: #666; margin-top: 3px;">📅 ${c.fecha}</div>
-                    <div style="font-size: 12px; color: #666;">👤 ${c.usuario}</div>
+    container.innerHTML = cierresOrdenados.map((c, index) => `
+        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
+            <!-- Header del cierre (siempre visible) -->
+            <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 20px;">🔒</span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 15px; color: #2d7a4d;">
+                                Cierre #${c.id}
+                                ${index === 0 ? '<span style="background: #28a745; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
+                            </div>
+                            <div style="font-size: 12px; color: #666; margin-top: 3px;">
+                                📅 ${c.fecha} • 👤 ${c.usuario}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
-                    <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ventas</div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div style="text-align: right;">
+                        <div style="font-size: 22px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
+                        <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ${c.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
+                    </div>
+                    <div id="icono-${c.id}" style="font-size: 20px; color: #999; transition: transform 0.3s;">▼</div>
                 </div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0f0f0;">
-                <div style="font-size: 12px;">
-                    <span style="color: #666;">Mesas:</span> <strong>S/ ${c.ventasMesas.toFixed(2)}</strong>
+            
+            <!-- Detalle desplegable (inicialmente oculto) -->
+            <div id="cierre-${c.id}" style="display: none; border-top: 1px solid #e0e0e0;">
+                <!-- Resumen -->
+                <div style="padding: 15px; background: #f8f9fa;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #2d7a4d;">
+                            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">💰 Ventas Mesas</div>
+                            <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${c.ventasMesas.toFixed(2)}</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #007bff;">
+                            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">🛒 Ventas Productos</div>
+                            <div style="font-size: 18px; font-weight: bold; color: #007bff;">S/ ${c.ventasProductos.toFixed(2)}</div>
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size: 12px;">
-                    <span style="color: #666;">Productos:</span> <strong>S/ ${c.ventasProductos.toFixed(2)}</strong>
+                
+                <!-- Lista de ventas -->
+                <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
+                    <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
+                    ${c.ventas.map((v, vIndex) => {
+                        let detalleHTML = '';
+                        let iconoTipo = '📝';
+                        
+                        if (v.tipo === 'Mesa Billar') {
+                            iconoTipo = '🎱';
+                            if (v.detalle) {
+                                detalleHTML = `
+                                    <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
+                                        <strong>${v.tipoDetalle}</strong>
+                                    </div>
+                                    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                                        ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                                        (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
+                                        <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                                    </div>
+                                    ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
+                                        <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
+                                            <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
+                                            <div style="margin-top: 5px;">
+                                                ${v.detalle.consumos.map(c => `
+                                                    <div style="font-size: 11px; color: #856404; padding: 2px 0;">
+                                                        • ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
+                                                Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                `;
+                            }
+                        } else if (v.tipo === 'Mesa Consumo') {
+                            iconoTipo = '🍺';
+                            if (v.detalle && v.detalle.consumos) {
+                                detalleHTML = `
+                                    <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                                        <strong>${v.tipoDetalle}</strong>
+                                    </div>
+                                    <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
+                                        <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
+                                        <div style="margin-top: 5px;">
+                                            ${v.detalle.consumos.map(c => `
+                                                <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
+                                                    • ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        } else if (v.tipo === 'Venta Directa') {
+                            iconoTipo = '🛒';
+                            if (v.detalle && v.detalle.consumos) {
+                                detalleHTML = `
+                                    <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                                        <strong>${v.tipoDetalle}</strong>
+                                    </div>
+                                    <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
+                                        ${v.detalle.consumos.map(c => `
+                                            <div style="font-size: 11px; color: #155724;">
+                                                ${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `;
+                            }
+                        } else {
+                            detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
+                        }
+                        
+                        return `
+                            <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                                    <div style="flex: 1;">
+                                        <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
+                                            ${iconoTipo} ${v.fecha}
+                                        </div>
+                                        ${detalleHTML}
+                                    </div>
+                                    <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
+                                        S/ ${v.monto.toFixed(2)}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
-            </div>
-            <div style="margin-top: 10px;">
-                <button class="btn btn-blue btn-small" onclick="verDetalleCierre(${c.id})" style="width: 48%; margin-right: 4%;">
-                    👁️ Ver Detalle
-                </button>
-                <button class="btn btn-green btn-small" onclick="descargarCierreEspecifico(${c.id})" style="width: 48%;">
-                    📥 Descargar
-                </button>
+                
+                <!-- Botón de descarga -->
+                <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
+                    <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
+                        📄 Descargar PDF del Cierre
+                    </button>
+                </div>
             </div>
         </div>
     `).join('');
 }
 
-window.verDetalleCierre = function(cierreId) {
+window.toggleDetalleCierre = function(elementId) {
+    const detalle = document.getElementById(elementId);
+    const cierreId = elementId.replace('cierre-', '');
+    const icono = document.getElementById(`icono-${cierreId}`);
+    
+    if (detalle.style.display === 'none') {
+        detalle.style.display = 'block';
+        icono.style.transform = 'rotate(180deg)';
+    } else {
+        detalle.style.display = 'none';
+        icono.style.transform = 'rotate(0deg)';
+    }
+};
+
+window.descargarCierrePDF = function(cierreId) {
     const cierre = cierres.find(c => c.id === cierreId);
     if (!cierre) return;
     
-    const modal = document.createElement('div');
-    modal.className = 'modal show';
-    modal.style.zIndex = '10000';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h2>🔒 Detalle del Cierre #${cierre.id}</h2>
-                <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Cierre de Caja #${cierre.id}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #2d7a4d;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .info-cierre {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 25px;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                }
+                .info-item {
+                    background: white;
+                    padding: 12px;
+                    border-radius: 5px;
+                    border-left: 3px solid #2d7a4d;
+                }
+                .info-item label {
+                    display: block;
+                    color: #666;
+                    font-size: 11px;
+                    margin-bottom: 5px;
+                }
+                .info-item .valor {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #2d7a4d;
+                }
+                h2 {
+                    color: #2d7a4d;
+                    font-size: 16px;
+                    margin: 25px 0 15px 0;
+                    border-bottom: 2px solid #e0e0e0;
+                    padding-bottom: 8px;
+                }
+                .venta-item {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin-bottom: 12px;
+                    border-left: 4px solid #2d7a4d;
+                    page-break-inside: avoid;
+                }
+                .venta-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                .venta-titulo {
+                    font-weight: bold;
+                    font-size: 14px;
+                    color: #333;
+                }
+                .venta-monto {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #2d7a4d;
+                }
+                .venta-fecha {
+                    font-size: 11px;
+                    color: #999;
+                    margin-bottom: 8px;
+                }
+                .consumos-box {
+                    background: #fff3cd;
+                    padding: 10px;
+                    border-radius: 4px;
+                    margin-top: 10px;
+                }
+                .consumo-item {
+                    font-size: 11px;
+                    color: #856404;
+                    padding: 3px 0;
+                    display: flex;
+                    justify-content: space-between;
+                }
+                .consumos-total {
+                    margin-top: 8px;
+                    padding-top: 8px;
+                    border-top: 1px solid #ffc107;
+                    font-weight: bold;
+                    font-size: 12px;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #2d7a4d;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #1f5436;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
             </div>
-            <div class="modal-body">
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <small style="color: #666;">Fecha y Hora</small>
-                            <div style="font-weight: 600;">${cierre.fecha}</div>
-                        </div>
-                        <div>
-                            <small style="color: #666;">Usuario</small>
-                            <div style="font-weight: 600;">${cierre.usuario}</div>
-                        </div>
-                        <div>
-                            <small style="color: #666;">Total</small>
-                            <div style="font-size: 24px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.total.toFixed(2)}</div>
-                        </div>
-                        <div>
-                            <small style="color: #666;">Transacciones</small>
-                            <div style="font-size: 24px; font-weight: bold;">${cierre.cantidadVentas}</div>
-                        </div>
+            
+            <div class="header">
+                <h1>🔒 CIERRE DE CAJA</h1>
+                <p style="color: #666; margin-top: 5px;">Cierre #${cierre.id}</p>
+            </div>
+            
+            <div class="info-cierre">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>📅 Fecha y Hora</label>
+                        <div class="valor" style="font-size: 14px;">${cierre.fecha}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>👤 Usuario</label>
+                        <div class="valor" style="font-size: 14px;">${cierre.usuario}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>💰 Total del Cierre</label>
+                        <div class="valor">S/ ${cierre.total.toFixed(2)}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>📊 Transacciones</label>
+                        <div class="valor">${cierre.cantidadVentas}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>🎱 Ventas Mesas</label>
+                        <div class="valor" style="font-size: 16px;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>🛒 Ventas Productos</label>
+                        <div class="valor" style="font-size: 16px;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
                     </div>
                 </div>
-                
-                <h3 style="margin-bottom: 15px; color: #2d7a4d;">📋 Ventas del Cierre</h3>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #2d7a4d; color: white;">
-                            <th style="padding: 10px; text-align: left;">Fecha</th>
-                            <th style="padding: 10px; text-align: left;">Descripción</th>
-                            <th style="padding: 10px; text-align: right;">Monto</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${cierre.ventas.map(v => `
-                            <tr style="border-bottom: 1px solid #e0e0e0;">
-                                <td style="padding: 8px; font-size: 12px;">${v.fecha}</td>
-                                <td style="padding: 8px;">${v.tipoDetalle || v.tipo}</td>
-                                <td style="padding: 8px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
             </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-};
-
-window.descargarCierreEspecifico = function(cierreId) {
-    const cierre = cierres.find(c => c.id === cierreId);
-    if (!cierre) return;
-    
-    descargarReporteCierre(cierre);
-    alert('✅ Reporte del cierre descargado');
-};
-
-window.descargarReporteExcel = function() {
-    const totalVentas = ventas.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventas.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventas.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    
-    const BOM = '\uFEFF';
-    let csv = BOM + 'REPORTE DETALLADO DE VENTAS\n\n';
-    csv += 'Concepto,Monto\n';
-    csv += `"Total Ventas","S/ ${totalVentas.toFixed(2)}"\n`;
-    csv += `"Ventas Mesas Billar","S/ ${ventasMesas.toFixed(2)}"\n`;
-    csv += `"Ventas Productos/Consumo","S/ ${ventasProductos.toFixed(2)}"\n`;
-    csv += `"Total Transacciones","${ventas.length}"\n\n`;
-    
-    csv += 'DETALLE COMPLETO DE VENTAS\n';
-    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
-    
-    ventas.forEach(v => {
-        let descripcion = '';
-        
-        if (v.detalle) {
-            if (v.tipo === 'Mesa Billar') {
-                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
-                if (v.detalle.consumos.length > 0) {
-                    descripcion += ` | Consumos: `;
-                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
-                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
+            
+            <h2>📋 Detalle de Ventas</h2>
+            
+            ${cierre.ventas.map((v, index) => {
+                let iconoTipo = '📝';
+                let contenidoVenta = '';
+                
+                if (v.tipo === 'Mesa Billar') {
+                    iconoTipo = '🎱';
+                    if (v.detalle) {
+                        contenidoVenta = `
+                            <div style="margin-top: 8px;">
+                                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                                    ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                                    (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
+                                </div>
+                                <div style="font-size: 12px; color: #666;">
+                                    💵 Costo por tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                                </div>
+                            </div>
+                            ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
+                                <div class="consumos-box">
+                                    <div style="font-weight: bold; margin-bottom: 8px; color: #856404; font-size: 12px;">🛒 Consumos:</div>
+                                    ${v.detalle.consumos.map(c => `
+                                        <div class="consumo-item">
+                                            <span>• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u)</span>
+                                            <span>S/ ${c.subtotal.toFixed(2)}</span>
+                                        </div>
+                                    `).join('')}
+                                    <div class="consumos-total">
+                                        Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        `;
+                    }
+                } else if (v.tipo === 'Mesa Consumo') {
+                    iconoTipo = '🍺';
+                    if (v.detalle && v.detalle.consumos) {
+                        contenidoVenta = `
+                            <div class="consumos-box" style="background: #d1ecf1; margin-top: 8px;">
+                                <div style="font-weight: bold; margin-bottom: 8px; color: #0c5460; font-size: 12px;">🛒 Consumos:</div>
+                                ${v.detalle.consumos.map(c => `
+                                    <div class="consumo-item" style="color: #0c5460;">
+                                        <span>• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u)</span>
+                                        <span>S/ ${c.subtotal.toFixed(2)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                } else if (v.tipo === 'Venta Directa') {
+                    iconoTipo = '🛒';
+                    if (v.detalle && v.detalle.consumos) {
+                        contenidoVenta = `
+                            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                                ${v.detalle.consumos.map(c => `
+                                    <div style="padding: 3px 0;">
+                                        ${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
                 }
-            } else if (v.detalle.consumos) {
-                descripcion = v.detalle.consumos.map(c => 
-                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
-                ).join(' | ');
-            }
-        } else {
-            descripcion = v.tipoDetalle || v.tipo;
-        }
-        
-        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
-    });
+                
+                return `
+                    <div class="venta-item">
+                        <div class="venta-fecha">${iconoTipo} ${v.fecha}</div>
+                        <div class="venta-header">
+                            <div class="venta-titulo">${v.tipoDetalle || v.tipo}</div>
+                            <div class="venta-monto">S/ ${v.monto.toFixed(2)}</div>
+                        </div>
+                        ${contenidoVenta}
+                    </div>
+                `;
+            }).join('')}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Cierre generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
     
-    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const fecha = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const hora = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
-    a.href = url;
-    a.download = `Reporte_Detallado_${fecha}_${hora}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    ventanaImpresion.document.close();
     
-    alert('✅ Reporte Excel DETALLADO descargado\n\n📌 Contiene hora inicio/fin y detalle de consumos');
-    debugLog('sistema', '📊 Reporte Excel detallado descargado');
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
 };
+
 
 window.descargarReportePDF = function() {
     const fecha = new Date().toLocaleString('es-PE', { 
