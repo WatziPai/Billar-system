@@ -10,7 +10,8 @@ function debugLog(categoria, mensaje, datos = null) {
         venta: 'background: #28a745; color: white; padding: 2px 5px; border-radius: 3px;',
         error: 'background: #dc3545; color: white; padding: 2px 5px; border-radius: 3px;',
         stock: 'background: #fd7e14; color: white; padding: 2px 5px; border-radius: 3px;',
-        firebase: 'background: #ffc107; color: black; padding: 2px 5px; border-radius: 3px;'
+        firebase: 'background: #ffc107; color: black; padding: 2px 5px; border-radius: 3px;',
+        seguridad: 'background: #6f42c1; color: white; padding: 2px 5px; border-radius: 3px;'
     };
     
     console.log(`%c${categoria.toUpperCase()}`, estilos[categoria] || '', mensaje, datos || '');
@@ -33,6 +34,104 @@ let tabActual = 'mesas';
 let cierres = [];
 let ultimoCierre = null;
 let consumosDueno = [];
+
+// ========== CONFIGURACIÓN DE SEGURIDAD ==========
+const TIEMPO_EXPIRACION = 30 * 60 * 1000; // 30 minutos en milisegundos
+let timerInactividad = null;
+
+function iniciarMonitoreoInactividad() {
+    debugLog('seguridad', '🔐 Iniciando monitoreo de inactividad');
+    
+    // Actualizar timestamp al iniciar
+    actualizarTimestampActividad();
+    
+    // Eventos que indican actividad del usuario
+    const eventos = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    
+    eventos.forEach(evento => {
+        document.addEventListener(evento, actualizarTimestampActividad, true);
+    });
+    
+    // Verificar inactividad cada minuto
+    timerInactividad = setInterval(verificarInactividad, 60000);
+}
+
+function detenerMonitoreoInactividad() {
+    debugLog('seguridad', '🔓 Deteniendo monitoreo de inactividad');
+    
+    if (timerInactividad) {
+        clearInterval(timerInactividad);
+        timerInactividad = null;
+    }
+    
+    const eventos = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    eventos.forEach(evento => {
+        document.removeEventListener(evento, actualizarTimestampActividad, true);
+    });
+}
+
+function actualizarTimestampActividad() {
+    if (usuarioActual) {
+        localStorage.setItem('ultimaActividad', Date.now().toString());
+    }
+}
+
+function verificarInactividad() {
+    if (!usuarioActual) return;
+    
+    const ultimaActividad = parseInt(localStorage.getItem('ultimaActividad') || '0');
+    const tiempoInactivo = Date.now() - ultimaActividad;
+    
+    if (tiempoInactivo >= TIEMPO_EXPIRACION) {
+        debugLog('seguridad', '⏰ Sesión cerrada por inactividad', {
+            tiempoInactivo: Math.floor(tiempoInactivo / 1000 / 60) + ' minutos'
+        });
+        
+        cerrarSesionPorInactividad();
+    }
+}
+
+function cerrarSesionPorInactividad() {
+    // NO detenemos los timers de las mesas - siguen corriendo
+    // Solo cerramos la sesión del usuario
+    
+    usuarioActual = null;
+    localStorage.removeItem('sesion');
+    localStorage.removeItem('ultimaActividad');
+    
+    detenerMonitoreoInactividad();
+    
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('mainScreen').classList.add('hidden');
+    
+    alert('🔒 Tu sesión se cerró automáticamente por 30 minutos de inactividad.\n\nLas mesas ocupadas siguen corriendo normalmente.');
+}
+
+function verificarExpiracionSesion() {
+    const sesion = localStorage.getItem('sesion');
+    
+    if (sesion) {
+        const ultimaActividad = parseInt(localStorage.getItem('ultimaActividad') || '0');
+        const tiempoInactivo = Date.now() - ultimaActividad;
+        
+        if (tiempoInactivo >= TIEMPO_EXPIRACION) {
+            debugLog('seguridad', '⏰ Sesión expirada detectada al cargar', {
+                tiempoInactivo: Math.floor(tiempoInactivo / 1000 / 60) + ' minutos'
+            });
+            
+            localStorage.removeItem('sesion');
+            localStorage.removeItem('ultimaActividad');
+            
+            alert('🔒 Tu sesión expiró por inactividad (más de 30 minutos).\n\nPor favor, inicia sesión nuevamente.');
+            
+            return false;
+        }
+        
+        return true;
+    }
+    
+    return false;
+}
 
 // ========== INICIALIZACIÓN ==========
 document.addEventListener('DOMContentLoaded', async function() {
@@ -100,13 +199,16 @@ async function cargarDatos() {
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
         
-        const sesion = localStorage.getItem('sesion');
-        if (sesion) {
-            const { usuarioId } = JSON.parse(sesion);
-            usuarioActual = usuarios.find(u => u.id === usuarioId);
-            if (usuarioActual) {
-                debugLog('sistema', '✅ Sesión activa encontrada', { usuario: usuarioActual.nombre });
-                mostrarPantallaPrincipal();
+        // Verificar si la sesión expiró
+        if (verificarExpiracionSesion()) {
+            const sesion = localStorage.getItem('sesion');
+            if (sesion) {
+                const { usuarioId } = JSON.parse(sesion);
+                usuarioActual = usuarios.find(u => u.id === usuarioId);
+                if (usuarioActual) {
+                    debugLog('sistema', '✅ Sesión activa encontrada', { usuario: usuarioActual.nombre });
+                    mostrarPantallaPrincipal();
+                }
             }
         }
         
@@ -125,6 +227,9 @@ async function cargarDatos() {
         if (cierres.length > 0) {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
+        
+        const consumosDuenoData = await window.firebaseDB.get('consumos', 'dueno');
+        consumosDueno = (consumosDuenoData && consumosDuenoData.lista) ? consumosDuenoData.lista : [];
         
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
@@ -204,8 +309,10 @@ async function guardarConfiguracion() {
 function guardarSesion() {
     if (usuarioActual) {
         localStorage.setItem('sesion', JSON.stringify({ usuarioId: usuarioActual.id }));
+        localStorage.setItem('ultimaActividad', Date.now().toString());
     } else {
         localStorage.removeItem('sesion');
+        localStorage.removeItem('ultimaActividad');
     }
 }
 
@@ -264,11 +371,14 @@ window.handleLogin = async function() {
 window.handleLogout = function() {
     debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
     
-    Object.keys(timers).forEach(id => clearInterval(timers[id]));
-    timers = {};
+    // NO detenemos los timers - las mesas siguen corriendo
+    // Object.keys(timers).forEach(id => clearInterval(timers[id]));
+    // timers = {};
     
     usuarioActual = null;
     guardarSesion();
+    detenerMonitoreoInactividad();
+    
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('mainScreen').classList.add('hidden');
 };
@@ -279,6 +389,9 @@ function mostrarPantallaPrincipal() {
     
     document.getElementById('userName').textContent = usuarioActual.nombre;
     document.getElementById('userRole').textContent = usuarioActual.rol.toUpperCase();
+    
+    // Iniciar monitoreo de inactividad
+    iniciarMonitoreoInactividad();
     
     if (usuarioActual.rol === 'admin') {
         document.getElementById('btnUsuarios').classList.remove('hidden');
@@ -384,7 +497,7 @@ function actualizarMesas() {
         mesaDiv.className = `mesa-card ${mesa.ocupada ? 'mesa-ocupada' : 'mesa-disponible'}`;
         
         mesaDiv.innerHTML = `
-            ${usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesa(${mesa.id})">×</button>` : ''}
+            ${usuarioActual && usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesa(${mesa.id})">×</button>` : ''}
             <h3>Mesa ${mesa.id}</h3>
             <span class="mesa-status ${mesa.ocupada ? 'status-ocupada' : 'status-disponible'}">
                 ${mesa.ocupada ? 'OCUPADA' : 'DISPONIBLE'}
@@ -813,7 +926,6 @@ window.showModalStock = function(productoId) {
     document.getElementById('stockActual').textContent = producto.stock;
     document.getElementById('stockAjuste').value = '';
     
-    // Cambiar el placeholder según el rol
     const inputAjuste = document.getElementById('stockAjuste');
     if (usuarioActual.rol === 'admin') {
         inputAjuste.placeholder = 'Ej: +10 o -5';
@@ -839,24 +951,8 @@ window.ajustarStock = async function() {
         return;
     }
     
-    // Validar que empleados solo puedan agregar (positivo)
     if (usuarioActual.rol !== 'admin' && ajuste < 0) {
         mostrarError('Los empleados solo pueden agregar stock (números positivos)');
-        return;
-    }
-    
-    const nuevoStock = productoEditando.stock + ajuste;
-    
-    if (nuevoStock < 0) {
-        mostrarError('El stock no puede ser negativo');
-        return;
-    }
-    
-    productoEditando.stock = nuevoStock;
-    await guardarProductos();
-    actualizarInventario();
-    window.closeModalStock();
-};mostrarError('Por favor ingresa un valor válido');
         return;
     }
     
@@ -934,7 +1030,6 @@ function generarReporte() {
     const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
     const ventasManuales = ventasActuales.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
     
-    // Calcular total de consumos del dueño desde último cierre
     const consumosDuenoActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
@@ -957,7 +1052,6 @@ function generarReporte() {
     productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
     
-    // Mostrar consumos del dueño
     const consumoDuenoEl = document.getElementById('reporteConsumoDueno');
     if (consumoDuenoEl) {
         consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
@@ -1057,6 +1151,12 @@ window.cerrarDia = async function() {
     
     const totalCierre = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
     
+    const consumosDuenoActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    
     const confirmar = confirm(
         `¿Cerrar turno/día?\n\n` +
         `📊 Ventas: ${ventasActuales.length}\n` +
@@ -1130,7 +1230,6 @@ function descargarReporteCierre(cierre) {
         csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
     });
     
-    // Agregar consumos del dueño
     if (cierre.consumosDueno && cierre.consumosDueno.length > 0) {
         csv += '\nCONSUMO DEL DUEÑO (NO COBRADO)\n';
         csv += 'Fecha,Productos,Total\n';
@@ -1952,7 +2051,7 @@ function actualizarMesasConsumo() {
         mesaDiv.className = `mesa-card ${mesa.ocupada ? 'mesa-ocupada' : 'mesa-disponible'}`;
         
         mesaDiv.innerHTML = `
-            ${usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesaConsumo(${mesa.id})">×</button>` : ''}
+            ${usuarioActual && usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesaConsumo(${mesa.id})">×</button>` : ''}
             <h3>Mesa ${mesa.id}</h3>
             <span class="mesa-status ${mesa.ocupada ? 'status-ocupada' : 'status-disponible'}">
                 ${mesa.ocupada ? 'OCUPADA' : 'DISPONIBLE'}
@@ -2352,7 +2451,6 @@ window.guardarConsumoDueno = async function() {
         total: total
     };
     
-    // Descontar stock
     carritoConsumoDueno.forEach(c => {
         const producto = productos.find(p => p.id === c.id);
         if (producto) {
@@ -2466,4 +2564,4 @@ window.eliminarConsumoDueno = async function(consumoId) {
     actualizarInventario();
     
     alert('✅ Registro eliminado y stock devuelto');
-};;
+};
