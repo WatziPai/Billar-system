@@ -42,17 +42,14 @@ let timerInactividad = null;
 function iniciarMonitoreoInactividad() {
     debugLog('seguridad', '🔐 Iniciando monitoreo de inactividad');
     
-    // Actualizar timestamp al iniciar
     actualizarTimestampActividad();
     
-    // Eventos que indican actividad del usuario
     const eventos = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
     
     eventos.forEach(evento => {
         document.addEventListener(evento, actualizarTimestampActividad, true);
     });
     
-    // Verificar inactividad cada minuto
     timerInactividad = setInterval(verificarInactividad, 60000);
 }
 
@@ -92,9 +89,6 @@ function verificarInactividad() {
 }
 
 function cerrarSesionPorInactividad() {
-    // NO detenemos los timers de las mesas - siguen corriendo
-    // Solo cerramos la sesión del usuario
-    
     usuarioActual = null;
     localStorage.removeItem('sesion');
     localStorage.removeItem('ultimaActividad');
@@ -199,7 +193,6 @@ async function cargarDatos() {
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
         
-        // Verificar si la sesión expiró
         if (verificarExpiracionSesion()) {
             const sesion = localStorage.getItem('sesion');
             if (sesion) {
@@ -234,6 +227,7 @@ async function cargarDatos() {
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
+            debugLog('firebase', '🎱 Mesas cargadas', { total: mesas.length });
         } else {
             mesas = [
                 { id: 1, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
@@ -242,6 +236,7 @@ async function cargarDatos() {
                 { id: 4, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] }
             ];
             await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
+            debugLog('firebase', '🎱 Mesas inicializadas por defecto', { total: mesas.length });
         }
         
         const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
@@ -255,7 +250,7 @@ async function cargarDatos() {
             await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
         }
         
-        debugLog('firebase', '✅ Todos los datos cargados');
+        debugLog('firebase', '✅ Todos los datos cargados correctamente');
     } catch (error) {
         console.error('Error cargando datos:', error);
         mostrarError('Error al cargar datos desde Firebase');
@@ -371,10 +366,6 @@ window.handleLogin = async function() {
 window.handleLogout = function() {
     debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
     
-    // NO detenemos los timers - las mesas siguen corriendo
-    // Object.keys(timers).forEach(id => clearInterval(timers[id]));
-    // timers = {};
-    
     usuarioActual = null;
     guardarSesion();
     detenerMonitoreoInactividad();
@@ -384,13 +375,14 @@ window.handleLogout = function() {
 };
 
 function mostrarPantallaPrincipal() {
+    debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
+    
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('mainScreen').classList.remove('hidden');
     
     document.getElementById('userName').textContent = usuarioActual.nombre;
     document.getElementById('userRole').textContent = usuarioActual.rol.toUpperCase();
     
-    // Iniciar monitoreo de inactividad
     iniciarMonitoreoInactividad();
     
     if (usuarioActual.rol === 'admin') {
@@ -411,11 +403,14 @@ function mostrarPantallaPrincipal() {
         document.getElementById('tabConsumoDueno').classList.add('hidden');
     }
     
+    debugLog('sistema', '🔄 Actualizando todas las vistas...', { mesas: mesas.length });
     actualizarMesas();
     actualizarMesasConsumo();
     actualizarTablaVentas();
     actualizarInventario();
     calcularTotal();
+    
+    debugLog('sistema', '✅ Pantalla principal mostrada completamente');
 }
 
 // ========== TABS ==========
@@ -483,13 +478,26 @@ window.eliminarMesa = async function(id) {
 
 function actualizarMesas() {
     const container = document.getElementById('mesasContainer');
-    if (!container) return;
+    if (!container) {
+        debugLog('error', '⚠️ Contenedor mesasContainer NO ENCONTRADO en el DOM');
+        return;
+    }
+    
+    debugLog('sistema', '🔄 Actualizando mesas...', { 
+        total: mesas.length,
+        contenedorExiste: !!container 
+    });
+    
+    // Solo limpiamos los timers de mesas que ya no existen
+    Object.keys(timers).forEach(id => {
+        if (!mesas.find(m => m.id === parseInt(id))) {
+            clearInterval(timers[id]);
+            delete timers[id];
+            debugLog('timer', '🗑️ Timer limpiado de mesa eliminada', { id });
+        }
+    });
     
     container.innerHTML = '';
-    Object.keys(timers).forEach(id => {
-        clearInterval(timers[id]);
-        delete timers[id];
-    });
     
     mesas.forEach(mesa => {
         const mesaDiv = document.createElement('div');
@@ -513,11 +521,26 @@ function actualizarMesas() {
         `;
         container.appendChild(mesaDiv);
         
+        // Solo reiniciamos el timer si la mesa está ocupada Y no tiene timer activo
         if (mesa.ocupada && mesa.inicio) {
-            mesa.tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
-            actualizarTimer(mesa.id);
-            timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
+            if (!timers[mesa.id]) {
+                mesa.tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
+                actualizarTimer(mesa.id);
+                timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
+                debugLog('timer', '▶️ Timer iniciado para mesa', { id: mesa.id });
+            }
+        } else {
+            // Si la mesa no está ocupada, limpiamos su timer si existe
+            if (timers[mesa.id]) {
+                clearInterval(timers[mesa.id]);
+                delete timers[mesa.id];
+                debugLog('timer', '⏸️ Timer detenido para mesa', { id: mesa.id });
+            }
         }
+    });
+    
+    debugLog('sistema', `✅ ${mesas.length} mesas renderizadas en el DOM`, {
+        timersActivos: Object.keys(timers).length
     });
 }
 
@@ -2547,7 +2570,6 @@ window.eliminarConsumoDueno = async function(consumoId) {
     const consumo = consumosDueno.find(c => c.id === consumoId);
     if (!consumo) return;
     
-    // Devolver stock
     consumo.productos.forEach(p => {
         const producto = productos.find(prod => prod.nombre === p.nombre);
         if (producto) {
