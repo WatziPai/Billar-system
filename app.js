@@ -470,12 +470,7 @@ window.changeTab = function(tab, event) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     
     const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
-    if (tabContent) {
-        tabContent.classList.add('active');
-        debugLog('sistema', `✅ Tab activada: ${tab}`);
-    } else {
-        debugLog('error', `❌ No se encontró el contenedor de tab: tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
-    }
+    if (tabContent) tabContent.classList.add('active');
     
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
     
@@ -486,8 +481,7 @@ window.changeTab = function(tab, event) {
     } else if (tab === 'inventario') {
         actualizarInventario();
     } else if (tab === 'consumoDueno') {
-        debugLog('sistema', '🍽️ Actualizando consumo dueño...');
-        actualizarConsumoDueno();
+        actualizarConsumoDueno(); // ← Esta línea es la clave
     }
 };
 
