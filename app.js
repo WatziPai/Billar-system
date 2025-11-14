@@ -131,21 +131,16 @@ function verificarExpiracionSesion() {
 document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación...');
     showLoading();
-    
+
     await esperarFirebase();
-    await cargarDatos();
-    
-    const loginPassword = document.getElementById('loginPassword');
-    if (loginPassword) {
-        loginPassword.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') window.handleLogin();
-        });
-    }
-    
+
     hideLoading();
-    debugLog('sistema', '✅ Aplicación iniciada correctamente');
+    debugLog('sistema', '⏳ Esperando login...');
+
 });
 
+
+// ESPERAR A QUE FIREBASE ESTÉ LISTO
 function esperarFirebase() {
     return new Promise((resolve) => {
         const checkFirebase = setInterval(() => {
@@ -155,7 +150,7 @@ function esperarFirebase() {
                 resolve();
             }
         }, 100);
-        
+
         setTimeout(() => {
             clearInterval(checkFirebase);
             if (!window.firebaseDB) {
@@ -167,15 +162,18 @@ function esperarFirebase() {
     });
 }
 
-// ========== CARGAR DATOS ==========
+
+
+// CARGAR DATOS (DESPUÉS DEL LOGIN)
 async function cargarDatos() {
     debugLog('firebase', '📂 Cargando datos desde Firebase...');
-    
+
     try {
+
+        // === USUARIOS ===
         const usuariosData = await window.firebaseDB.get('usuarios', 'todos');
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
-            debugLog('firebase', '👥 Usuarios cargados', { total: usuarios.length });
         } else {
             usuarios = [{
                 id: Date.now(),
@@ -186,48 +184,54 @@ async function cargarDatos() {
             }];
             await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
         }
-        
+
+        // === CONFIGURACIÓN ===
         const config = await window.firebaseDB.get('configuracion', 'general');
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
-        
+
+        // === SESIÓN ACTIVA ===
         if (verificarExpiracionSesion()) {
             const sesion = localStorage.getItem('sesion');
             if (sesion) {
                 const { usuarioId } = JSON.parse(sesion);
                 usuarioActual = usuarios.find(u => u.id === usuarioId);
                 if (usuarioActual) {
-                    debugLog('sistema', '✅ Sesión activa encontrada', { usuario: usuarioActual.nombre });
                     mostrarPantallaPrincipal();
                 }
             }
         }
-        
+
+        // === VENTAS ===
         const ventasData = await window.firebaseDB.get('ventas', 'todas');
-        ventas = (ventasData && ventasData.lista) ? ventasData.lista : [];
-        
+        ventas = ventasData?.lista || [];
+
+        // === PRODUCTOS ===
         const productosData = await window.firebaseDB.get('productos', 'todos');
-        productos = (productosData && productosData.lista) ? productosData.lista : [];
-        
+        productos = productosData?.lista || [];
+
+        // === ERRORES ===
         const erroresData = await window.firebaseDB.get('errores', 'todos');
-        erroresReportados = (erroresData && erroresData.lista) ? erroresData.lista : [];
-        
+        erroresReportados = erroresData?.lista || [];
+
+        // === CIERRES ===
         const cierresData = await window.firebaseDB.get('cierres', 'historial');
-        cierres = (cierresData && cierresData.lista) ? cierresData.lista : [];
-        
+        cierres = cierresData?.lista || [];
+
         if (cierres.length > 0) {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
-        
+
+        // === CONSUMOS DUEÑO ===
         const consumosDuenoData = await window.firebaseDB.get('consumos', 'dueno');
-        consumosDueno = (consumosDuenoData && consumosDuenoData.lista) ? consumosDuenoData.lista : [];
-        
+        consumosDueno = consumosDuenoData?.lista || [];
+
+        // === MESAS ===
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
-            debugLog('firebase', '🎱 Mesas cargadas', { total: mesas.length });
         } else {
             mesas = [
                 { id: 1, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] },
@@ -236,9 +240,9 @@ async function cargarDatos() {
                 { id: 4, ocupada: false, inicio: null, tiempoTranscurrido: 0, consumos: [] }
             ];
             await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
-            debugLog('firebase', '🎱 Mesas inicializadas por defecto', { total: mesas.length });
         }
-        
+
+        // === MESAS CONSUMO ===
         const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
         if (mesasConsumoData && mesasConsumoData.lista) {
             mesasConsumo = mesasConsumoData.lista;
@@ -249,13 +253,36 @@ async function cargarDatos() {
             ];
             await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
         }
-        
+
         debugLog('firebase', '✅ Todos los datos cargados correctamente');
+
     } catch (error) {
         console.error('Error cargando datos:', error);
         mostrarError('Error al cargar datos desde Firebase');
     }
 }
+
+
+// =====================================
+// AUTENTICACIÓN: CARGAR DATOS TRAS LOGIN
+// =====================================
+import { onAuthStateChanged } from "firebase/auth";
+
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        debugLog('auth', '🔐 Usuario autenticado:', user.email);
+
+        showLoading();
+        await cargarDatos();
+        hideLoading();
+
+        mostrarPantallaPrincipal();
+    } else {
+        debugLog('auth', '❌ Usuario no autenticado');
+        mostrarPantallaLogin();
+    }
+});
+
 
 // ========== FUNCIONES DE GUARDADO ==========
 async function guardarUsuarios() {
