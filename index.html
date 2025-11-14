@@ -432,35 +432,6 @@
     </div>
 </div>
             
-            
-
-    <div id="modalConsumoDueno" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
-            <h3 style="margin-bottom: 10px; color: #333;">🍽️ Registrar Consumo del Dueño</h3>
-            <p style="color: #666; margin-bottom: 20px;">⚠️ Este consumo NO se cobrará, pero se descontará del inventario</p>
-            
-            <div id="productosConsumoDuenoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;"></div>
-            
-            <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 8px; border: 2px solid #ff9800;">
-                <h4 style="margin-bottom: 15px; color: #856404; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 24px;">🛒</span> Carrito de Consumo
-                </h4>
-                <div id="carritoConsumoDuenoContainer" style="margin-bottom: 15px;"></div>
-                <div style="text-align: right; font-size: 24px; font-weight: bold; color: #ff9800; border-top: 2px solid #ff9800; padding-top: 15px;" id="totalConsumoDueno">
-                    S/ 0.00
-                </div>
-            </div>
-            
-            <div class="modal-buttons">
-                <button class="btn btn-primary btn-full" onclick="guardarConsumoDueno()" id="btnGuardarConsumoDueno">
-                    💾 Guardar Consumo
-                </button>
-                <button class="btn btn-gray btn-full" onclick="closeModalConsumoDueno()">
-                    Cancelar
-                </button>
-            </div>
-        </div>
-    </div>
 
     <script type="module" src="firebase-config.js"></script>
     <script src="app.js"></script>
