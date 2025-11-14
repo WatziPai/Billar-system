@@ -136,7 +136,6 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     hideLoading();
     debugLog('sistema', '⏳ Esperando login...');
-
 });
 
 
@@ -244,15 +243,10 @@ async function cargarDatos() {
 
         // === MESAS CONSUMO ===
         const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
-        if (mesasConsumoData && mesasConsumoData.lista) {
-            mesasConsumo = mesasConsumoData.lista;
-        } else {
-            mesasConsumo = [
-                { id: 1, ocupada: false, consumos: [], total: 0 },
-                { id: 2, ocupada: false, consumos: [], total: 0 }
-            ];
-            await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
-        }
+        mesasConsumo = mesasConsumoData?.lista || [
+            { id: 1, ocupada: false, consumos: [], total: 0 },
+            { id: 2, ocupada: false, consumos: [], total: 0 }
+        ];
 
         debugLog('firebase', '✅ Todos los datos cargados correctamente');
 
@@ -261,27 +255,6 @@ async function cargarDatos() {
         mostrarError('Error al cargar datos desde Firebase');
     }
 }
-
-
-// =====================================
-// AUTENTICACIÓN: CARGAR DATOS TRAS LOGIN
-// =====================================
-
-window.firebaseAuth.onChange(async (user) => {
-    if (user) {
-        debugLog('auth', '🔐 Usuario autenticado:', user.email);
-
-        showLoading();
-        await cargarDatos();
-        hideLoading();
-
-        mostrarPantallaPrincipal();
-    } else {
-        debugLog('auth', '❌ Usuario no autenticado');
-        mostrarPantallaLogin();
-    }
-});
-
 
 // ========== FUNCIONES DE GUARDADO ==========
 async function guardarUsuarios() {
