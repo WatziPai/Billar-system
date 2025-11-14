@@ -134,6 +134,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     await esperarFirebase();
 
+    // 🔥 Cargar usuarios ANTES del login
+    await cargarDatos();
+
     hideLoading();
     debugLog('sistema', '⏳ Esperando login...');
 });
