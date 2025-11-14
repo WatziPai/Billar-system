@@ -481,7 +481,7 @@ window.changeTab = function(tab, event) {
     } else if (tab === 'inventario') {
         actualizarInventario();
     } else if (tab === 'consumoDueno') {
-        actualizarConsumoDueno();
+        actualizarConsumoDueno(); // ← Esta línea es la clave
     }
 };
 
