@@ -267,7 +267,7 @@ async function cargarDatos() {
 // AUTENTICACIÓN: CARGAR DATOS TRAS LOGIN
 // =====================================
 
-window.firebaseAuth.onAuthStateChanged(async (user) => {
+window.firebaseAuth.onChange(async (user) => {
     if (user) {
         debugLog('auth', '🔐 Usuario autenticado:', user.email);
 
