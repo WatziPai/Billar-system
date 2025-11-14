@@ -1354,7 +1354,6 @@ function actualizarHistorialCierres() {
     });
     
     const diasOrdenados = Object.keys(cierresPorDia).sort().reverse();
-    
     const cierresOrdenados = [...cierres].reverse();
     
     container.innerHTML = `
@@ -1386,154 +1385,155 @@ function actualizarHistorialCierres() {
         </div>
         
         ${cierresOrdenados.map((c, index) => `
-        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
-            <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
-                <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                        <span style="font-size: 20px;">🔒</span>
-                        <div>
-                            <div style="font-weight: 600; font-size: 15px; color: #2d7a4d;">
-                                Cierre #${c.id}
-                                ${index === 0 ? '<span style="background: #28a745; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
-                            </div>
-                            <div style="font-size: 12px; color: #666; margin-top: 3px;">
-                                📅 ${c.fecha} • 👤 ${c.usuario}
+            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
+                <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="font-size: 20px;">🔒</span>
+                            <div>
+                                <div style="font-weight: 600; font-size: 15px; color: #2d7a4d;">
+                                    Cierre #${c.id}
+                                    ${index === 0 ? '<span style="background: #28a745; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
+                                </div>
+                                <div style="font-size: 12px; color: #666; margin-top: 3px;">
+                                    📅 ${c.fecha} • 👤 ${c.usuario}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <div style="text-align: right;">
-                        <div style="font-size: 22px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
-                        <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ${c.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
-                    </div>
-                    <div id="icono-${c.id}" style="font-size: 20px; color: #999; transition: transform 0.3s;">▼</div>
-                </div>
-            </div>
-            
-            <div id="cierre-${c.id}" style="display: none; border-top: 1px solid #e0e0e0;">
-                <div style="padding: 15px; background: #f8f9fa;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #2d7a4d;">
-                            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">💰 Ventas Mesas</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${c.ventasMesas.toFixed(2)}</div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="text-align: right;">
+                            <div style="font-size: 22px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
+                            <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ${c.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
                         </div>
-                        <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #007bff;">
-                            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">🛒 Ventas Productos</div>
-                            <div style="font-size: 18px; font-weight: bold; color: #007bff;">S/ ${c.ventasProductos.toFixed(2)}</div>
-                        </div>
+                        <div id="icono-${c.id}" style="font-size: 20px; color: #999; transition: transform 0.3s;">▼</div>
                     </div>
                 </div>
                 
-                <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
-                    <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
-                    ${c.ventas.map((v, vIndex) => {
-                        let detalleHTML = '';
-                        let iconoTipo = '📝';
-                        
-                        if (v.tipo === 'Mesa Billar') {
-                            iconoTipo = '🎱';
-                            if (v.detalle) {
-                                detalleHTML = `
-                                    <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
-                                        <strong>${v.tipoDetalle}</strong>
-                                    </div>
-                                    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                                        ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
-                                        (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
-                                        <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
-                                    </div>
-                                    ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
-                                        <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
-                                            <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
+                <div id="cierre-${c.id}" style="display: none; border-top: 1px solid #e0e0e0;">
+                    <div style="padding: 15px; background: #f8f9fa;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #2d7a4d;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">💰 Ventas Mesas</div>
+                                <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${c.ventasMesas.toFixed(2)}</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #007bff;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">🛒 Ventas Productos</div>
+                                <div style="font-size: 18px; font-weight: bold; color: #007bff;">S/ ${c.ventasProductos.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
+                        <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
+                        ${c.ventas.map((v, vIndex) => {
+                            let detalleHTML = '';
+                            let iconoTipo = '📝';
+                            
+                            if (v.tipo === 'Mesa Billar') {
+                                iconoTipo = '🎱';
+                                if (v.detalle) {
+                                    detalleHTML = `
+                                        <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
+                                            <strong>${v.tipoDetalle}</strong>
+                                        </div>
+                                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
+                                            <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                                        </div>
+                                        ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
+                                            <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
+                                                <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
+                                                <div style="margin-top: 5px;">
+                                                    ${v.detalle.consumos.map(co => `
+                                                        <div style="font-size: 11px; color: #856404; padding: 2px 0;">
+                                                            • ${co.producto} x${co.cantidad} (S/ ${co.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
+                                                        </div>
+                                                    `).join('')}
+                                                </div>
+                                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
+                                                    Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    `;
+                                }
+                            } else if (v.tipo === 'Mesa Consumo') {
+                                iconoTipo = '🍺';
+                                if (v.detalle && v.detalle.consumos) {
+                                    detalleHTML = `
+                                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                                            <strong>${v.tipoDetalle}</strong>
+                                        </div>
+                                        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
+                                            <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
                                             <div style="margin-top: 5px;">
-                                                ${v.detalle.consumos.map(c => `
-                                                    <div style="font-size: 11px; color: #856404; padding: 2px 0;">
-                                                        • ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                                ${v.detalle.consumos.map(co => `
+                                                    <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
+                                                        • ${co.producto} x${co.cantidad} (S/ ${co.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
                                                     </div>
                                                 `).join('')}
                                             </div>
-                                            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
-                                                Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
-                                            </div>
                                         </div>
-                                    ` : ''}
-                                `;
-                            }
-                        } else if (v.tipo === 'Mesa Consumo') {
-                            iconoTipo = '🍺';
-                            if (v.detalle && v.detalle.consumos) {
-                                detalleHTML = `
-                                    <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                                        <strong>${v.tipoDetalle}</strong>
-                                    </div>
-                                    <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
-                                        <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
-                                        <div style="margin-top: 5px;">
-                                            ${v.detalle.consumos.map(c => `
-                                                <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
-                                                    • ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                                    `;
+                                }
+                            } else if (v.tipo === 'Venta Directa') {
+                                iconoTipo = '🛒';
+                                if (v.detalle && v.detalle.consumos) {
+                                    detalleHTML = `
+                                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                                            <strong>${v.tipoDetalle}</strong>
+                                        </div>
+                                        <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
+                                            ${v.detalle.consumos.map(co => `
+                                                <div style="font-size: 11px; color: #155724;">
+                                                    ${co.producto}: ${co.cantidad} × S/ ${co.precioUnitario.toFixed(2)} = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
                                                 </div>
                                             `).join('')}
                                         </div>
-                                    </div>
-                                `;
+                                    `;
+                                }
+                            } else {
+                                detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
                             }
-                        } else if (v.tipo === 'Venta Directa') {
-                            iconoTipo = '🛒';
-                            if (v.detalle && v.detalle.consumos) {
-                                detalleHTML = `
-                                    <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                                        <strong>${v.tipoDetalle}</strong>
-                                    </div>
-                                    <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
-                                        ${v.detalle.consumos.map(c => `
-                                            <div style="font-size: 11px; color: #155724;">
-                                                ${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
+                            
+                            return `
+                                <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
+                                                ${iconoTipo} ${v.fecha}
                                             </div>
-                                        `).join('')}
-                                    </div>
-                                `;
-                            }
-                        } else {
-                            detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
-                        }
-                        
-                        return `
-                            <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
-                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                                    <div style="flex: 1;">
-                                        <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
-                                            ${iconoTipo} ${v.fecha}
+                                            ${detalleHTML}
                                         </div>
-                                        ${detalleHTML}
-                                    </div>
-                                    <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
-                                        S/ ${v.monto.toFixed(2)}
+                                        <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
+                                            S/ ${v.monto.toFixed(2)}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-                
-                <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
-                    ${usuarioActual.rol === 'admin' ? `
-                        <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 48%; padding: 12px; margin-right: 4%;">
-                            📄 Descargar PDF
-                        </button>
-                        <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
-                            🗑️ Eliminar Cierre
-                        </button>
-                    ` : `
-                        <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
-                            📄 Descargar PDF
-                        </button>
-                    `}
+                            `;
+                        }).join('')}
+                    </div>
+                    
+                    <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
+                        ${usuarioActual.rol === 'admin' ? `
+                            <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 48%; padding: 12px; margin-right: 4%;">
+                                📄 Descargar PDF
+                            </button>
+                            <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
+                                🗑️ Eliminar Cierre
+                            </button>
+                        ` : `
+                            <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
+                                📄 Descargar PDF
+                            </button>
+                        `}
+                    </div>
                 </div>
             </div>
-        </div>
-    `).join('');
+        `).join('')}
+    `;
 }
 
 window.toggleDetalleCierre = function(elementId) {
