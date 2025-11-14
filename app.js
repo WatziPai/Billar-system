@@ -266,9 +266,8 @@ async function cargarDatos() {
 // =====================================
 // AUTENTICACIÓN: CARGAR DATOS TRAS LOGIN
 // =====================================
-import { onAuthStateChanged } from "firebase/auth";
 
-onAuthStateChanged(auth, async (user) => {
+window.firebaseAuth.onAuthStateChanged(async (user) => {
     if (user) {
         debugLog('auth', '🔐 Usuario autenticado:', user.email);
 
