@@ -1356,35 +1356,144 @@ function actualizarHistorialCierres() {
     const diasOrdenados = Object.keys(cierresPorDia).sort().reverse();
     const cierresOrdenados = [...cierres].reverse();
     
-    container.innerHTML = `
-        <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div>
-                    <strong style="font-size: 16px; color: #1565c0;">📊 Descargas Agrupadas por Día</strong>
-                    <div style="font-size: 13px; color: #1976d2; margin-top: 5px;">
-                        Descarga todos los cierres de un día en un solo PDF
+    // Generar HTML de botones de días
+    let htmlBotonesDias = '';
+    diasOrdenados.slice(0, 3).forEach(dia => {
+        const info = cierresPorDia[dia];
+        const totalDia = info.cierres.reduce((sum, c) => sum + c.total, 0);
+        htmlBotonesDias += `
+            <button class="btn btn-blue btn-small" onclick="descargarCierrePorDia('${dia}')" style="padding: 8px 15px;">
+                📅 ${dia} (${info.cierres.length} ${info.cierres.length === 1 ? 'cierre' : 'cierres'}) - S/ ${totalDia.toFixed(2)}
+            </button>
+        `;
+    });
+    
+    if (diasOrdenados.length > 3) {
+        htmlBotonesDias += `
+            <button class="btn btn-teal btn-small" onclick="mostrarTodosDias()" style="padding: 8px 15px;">
+                Ver más días...
+            </button>
+        `;
+    }
+    
+    // Generar HTML de cada cierre
+    let htmlCierres = '';
+    
+    cierresOrdenados.forEach((c, index) => {
+        // Generar detalle de ventas
+        let htmlVentas = '';
+        
+        c.ventas.forEach((v, vIndex) => {
+            let detalleHTML = '';
+            let iconoTipo = '📝';
+            
+            if (v.tipo === 'Mesa Billar') {
+                iconoTipo = '🎱';
+                if (v.detalle) {
+                    let htmlConsumos = '';
+                    if (v.detalle.consumos && v.detalle.consumos.length > 0) {
+                        let itemsConsumos = '';
+                        v.detalle.consumos.forEach(consumo => {
+                            itemsConsumos += `
+                                <div style="font-size: 11px; color: #856404; padding: 2px 0;">
+                                    • ${consumo.producto} x${consumo.cantidad} (S/ ${consumo.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
+                                </div>
+                            `;
+                        });
+                        
+                        htmlConsumos = `
+                            <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
+                                <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
+                                <div style="margin-top: 5px;">
+                                    ${itemsConsumos}
+                                </div>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
+                                    Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    detalleHTML = `
+                        <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
+                            <strong>${v.tipoDetalle}</strong>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
+                            <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                        </div>
+                        ${htmlConsumos}
+                    `;
+                }
+            } else if (v.tipo === 'Mesa Consumo') {
+                iconoTipo = '🍺';
+                if (v.detalle && v.detalle.consumos) {
+                    let itemsConsumos = '';
+                    v.detalle.consumos.forEach(consumo => {
+                        itemsConsumos += `
+                            <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
+                                • ${consumo.producto} x${consumo.cantidad} (S/ ${consumo.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
+                            </div>
+                        `;
+                    });
+                    
+                    detalleHTML = `
+                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                            <strong>${v.tipoDetalle}</strong>
+                        </div>
+                        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
+                            <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
+                            <div style="margin-top: 5px;">
+                                ${itemsConsumos}
+                            </div>
+                        </div>
+                    `;
+                }
+            } else if (v.tipo === 'Venta Directa') {
+                iconoTipo = '🛒';
+                if (v.detalle && v.detalle.consumos) {
+                    let itemsConsumos = '';
+                    v.detalle.consumos.forEach(consumo => {
+                        itemsConsumos += `
+                            <div style="font-size: 11px; color: #155724;">
+                                ${consumo.producto}: ${consumo.cantidad} × S/ ${consumo.precioUnitario.toFixed(2)} = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
+                            </div>
+                        `;
+                    });
+                    
+                    detalleHTML = `
+                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+                            <strong>${v.tipoDetalle}</strong>
+                        </div>
+                        <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
+                            ${itemsConsumos}
+                        </div>
+                    `;
+                }
+            } else {
+                detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
+            }
+            
+            htmlVentas += `
+                <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
+                                ${iconoTipo} ${v.fecha}
+                            </div>
+                            ${detalleHTML}
+                        </div>
+                        <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
+                            S/ ${v.monto.toFixed(2)}
+                        </div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    ${diasOrdenados.slice(0, 3).map(dia => {
-                        const info = cierresPorDia[dia];
-                        const totalDia = info.cierres.reduce((sum, c) => sum + c.total, 0);
-                        return `
-                            <button class="btn btn-blue btn-small" onclick="descargarCierrePorDia('${dia}')" style="padding: 8px 15px;">
-                                📅 ${dia} (${info.cierres.length} ${info.cierres.length === 1 ? 'cierre' : 'cierres'}) - S/ ${totalDia.toFixed(2)}
-                            </button>
-                        `;
-                    }).join('')}
-                    ${diasOrdenados.length > 3 ? `
-                        <button class="btn btn-teal btn-small" onclick="mostrarTodosDias()" style="padding: 8px 15px;">
-                            Ver más días...
-                        </button>
-                    ` : ''}
-                </div>
-            </div>
-        </div>
+            `;
+        });
         
-        ${cierresOrdenados.map((c, index) => `
+        // Generar HTML del cierre completo
+        htmlCierres += `
             <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
                 <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
                     <div style="flex: 1;">
@@ -1426,94 +1535,7 @@ function actualizarHistorialCierres() {
                     
                     <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
                         <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
-                        ${c.ventas.map((v, vIndex) => {
-                            let detalleHTML = '';
-                            let iconoTipo = '📝';
-                            
-                            if (v.tipo === 'Mesa Billar') {
-                                iconoTipo = '🎱';
-                                if (v.detalle) {
-                                    detalleHTML = `
-                                        <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
-                                            <strong>${v.tipoDetalle}</strong>
-                                        </div>
-                                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
-                                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
-                                            <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
-                                        </div>
-                                        ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
-                                            <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
-                                                <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
-                                                <div style="margin-top: 5px;">
-                                                    ${v.detalle.consumos.map(co => `
-                                                        <div style="font-size: 11px; color: #856404; padding: 2px 0;">
-                                                            • ${co.producto} x${co.cantidad} (S/ ${co.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
-                                                        </div>
-                                                    `).join('')}
-                                                </div>
-                                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
-                                                    Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
-                                                </div>
-                                            </div>
-                                        ` : ''}
-                                    `;
-                                }
-                            } else if (v.tipo === 'Mesa Consumo') {
-                                iconoTipo = '🍺';
-                                if (v.detalle && v.detalle.consumos) {
-                                    detalleHTML = `
-                                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                                            <strong>${v.tipoDetalle}</strong>
-                                        </div>
-                                        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
-                                            <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
-                                            <div style="margin-top: 5px;">
-                                                ${v.detalle.consumos.map(co => `
-                                                    <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
-                                                        • ${co.producto} x${co.cantidad} (S/ ${co.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
-                                                    </div>
-                                                `).join('')}
-                                            </div>
-                                        </div>
-                                    `;
-                                }
-                            } else if (v.tipo === 'Venta Directa') {
-                                iconoTipo = '🛒';
-                                if (v.detalle && v.detalle.consumos) {
-                                    detalleHTML = `
-                                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                                            <strong>${v.tipoDetalle}</strong>
-                                        </div>
-                                        <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
-                                            ${v.detalle.consumos.map(co => `
-                                                <div style="font-size: 11px; color: #155724;">
-                                                    ${co.producto}: ${co.cantidad} × S/ ${co.precioUnitario.toFixed(2)} = <strong>S/ ${co.subtotal.toFixed(2)}</strong>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    `;
-                                }
-                            } else {
-                                detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
-                            }
-                            
-                            return `
-                                <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
-                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                                        <div style="flex: 1;">
-                                            <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
-                                                ${iconoTipo} ${v.fecha}
-                                            </div>
-                                            ${detalleHTML}
-                                        </div>
-                                        <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
-                                            S/ ${v.monto.toFixed(2)}
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                        ${htmlVentas}
                     </div>
                     
                     <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
@@ -1532,10 +1554,28 @@ function actualizarHistorialCierres() {
                     </div>
                 </div>
             </div>
-        `).join('')}
+        `;
+    });
+    
+    // Ensamblar HTML final
+    container.innerHTML = `
+        <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <strong style="font-size: 16px; color: #1565c0;">📊 Descargas Agrupadas por Día</strong>
+                    <div style="font-size: 13px; color: #1976d2; margin-top: 5px;">
+                        Descarga todos los cierres de un día en un solo PDF
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    ${htmlBotonesDias}
+                </div>
+            </div>
+        </div>
+        
+        ${htmlCierres}
     `;
 }
-
 window.toggleDetalleCierre = function(elementId) {
     const detalle = document.getElementById(elementId);
     const cierreId = elementId.replace('cierre-', '');
