@@ -367,6 +367,18 @@ window.guardarUsuario = async function() {
     alert(usuarioEditando ? '✅ Usuario actualizado correctamente' : '✅ Usuario creado correctamente');
 };
 
+// ========== GESTIÓN DE SESIÓN ==========
+function guardarSesion() {
+    if (usuarioActual) {
+        localStorage.setItem('sesion', JSON.stringify({ usuarioId: usuarioActual.id }));
+        localStorage.setItem('ultimaActividad', Date.now().toString());
+    } else {
+        localStorage.removeItem('sesion');
+        localStorage.removeItem('ultimaActividad');
+    }
+}
+
+window.guardarConfiguracion = guardarConfiguracion;
 // ========== UTILIDADES ==========
 function mostrarError(mensaje) {
     alert('⚠️ ' + mensaje);
