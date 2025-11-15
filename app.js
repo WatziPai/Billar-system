@@ -243,6 +243,55 @@ async function cargarDatos() {
     }
 }
 
+// ========== FUNCIONES DE GUARDADO ==========
+async function guardarUsuarios() {
+    await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
+}
+
+async function guardarVentas() {
+    await window.firebaseDB.set('ventas', 'todas', { lista: ventas });
+}
+
+async function guardarProductos() {
+    await window.firebaseDB.set('productos', 'todos', { lista: productos });
+}
+
+async function guardarMesas() {
+    await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
+}
+
+async function guardarMesasConsumo() {
+    await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
+}
+
+async function guardarErrores() {
+    await window.firebaseDB.set('errores', 'todos', { lista: erroresReportados });
+}
+
+async function guardarCierres() {
+    await window.firebaseDB.set('cierres', 'historial', { lista: cierres });
+}
+
+async function guardarConsumosDueno() {
+    await window.firebaseDB.set('consumos', 'dueno', { lista: consumosDueno });
+}
+
+async function guardarConfiguracion() {
+    const config = {
+        tarifaHora: parseFloat(document.getElementById('tarifaHora').value) || 5.00,
+        tarifaExtra5Min: parseFloat(document.getElementById('tarifaExtra5Min').value) || 0.50
+    };
+    await window.firebaseDB.set('configuracion', 'general', config);
+    
+    mesas.forEach(mesa => {
+        if (mesa.ocupada) actualizarTimer(mesa.id);
+    });
+    
+    alert('✅ Configuración guardada correctamente');
+}
+
+window.guardarConfiguracion = guardarConfiguracion;
+
 // ========== LOGIN / LOGOUT ==========
 window.handleLogin = async function() {
     const btnLogin = document.getElementById('btnLogin');
@@ -260,7 +309,6 @@ window.handleLogin = async function() {
     btnLogin.textContent = 'Iniciando...';
 
     try {
-        // 🔐 TODOS los usuarios usan Firebase Auth con email
         let email = username;
         if (!username.includes('@')) {
             email = `${username}@billar.app`;
@@ -268,7 +316,6 @@ window.handleLogin = async function() {
         
         debugLog('sistema', '🔐 Intentando login con Firebase Auth', { email });
         
-        // 🔥 SOLO AUTENTICAR - El listener onAuthChange cargará los datos
         await window.firebaseAuth.signIn(email, password);
         
         debugLog('sistema', '✅ Autenticación iniciada');
@@ -320,116 +367,7 @@ window.handleLogout = async function() {
     document.getElementById('mainScreen').classList.add('hidden');
 };
 
-// ========== CREAR/EDITAR USUARIO (CON FIREBASE AUTH) ==========
-window.guardarUsuario = async function() {
-    const nombre = document.getElementById('nuevoNombre').value.trim();
-    const username = document.getElementById('nuevoUsername').value.trim();
-    const password = document.getElementById('nuevoPassword').value;
-    const rol = document.getElementById('nuevoRol').value;
-    const errorDiv = document.getElementById('usuarioError');
-    const btnGuardar = document.querySelector('#modalUsuario .btn-primary');
-    
-    if (!nombre || !username) {
-        errorDiv.textContent = 'Por favor completa todos los campos obligatorios';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    // Validar contraseña solo si es usuario nuevo
-    if (!usuarioEditando && (!password || password.length < 6)) {
-        errorDiv.textContent = 'La contraseña debe tener al menos 6 caracteres';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
-    if (existente) {
-        errorDiv.textContent = 'El nombre de usuario ya existe';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    btnGuardar.disabled = true;
-    btnGuardar.textContent = 'Guardando...';
-    errorDiv.classList.add('hidden');
-    
-    try {
-        const email = `${username}@billar.app`;
-        
-        if (usuarioEditando) {
-            // === EDITAR USUARIO EXISTENTE ===
-            const index = usuarios.findIndex(u => u.id === usuarioEditando.id);
-            if (index !== -1) {
-                usuarios[index].nombre = nombre;
-                usuarios[index].username = username;
-                usuarios[index].rol = rol;
-                
-                // Si se proporcionó nueva contraseña, actualizarla en Firebase Auth
-                if (password && usuarioEditando.uid) {
-                    try {
-                        // Nota: Cambiar contraseña requiere que el usuario esté logueado
-                        // o usar Firebase Admin SDK desde backend
-                        debugLog('sistema', '⚠️ Cambio de contraseña requiere re-autenticación');
-                    } catch (authError) {
-                        debugLog('error', '⚠️ No se pudo cambiar contraseña en Firebase Auth', authError);
-                    }
-                }
-                
-                debugLog('sistema', '✏️ Usuario actualizado', { id: usuarioEditando.id, nombre });
-            }
-        } else {
-            // === CREAR NUEVO USUARIO ===
-            debugLog('sistema', '📝 Creando usuario en Firebase Auth...', { email });
-            
-            // Crear usuario en Firebase Authentication
-            const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
-            const uid = userCredential.user.uid;
-            
-            debugLog('sistema', '✅ Usuario creado en Firebase Auth', { uid });
-            
-            // Guardar en Firestore
-            const nuevoUsuario = {
-                id: Date.now(),
-                username,
-                nombre,
-                rol,
-                uid
-            };
-            
-            usuarios.push(nuevoUsuario);
-            
-            debugLog('sistema', '➕ Usuario agregado a Firestore', { username, nombre, rol });
-        }
-        
-        // Guardar en Firestore
-        await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
-        
-        actualizarUsuarios();
-        window.closeModalUsuario();
-        
-        alert(usuarioEditando ? '✅ Usuario actualizado correctamente' : '✅ Usuario creado correctamente');
-        
-    } catch (error) {
-        console.error('❌ Error al guardar usuario:', error);
-        
-        if (error.code === 'auth/email-already-in-use') {
-            errorDiv.textContent = 'Este usuario ya existe en Firebase Authentication';
-        } else if (error.code === 'auth/weak-password') {
-            errorDiv.textContent = 'La contraseña es muy débil (mínimo 6 caracteres)';
-        } else if (error.code === 'auth/invalid-email') {
-            errorDiv.textContent = 'Email inválido';
-        } else {
-            errorDiv.textContent = 'Error al crear usuario: ' + (error.message || 'Error desconocido');
-        }
-        
-        errorDiv.classList.remove('hidden');
-    } finally {
-        btnGuardar.disabled = false;
-        btnGuardar.textContent = 'Guardar';
-    }
-};
-
-// ========== FUNCIONES DE UTILIDAD ==========
+// ========== UTILIDADES ==========
 function mostrarError(mensaje) {
     alert('⚠️ ' + mensaje);
     debugLog('error', '🚨 Error mostrado al usuario', mensaje);
@@ -445,43 +383,87 @@ function hideLoading() {
     if (overlay) overlay.classList.add('hidden');
 }
 
-// ========== FUNCIONES DE GUARDADO ==========
-async function guardarUsuarios() {
-    await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
-}
-
-async function guardarVentas() {
-    await window.firebaseDB.set('ventas', 'todas', { lista: ventas });
-}
-
-async function guardarProductos() {
-    await window.firebaseDB.set('productos', 'todos', { lista: productos });
-}
-
-async function guardarMesas() {
-    await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
-}
-
-async function guardarMesasConsumo() {
-    await window.firebaseDB.set('mesas', 'consumo', { lista: mesasConsumo });
-}
-
-async function guardarConfiguracion() {
-    const config = {
-        tarifaHora: parseFloat(document.getElementById('tarifaHora').value) || 5.00,
-        tarifaExtra5Min: parseFloat(document.getElementById('tarifaExtra5Min').value) || 0.50
+function mostrarPantallaPrincipal() {
+    debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
+    
+    const loginScreen = document.getElementById('loginScreen');
+    const mainScreen = document.getElementById('mainScreen');
+    
+    if (!loginScreen || !mainScreen) {
+        debugLog('error', '❌ Elementos de pantalla no encontrados');
+        alert('Error: Elementos de la interfaz no encontrados. Recarga la página.');
+        return;
+    }
+    
+    loginScreen.classList.add('hidden');
+    mainScreen.classList.remove('hidden');
+    
+    const userName = document.getElementById('userName');
+    const userRole = document.getElementById('userRole');
+    
+    if (userName) userName.textContent = usuarioActual.nombre;
+    if (userRole) userRole.textContent = usuarioActual.rol.toUpperCase();
+    
+    iniciarMonitoreoInactividad();
+    
+    const toggleElement = (id, show) => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (show) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        }
     };
-    await window.firebaseDB.set('configuracion', 'general', config);
     
-    mesas.forEach(mesa => {
-        if (mesa.ocupada) actualizarTimer(mesa.id);
-    });
+    if (usuarioActual.rol === 'admin') {
+        toggleElement('btnUsuarios', true);
+        toggleElement('btnAgregarMesa', true);
+        toggleElement('btnAgregarMesaConsumo', true);
+        toggleElement('tabErrores', true);
+        toggleElement('btnReportarError', false);
+        toggleElement('btnAgregarProducto', true);
+        toggleElement('tabConsumoDueno', true);
+    } else {
+        toggleElement('btnUsuarios', false);
+        toggleElement('btnAgregarMesa', false);
+        toggleElement('btnAgregarMesaConsumo', false);
+        toggleElement('tabErrores', false);
+        toggleElement('btnReportarError', true);
+        toggleElement('btnAgregarProducto', false);
+        toggleElement('tabConsumoDueno', false);
+    }
     
-    alert('✅ Configuración guardada correctamente');
+    actualizarMesas();
+    actualizarMesasConsumo();
+    actualizarTablaVentas();
+    actualizarInventario();
+    calcularTotal();
+    
+    debugLog('sistema', '✅ Pantalla principal mostrada completamente');
 }
 
-window.guardarConfiguracion = guardarConfiguracion;
-
+// ========== TABS ==========
+window.changeTab = function(tab, event) {
+    tabActual = tab;
+    debugLog('sistema', '📑 Cambiando tab', { tab });
+    
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    
+    const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+    if (tabContent) tabContent.classList.add('active');
+    
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    
+    if (tab === 'reportes') {
+        generarReporte();
+    } else if (tab === 'errores') {
+        actualizarErrores();
+    } else if (tab === 'inventario') {
+        actualizarInventario();
+    } else if (tab === 'consumoDueno') {
+        actualizarConsumoDueno();
+    }
+};
 // ========== GESTIÓN DE MESAS ==========
 window.agregarMesa = async function() {
     if (usuarioActual.rol !== 'admin') {
