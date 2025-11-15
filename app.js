@@ -3216,7 +3216,7 @@ function actualizarConsumoDueno() {
     
     debugLog('sistema', '✅ Consumos actualizados correctamente');
 }
-}
+
 
 window.descargarConsumoDuenoPDF = function() {
     const consumosActuales = ultimoCierre 
