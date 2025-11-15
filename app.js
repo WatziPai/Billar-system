@@ -430,6 +430,7 @@ window.handleLogin = async function() {
         
         debugLog('sistema', '🔐 Intentando login con Firebase Auth', { email });
         
+        // Esta línea inicia la autenticación
         await window.firebaseAuth.signIn(email, password);
         
         debugLog('sistema', '✅ Autenticación iniciada');
@@ -438,9 +439,12 @@ window.handleLogin = async function() {
         document.getElementById('loginUsername').value = '';
         document.getElementById('loginPassword').value = '';
         
+        // Opcional: El onAuthChange se encargará de mostrar la pantalla principal.
+
     } catch (error) {
         console.error('❌ Error en login:', error);
         
+        // Mapeo de errores de Firebase Auth
         if (error.code === 'auth/user-not-found') {
             errorDiv.textContent = 'Usuario no existe';
         } else if (error.code === 'auth/wrong-password') {
@@ -448,7 +452,8 @@ window.handleLogin = async function() {
         } else if (error.code === 'auth/invalid-email') {
             errorDiv.textContent = 'Email inválido';
         } else if (error.code === 'auth/invalid-credential') {
-            errorDiv.textContent = 'Credenciales incorrectas';
+            // Este es el error real que significa "no existe el usuario/contraseña"
+            errorDiv.textContent = 'Credenciales incorrectas'; 
         } else if (error.code === 'auth/too-many-requests') {
             errorDiv.textContent = 'Demasiados intentos. Espera un momento.';
         } else {
@@ -457,7 +462,8 @@ window.handleLogin = async function() {
         
         errorDiv.classList.remove('hidden');
         debugLog('error', '❌ Login fallido', { error: error.code || error.message });
-        
+
+    } finally {
         btnLogin.disabled = false;
         btnLogin.textContent = 'Iniciar Sesión';
     }
