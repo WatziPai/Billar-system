@@ -3166,30 +3166,43 @@ function actualizarConsumoDueno() {
     
     if (!container) {
         debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
+        alert('ERROR: No se encontró el contenedor. Recarga la página.');
         return;
     }
     
     // Asegurarse de que el contenedor sea visible
     container.style.display = 'block';
-    container.style.minHeight = '200px';
+    container.style.minHeight = '300px';
+    container.style.backgroundColor = '#f8f9fa'; // Color de fondo para debug
+    container.style.padding = '20px';
+    container.style.borderRadius = '10px';
     
     const consumosActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
     
-    debugLog('sistema', `📊 Consumos actuales: ${consumosActuales.length}`, consumosActuales);
+    debugLog('sistema', `📊 Total consumos en array: ${consumosDueno.length}`);
+    debugLog('sistema', `📊 Consumos después del último cierre: ${consumosActuales.length}`);
     
     if (consumosActuales.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #999;">
-                <p style="font-size: 48px; margin: 0;">🍽️</p>
-                <p style="margin-top: 10px; font-size: 16px;">No hay consumos registrados desde el último cierre</p>
-                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 20px; padding: 12px 30px;">
+        const htmlVacio = `
+            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <p style="font-size: 64px; margin: 0;">🍽️</p>
+                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
+                    No hay consumos registrados
+                </p>
+                <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                    ${ultimoCierre ? 'desde el último cierre' : 'en el sistema'}
+                </p>
+                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 30px; padding: 15px 40px; font-size: 16px;">
                     ➕ Registrar Primer Consumo
                 </button>
             </div>
         `;
-        debugLog('sistema', '✅ Mensaje de sin consumos renderizado');
+        
+        container.innerHTML = htmlVacio;
+        debugLog('sistema', '✅ HTML vacío insertado correctamente');
+        debugLog('sistema', `📏 Altura del contenedor: ${container.offsetHeight}px`);
         return;
     }
 
