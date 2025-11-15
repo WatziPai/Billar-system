@@ -3180,75 +3180,66 @@ function actualizarConsumoDueno() {
     console.log('Cantidad de consumos:', consumosActuales.length);
     
     if (consumosActuales.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #999;">
-                <p style="font-size: 48px; margin: 0;">🍽️</p>
-                <p style="margin-top: 10px;">No hay consumos registrados desde el último cierre</p>
-                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 20px; padding: 12px 30px;">
-                    ➕ Registrar Primer Consumo
-                </button>
-            </div>
-        `;
+        console.log('⚠️ Insertando HTML de mensaje vacío...');
+        
+        const html = '<div style="text-align: center; padding: 50px; color: #999;">' +
+            '<p style="font-size: 48px; margin: 0;">🍽️</p>' +
+            '<p style="margin-top: 10px;">No hay consumos registrados desde el último cierre</p>' +
+            '<button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 20px; padding: 12px 30px;">' +
+            '➕ Registrar Primer Consumo' +
+            '</button>' +
+            '</div>';
+        
+        container.innerHTML = html;
+        console.log('✅ HTML insertado:', container.innerHTML);
         return;
     }
     
     const consumosOrdenados = [...consumosActuales].reverse();
     const totalGeneral = consumosOrdenados.reduce((sum, c) => sum + c.total, 0);
     
-    container.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div style="background: #fff3cd; padding: 15px 20px; border-radius: 8px; flex: 1; margin-right: 15px; border-left: 4px solid #ff9800;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong style="font-size: 16px; color: #856404;">📊 Total Consumido (No Cobrado)</strong>
-                        <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                            ${consumosOrdenados.length} ${consumosOrdenados.length === 1 ? 'registro' : 'registros'}
-                        </div>
-                    </div>
-                    <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                        S/ ${totalGeneral.toFixed(2)}
-                    </div>
-                </div>
-            </div>
-            <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="padding: 15px 25px; white-space: nowrap;">
-                📄 Descargar PDF
-            </button>
-        </div>
-        
-        ${consumosOrdenados.map((c, index) => `
-            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; border-left: 4px solid #ff9800;">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-                    <div style="flex: 1;">
-                        <div style="font-size: 13px; color: #999; margin-bottom: 8px;">
-                            🍽️ ${c.fecha}
-                        </div>
-                        <div style="background: #fff3cd; padding: 10px; border-radius: 6px;">
-                            <strong style="font-size: 12px; color: #856404;">Productos:</strong>
-                            <div style="margin-top: 8px;">
-                                ${c.productos.map(p => `
-                                    <div style="font-size: 12px; color: #856404; padding: 3px 0; display: flex; justify-content: space-between;">
-                                        <span>• ${p.nombre} x${p.cantidad}</span>
-                                        <span><strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong></span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="margin-left: 20px;">
-                        <div style="font-size: 22px; font-weight: bold; color: #ff9800;">
-                            S/ ${c.total.toFixed(2)}
-                        </div>
-                    </div>
-                </div>
-                ${usuarioActual.rol === 'admin' ? `
-                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})" style="width: 100%;">
-                        🗑️ Eliminar Registro
-                    </button>
-                ` : ''}
-            </div>
-        `).join('')}
-    `;
+    let html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">' +
+        '<div style="background: #fff3cd; padding: 15px 20px; border-radius: 8px; flex: 1; margin-right: 15px; border-left: 4px solid #ff9800;">' +
+        '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+        '<div>' +
+        '<strong style="font-size: 16px; color: #856404;">📊 Total Consumido (No Cobrado)</strong>' +
+        '<div style="font-size: 13px; color: #856404; margin-top: 5px;">' +
+        consumosOrdenados.length + ' ' + (consumosOrdenados.length === 1 ? 'registro' : 'registros') +
+        '</div></div>' +
+        '<div style="font-size: 28px; font-weight: bold; color: #ff9800;">S/ ' + totalGeneral.toFixed(2) + '</div>' +
+        '</div></div>' +
+        '<button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="padding: 15px 25px; white-space: nowrap;">📄 Descargar PDF</button>' +
+        '</div>';
     
+    consumosOrdenados.forEach(c => {
+        html += '<div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; border-left: 4px solid #ff9800;">' +
+            '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">' +
+            '<div style="flex: 1;">' +
+            '<div style="font-size: 13px; color: #999; margin-bottom: 8px;">🍽️ ' + c.fecha + '</div>' +
+            '<div style="background: #fff3cd; padding: 10px; border-radius: 6px;">' +
+            '<strong style="font-size: 12px; color: #856404;">Productos:</strong>' +
+            '<div style="margin-top: 8px;">';
+        
+        c.productos.forEach(p => {
+            html += '<div style="font-size: 12px; color: #856404; padding: 3px 0; display: flex; justify-content: space-between;">' +
+                '<span>• ' + p.nombre + ' x' + p.cantidad + '</span>' +
+                '<span><strong>S/ ' + (p.precio * p.cantidad).toFixed(2) + '</strong></span>' +
+                '</div>';
+        });
+        
+        html += '</div></div></div>' +
+            '<div style="margin-left: 20px;">' +
+            '<div style="font-size: 22px; font-weight: bold; color: #ff9800;">S/ ' + c.total.toFixed(2) + '</div>' +
+            '</div></div>';
+        
+        if (usuarioActual.rol === 'admin') {
+            html += '<button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(' + c.id + ')" style="width: 100%;">🗑️ Eliminar Registro</button>';
+        }
+        
+        html += '</div>';
+    });
+    
+    container.innerHTML = html;
     console.log('✅ HTML generado correctamente');
 }
 
