@@ -109,10 +109,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             debugLog('sistema', '✅ Usuario autenticado detectado', { uid: user.uid });
             
             try {
-                // 🔥 IMPORTANTE: Esperar un momento para que Firebase Auth se sincronice
-                await new Promise(resolve => setTimeout(resolve, 500));
+                // 🔥 Esperar a que Firebase sincronice permisos
+                await new Promise(resolve => setTimeout(resolve, 800));
                 
-                // Ahora sí cargar datos
+                // Cargar datos con el usuario autenticado
                 await cargarDatos();
                 
                 // Buscar datos del usuario
@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (usuario) {
                     usuarioActual = usuario;
                     usuarioActual.uid = user.uid;
+                    localStorage.setItem('ultimaActividad', Date.now().toString());
                     mostrarPantallaPrincipal();
                 } else {
                     debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore');
@@ -131,12 +132,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             } catch (error) {
                 debugLog('error', '❌ Error al cargar datos', error);
                 
-                // 🔥 Si el error es de permisos, cerrar sesión y mostrar login
                 if (error.code === 'permission-denied' || error.message.includes('permissions')) {
                     await window.firebaseAuth.signOut();
                     alert('Error de permisos. Por favor, inicia sesión nuevamente.');
                 } else {
-                    alert('Error al cargar datos. Verifica tu conexión.');
+                    alert('Error al cargar datos: ' + error.message);
                 }
             }
         } else {
@@ -263,40 +263,19 @@ window.handleLogin = async function() {
         // 🔐 TODOS los usuarios usan Firebase Auth con email
         let email = username;
         if (!username.includes('@')) {
-            // Si escribió solo "admin" o "empleado1", agregar dominio
             email = `${username}@billar.app`;
         }
         
         debugLog('sistema', '🔐 Intentando login con Firebase Auth', { email });
         
-        const userCredential = await window.firebaseAuth.signIn(email, password);
+        // 🔥 SOLO AUTENTICAR - El listener onAuthChange cargará los datos
+        await window.firebaseAuth.signIn(email, password);
         
-        debugLog('sistema', '✅ Autenticación exitosa', { uid: userCredential.user.uid });
+        debugLog('sistema', '✅ Autenticación iniciada');
         
-        // Cargar datos ahora que estamos autenticados
-        await cargarDatos();
-        
-        // Buscar usuario en Firestore
-        const usernameFromEmail = email.split('@')[0];
-        const usuario = usuarios.find(u => u.username === usernameFromEmail);
-        
-        if (usuario) {
-            usuarioActual = usuario;
-            usuarioActual.uid = userCredential.user.uid;
-            localStorage.setItem('ultimaActividad', Date.now().toString());
-            
-            errorDiv.classList.add('hidden');
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-            
-            debugLog('sistema', '✅ Login exitoso', { usuario: usuario.nombre, rol: usuario.rol });
-            mostrarPantallaPrincipal();
-        } else {
-            // Usuario existe en Firebase Auth pero no en Firestore
-            errorDiv.textContent = 'Usuario no registrado en el sistema. Contacta al administrador.';
-            errorDiv.classList.remove('hidden');
-            await window.firebaseAuth.signOut();
-        }
+        errorDiv.classList.add('hidden');
+        document.getElementById('loginUsername').value = '';
+        document.getElementById('loginPassword').value = '';
         
     } catch (error) {
         console.error('❌ Error en login:', error);
@@ -317,10 +296,10 @@ window.handleLogin = async function() {
         
         errorDiv.classList.remove('hidden');
         debugLog('error', '❌ Login fallido', { error: error.code || error.message });
+        
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Iniciar Sesión';
     }
-
-    btnLogin.disabled = false;
-    btnLogin.textContent = 'Iniciar Sesión';
 };
 
 window.handleLogout = async function() {
@@ -503,256 +482,6 @@ async function guardarConfiguracion() {
 
 window.guardarConfiguracion = guardarConfiguracion;
 
-// Continúa con el resto de tus funciones (actualizarMesas, toggleMesa, etc.)
-// El código restante permanece igual...
-// ========== UTILIDADES ==========
-function mostrarError(mensaje) {
-    alert('⚠️ ' + mensaje);
-    debugLog('error', '🚨 Error mostrado al usuario', mensaje);
-}
-
-function showLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.remove('hidden');
-}
-
-function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.add('hidden');
-}
-
-// ========== LOGIN / LOGOUT ==========
-window.handleLogin = async function() {
-    const btnLogin = document.getElementById('btnLogin');
-    const username = document.getElementById('loginUsername').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    const errorDiv = document.getElementById('loginError');
-
-    if (!username || !password) {
-        errorDiv.textContent = 'Por favor completa todos los campos';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-
-    btnLogin.disabled = true;
-    btnLogin.textContent = 'Iniciando...';
-
-    try {
-        // 🔐 DETECTAR TIPO DE LOGIN
-        const isEmailLogin = username.includes('@');
-        
-        if (isEmailLogin) {
-            // ============================================
-            // 🔥 LOGIN ADMIN (Firebase Authentication)
-            // ============================================
-            debugLog('sistema', '🔐 Login ADMIN con Firebase Auth...', { email: username });
-            
-            const userCredential = await window.firebaseAuth.signIn(username, password);
-            
-            debugLog('sistema', '✅ Autenticación exitosa en Firebase Auth', { uid: userCredential.user.uid });
-            
-            // Buscar datos del usuario admin en Firestore
-            const usernameFromEmail = username.split('@')[0]; // "admin@billar.app" -> "admin"
-            const usuario = usuarios.find(u => u.username === usernameFromEmail && u.rol === 'admin');
-            
-            if (usuario) {
-                usuarioActual = usuario;
-                usuarioActual.uid = userCredential.user.uid;
-                guardarSesion();
-                errorDiv.classList.add('hidden');
-                document.getElementById('loginUsername').value = '';
-                document.getElementById('loginPassword').value = '';
-                debugLog('sistema', '✅ Login ADMIN exitoso', { usuario: usuario.nombre });
-                mostrarPantallaPrincipal();
-            } else {
-                // Si no existe en Firestore, crear uno automáticamente
-                const nuevoAdmin = {
-                    id: Date.now(),
-                    username: usernameFromEmail,
-                    password: password,
-                    nombre: 'Administrador',
-                    rol: 'admin'
-                };
-                usuarios.push(nuevoAdmin);
-                await guardarUsuarios();
-                
-                usuarioActual = nuevoAdmin;
-                usuarioActual.uid = userCredential.user.uid;
-                guardarSesion();
-                errorDiv.classList.add('hidden');
-                document.getElementById('loginUsername').value = '';
-                document.getElementById('loginPassword').value = '';
-                debugLog('sistema', '✅ Login ADMIN exitoso (usuario creado automáticamente)', { usuario: nuevoAdmin.nombre });
-                mostrarPantallaPrincipal();
-            }
-        } else {
-            // ============================================
-            // 👤 LOGIN EMPLEADO (Autenticación Local)
-            // ============================================
-            debugLog('sistema', '👤 Login EMPLEADO con autenticación local...', { username });
-            
-            const usuario = usuarios.find(u => u.username === username && u.password === password);
-            
-            if (usuario) {
-                usuarioActual = usuario;
-                guardarSesion();
-                errorDiv.classList.add('hidden');
-                document.getElementById('loginUsername').value = '';
-                document.getElementById('loginPassword').value = '';
-                debugLog('sistema', '✅ Login EMPLEADO exitoso', { usuario: usuario.nombre });
-                mostrarPantallaPrincipal();
-            } else {
-                errorDiv.textContent = 'Usuario o contraseña incorrectos';
-                errorDiv.classList.remove('hidden');
-                debugLog('error', '❌ Login EMPLEADO fallido', { username });
-            }
-        }
-        
-    } catch (error) {
-        console.error('❌ Error en login:', error);
-        
-        // Mensajes de error más claros para Firebase Auth
-        if (error.code === 'auth/user-not-found') {
-            errorDiv.textContent = 'Usuario administrador no existe en Firebase';
-        } else if (error.code === 'auth/wrong-password') {
-            errorDiv.textContent = 'Contraseña de administrador incorrecta';
-        } else if (error.code === 'auth/invalid-email') {
-            errorDiv.textContent = 'Email de administrador inválido';
-        } else if (error.code === 'auth/invalid-credential') {
-            errorDiv.textContent = 'Credenciales de administrador incorrectas';
-        } else {
-            errorDiv.textContent = 'Error al iniciar sesión. Intenta nuevamente.';
-        }
-        
-        errorDiv.classList.remove('hidden');
-        debugLog('error', '❌ Login fallido', { username, error: error.code || error.message });
-    }
-
-    btnLogin.disabled = false;
-    btnLogin.textContent = 'Iniciar Sesión';
-};
-
-window.handleLogout = async function() {
-    debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
-    
-    try {
-        await window.firebaseAuth.signOut();
-        debugLog('sistema', '✅ Sesión cerrada en Firebase Auth');
-    } catch (error) {
-        console.error('❌ Error al cerrar sesión:', error);
-    }
-    
-    usuarioActual = null;
-    guardarSesion();
-    detenerMonitoreoInactividad();
-    
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('mainScreen').classList.add('hidden');
-};
-
-function mostrarPantallaPrincipal() {
-    debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
-    
-    const loginScreen = document.getElementById('loginScreen');
-    const mainScreen = document.getElementById('mainScreen');
-    
-    if (!loginScreen || !mainScreen) {
-        debugLog('error', '❌ Elementos de pantalla no encontrados', {
-            loginScreen: !!loginScreen,
-            mainScreen: !!mainScreen
-        });
-        alert('Error: Elementos de la interfaz no encontrados. Recarga la página.');
-        return;
-    }
-    
-    loginScreen.classList.add('hidden');
-    mainScreen.classList.remove('hidden');
-    
-    const userName = document.getElementById('userName');
-    const userRole = document.getElementById('userRole');
-    
-    if (userName) userName.textContent = usuarioActual.nombre;
-    if (userRole) userRole.textContent = usuarioActual.rol.toUpperCase();
-    
-    iniciarMonitoreoInactividad();
-    
-    // Función helper para mostrar/ocultar elementos de forma segura
-    const toggleElement = (id, show) => {
-        const el = document.getElementById(id);
-        if (el) {
-            if (show) el.classList.remove('hidden');
-            else el.classList.add('hidden');
-        } else {
-            debugLog('error', `⚠️ Elemento no encontrado: ${id}`);
-        }
-    };
-    
-    if (usuarioActual.rol === 'admin') {
-        toggleElement('btnUsuarios', true);
-        toggleElement('btnAgregarMesa', true);
-        toggleElement('btnAgregarMesaConsumo', true);
-        toggleElement('tabErrores', true);
-        toggleElement('btnReportarError', false);
-        toggleElement('btnAgregarProducto', true);
-        toggleElement('tabConsumoDueno', true);
-    } else {
-        toggleElement('btnUsuarios', false);
-        toggleElement('btnAgregarMesa', false);
-        toggleElement('btnAgregarMesaConsumo', false);
-        toggleElement('tabErrores', false);
-        toggleElement('btnReportarError', true);
-        toggleElement('btnAgregarProducto', false);
-        toggleElement('tabConsumoDueno', false);
-    }
-    
-    debugLog('sistema', '🔄 Actualizando todas las vistas...', { mesas: mesas.length });
-    
-    // Verificar que los contenedores existen antes de actualizar
-    const mesasContainer = document.getElementById('mesasContainer');
-    const mesasConsumoContainer = document.getElementById('mesasConsumoContainer');
-    
-    if (!mesasContainer) {
-        debugLog('error', '❌ CRÍTICO: mesasContainer no existe en el HTML');
-    } else {
-        debugLog('sistema', '✅ mesasContainer encontrado, actualizando...');
-        actualizarMesas();
-    }
-    
-    if (mesasConsumoContainer) {
-        actualizarMesasConsumo();
-    }
-    
-    actualizarTablaVentas();
-    actualizarInventario();
-    calcularTotal();
-    
-    debugLog('sistema', '✅ Pantalla principal mostrada completamente');
-}
-
-// ========== TABS ==========
-window.changeTab = function(tab, event) {
-    tabActual = tab;
-    debugLog('sistema', '📑 Cambiando tab', { tab });
-    
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    
-    const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
-    if (tabContent) tabContent.classList.add('active');
-    
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
-    
-    if (tab === 'reportes') {
-        generarReporte();
-    } else if (tab === 'errores') {
-        actualizarErrores();
-    } else if (tab === 'inventario') {
-        actualizarInventario();
-    } else if (tab === 'consumoDueno') {
-        actualizarConsumoDueno(); // ← Esta línea es la clave
-    }
-};
-
 // ========== GESTIÓN DE MESAS ==========
 window.agregarMesa = async function() {
     if (usuarioActual.rol !== 'admin') {
@@ -800,21 +529,21 @@ window.eliminarMesa = async function(id) {
 function actualizarMesas() {
     const container = document.getElementById('mesasContainer');
     if (!container) {
-        debugLog('error', '⚠️ Contenedor mesasContainer NO ENCONTRADO en el DOM');
+        debugLog('error', '⚠️ Contenedor mesasContainer NO ENCONTRADO');
         return;
     }
     
-    debugLog('sistema', '🔄 Actualizando mesas...', { 
-        total: mesas.length,
-        contenedorExiste: !!container 
-    });
+    if (!usuarioActual) {
+        debugLog('error', '⚠️ No hay usuario activo');
+        return;
+    }
     
-    // Solo limpiamos los timers de mesas que ya no existen
+    debugLog('sistema', '🔄 Actualizando mesas...', { total: mesas.length });
+    
     Object.keys(timers).forEach(id => {
         if (!mesas.find(m => m.id === parseInt(id))) {
             clearInterval(timers[id]);
             delete timers[id];
-            debugLog('timer', '🗑️ Timer limpiado de mesa eliminada', { id });
         }
     });
     
@@ -826,7 +555,7 @@ function actualizarMesas() {
         mesaDiv.className = `mesa-card ${mesa.ocupada ? 'mesa-ocupada' : 'mesa-disponible'}`;
         
         mesaDiv.innerHTML = `
-            ${usuarioActual && usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesa(${mesa.id})">×</button>` : ''}
+            ${usuarioActual.rol === 'admin' ? `<button class="delete-mesa-btn" onclick="eliminarMesa(${mesa.id})">×</button>` : ''}
             <h3>Mesa ${mesa.id}</h3>
             <span class="mesa-status ${mesa.ocupada ? 'status-ocupada' : 'status-disponible'}">
                 ${mesa.ocupada ? 'OCUPADA' : 'DISPONIBLE'}
@@ -842,26 +571,16 @@ function actualizarMesas() {
         `;
         container.appendChild(mesaDiv);
         
-        // Solo reiniciamos el timer si la mesa está ocupada Y no tiene timer activo
         if (mesa.ocupada && mesa.inicio) {
             if (!timers[mesa.id]) {
                 mesa.tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
                 actualizarTimer(mesa.id);
                 timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
-                debugLog('timer', '▶️ Timer iniciado para mesa', { id: mesa.id });
             }
-        } else {
-            // Si la mesa no está ocupada, limpiamos su timer si existe
-            if (timers[mesa.id]) {
-                clearInterval(timers[mesa.id]);
-                delete timers[mesa.id];
-                debugLog('timer', '⏸️ Timer detenido para mesa', { id: mesa.id });
-            }
+        } else if (timers[mesa.id]) {
+            clearInterval(timers[mesa.id]);
+            delete timers[mesa.id];
         }
-    });
-    
-    debugLog('sistema', `✅ ${mesas.length} mesas renderizadas en el DOM`, {
-        timersActivos: Object.keys(timers).length
     });
 }
 
