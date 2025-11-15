@@ -3418,4 +3418,5 @@ window.cerrarMesaCompleto = function() {
         finalizarMesaConsumo(mesaConsumoActual);
     }
     window.closeModalConsumo();
+}
 };
