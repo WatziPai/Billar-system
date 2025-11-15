@@ -109,7 +109,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             debugLog('sistema', '✅ Usuario autenticado detectado', { uid: user.uid });
             
             try {
-                // Cargar datos con el usuario autenticado
+                // 🔥 IMPORTANTE: Esperar un momento para que Firebase Auth se sincronice
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Ahora sí cargar datos
                 await cargarDatos();
                 
                 // Buscar datos del usuario
@@ -127,7 +130,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             } catch (error) {
                 debugLog('error', '❌ Error al cargar datos', error);
-                alert('Error al cargar datos. Verifica tu conexión.');
+                
+                // 🔥 Si el error es de permisos, cerrar sesión y mostrar login
+                if (error.code === 'permission-denied' || error.message.includes('permissions')) {
+                    await window.firebaseAuth.signOut();
+                    alert('Error de permisos. Por favor, inicia sesión nuevamente.');
+                } else {
+                    alert('Error al cargar datos. Verifica tu conexión.');
+                }
             }
         } else {
             debugLog('sistema', '⏳ Sin sesión activa');
