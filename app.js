@@ -172,13 +172,10 @@ function mostrarPantallaPrincipal() {
         actualizarTablaVentas();
         actualizarInventario();
         calcularTotal();
+       actualizarConsumoDueno();
     } catch (e) {
-        // Si hay un ReferenceError porque faltan funciones (stubs), esto lo atrapará
-        // pero permitirá que el resto de la interfaz cargue y la seguridad funcione.
         debugLog('error', '❌ Error al cargar datos de pantalla (Puede faltar una definición de función)', e);
     }
-    // === FIN DE LA CORRECCIÓN ===
-
     debugLog('sistema', '✅ Pantalla principal mostrada completamente');
 }
 
@@ -202,13 +199,12 @@ window.changeTab = function(tab, event) {
     } else if (tab === 'inventario') {
         actualizarInventario();
     } else if (tab === 'consumoDueno') {
-        actualizarConsumoDueno();
-    }
+    console.log('🔥 LLAMANDO actualizarConsumoDueno'); 
+    actualizarConsumoDueno();
+}
 };
 
-// ===================================
 // ========== INICIALIZACIÓN (Se mantiene la posición) ==========
-// ===================================
 document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación...');
     showLoading();
