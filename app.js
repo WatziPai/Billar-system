@@ -353,28 +353,65 @@ window.handleLogin = async function() {
     btnLogin.disabled = true;
     btnLogin.textContent = 'Iniciando...';
 
-    const usuario = usuarios.find(u => u.username === username && u.password === password);
-    
-    if (usuario) {
-        usuarioActual = usuario;
-        guardarSesion();
-        errorDiv.classList.add('hidden');
-        document.getElementById('loginUsername').value = '';
-        document.getElementById('loginPassword').value = '';
-        debugLog('sistema', '✅ Login exitoso', { usuario: usuario.nombre });
-        mostrarPantallaPrincipal();
-    } else {
-        errorDiv.textContent = 'Usuario o contraseña incorrectos';
+    try {
+        // 👇 NUEVO: Autenticar con Firebase Auth
+        const email = `${username}@billar.app`;
+        debugLog('sistema', '🔐 Intentando autenticar con Firebase Auth...', { email });
+        
+        const userCredential = await window.firebaseAuth.signIn(email, password);
+        
+        debugLog('sistema', '✅ Autenticación exitosa en Firebase Auth', { uid: userCredential.user.uid });
+        
+        // Buscar datos del usuario en Firestore
+        const usuario = usuarios.find(u => u.username === username);
+        
+        if (usuario) {
+            usuarioActual = usuario;
+            usuarioActual.uid = userCredential.user.uid; // 👈 Agregar UID de Firebase
+            guardarSesion();
+            errorDiv.classList.add('hidden');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            debugLog('sistema', '✅ Login exitoso', { usuario: usuario.nombre });
+            mostrarPantallaPrincipal();
+        } else {
+            errorDiv.textContent = 'Usuario no encontrado en la base de datos';
+            errorDiv.classList.remove('hidden');
+            debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore', { username });
+        }
+    } catch (error) {
+        console.error('❌ Error en login:', error);
+        
+        // Mensajes de error más claros
+        if (error.code === 'auth/user-not-found') {
+            errorDiv.textContent = 'Usuario no existe en el sistema';
+        } else if (error.code === 'auth/wrong-password') {
+            errorDiv.textContent = 'Contraseña incorrecta';
+        } else if (error.code === 'auth/invalid-email') {
+            errorDiv.textContent = 'Usuario inválido';
+        } else if (error.code === 'auth/invalid-credential') {
+            errorDiv.textContent = 'Usuario o contraseña incorrectos';
+        } else {
+            errorDiv.textContent = 'Error al iniciar sesión. Intenta nuevamente.';
+        }
+        
         errorDiv.classList.remove('hidden');
-        debugLog('error', '❌ Login fallido', { username });
+        debugLog('error', '❌ Login fallido', { username, error: error.code });
     }
 
     btnLogin.disabled = false;
     btnLogin.textContent = 'Iniciar Sesión';
 };
 
-window.handleLogout = function() {
+window.handleLogout = async function() {
     debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
+    
+    try {
+        await window.firebaseAuth.signOut();
+        debugLog('sistema', '✅ Sesión cerrada en Firebase Auth');
+    } catch (error) {
+        console.error('❌ Error al cerrar sesión:', error);
+    }
     
     usuarioActual = null;
     guardarSesion();
@@ -3355,4 +3392,31 @@ window.eliminarConsumoDueno = async function(consumoId) {
     actualizarInventario();
     
     alert('✅ Registro eliminado y stock devuelto');
+    // ========== VERIFICAR SESIÓN AUTOMÁTICA CON FIREBASE AUTH ==========
+if (window.firebaseAuth) {
+    window.firebaseAuth.onAuthChange((user) => {
+        if (user && !usuarioActual) {
+            debugLog('sistema', '🔄 Usuario autenticado detectado, restaurando sesión...', { uid: user.uid });
+            
+            // El usuario está autenticado, cargar sus datos
+            const username = user.email.replace('@billar.app', '');
+            const usuario = usuarios.find(u => u.username === username);
+            
+            if (usuario) {
+                usuarioActual = usuario;
+                usuarioActual.uid = user.uid;
+                
+                // Solo mostrar pantalla si no estamos en proceso de login
+                if (document.getElementById('mainScreen').classList.contains('hidden')) {
+                    mostrarPantallaPrincipal();
+                }
+            }
+        } else if (!user && usuarioActual) {
+            debugLog('sistema', '🔓 Sesión cerrada detectada');
+            usuarioActual = null;
+        }
+    });
+    
+    debugLog('sistema', '✅ Listener de autenticación configurado');
+}
 };
