@@ -355,7 +355,7 @@ window.handleLogin = async function() {
 
     try {
         // 👇 NUEVO: Autenticar con Firebase Auth
-        const email = `${username}@billar.app`;
+        const email = username.includes('@') ? username : `${username}@billar.app`;
         debugLog('sistema', '🔐 Intentando autenticar con Firebase Auth...', { email });
         
         const userCredential = await window.firebaseAuth.signIn(email, password);
