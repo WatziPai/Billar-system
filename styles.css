@@ -284,6 +284,7 @@ body {
 .tab-content {
     display: none;
     animation: fadeIn 0.3s ease-in;
+    min-height: 400px;
 }
 
 .tab-content.active {
