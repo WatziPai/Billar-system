@@ -472,6 +472,11 @@ window.handleLogout = async function() {
     
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('mainScreen').classList.add('hidden');
+    const btnLogin = document.getElementById('btnLogin');
+    if (btnLogin) {
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Iniciar Sesión'; 
+    }
 };
 
 
