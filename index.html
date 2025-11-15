@@ -258,21 +258,20 @@
             </div>
         </div>
 
-        <div id="tabConsumoDueno" class="tab-content">
-            <div class="section-box">
-                <div class="section-header">
-                    <h2>🍽️ Consumo del Dueño</h2>
-                    <button class="btn-small btn-primary" onclick="showModalConsumoDueno()">
-                        ➕ Registrar Consumo
-                    </button>
-                </div>
-                <p style="color: #666; margin-bottom: 20px;">
-                    ℹ️ Aquí se registran los consumos personales que NO se cobran, pero se descuentan del stock
-                </p>
-                <div id="consumoDuenoContainer" style="display: block !important;"></div>
+       <div id="consumoDuenoTab" class="tab-content">  <!-- Cambiar de tabConsumoDueno a consumoDuenoTab -->
+        <div class="section-box">
+            <div class="section-header">
+                <h2>🍽️ Consumo del Dueño</h2>
+                <button class="btn-small btn-primary" onclick="showModalConsumoDueno()">
+                    ➕ Registrar Consumo
+                </button>
             </div>
+            <p style="color: #666; margin-bottom: 20px;">
+                ℹ️ Aquí se registran los consumos personales que NO se cobran, pero se descuentan del stock
+            </p>
+            <div id="consumoDuenoContainer" style="display: block !important;"></div>
         </div>
-
+    </div>
     <!-- LOADING OVERLAY -->
     <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
