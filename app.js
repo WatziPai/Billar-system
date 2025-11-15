@@ -908,7 +908,11 @@ function actualizarTablaVentas() {
 }
 
 function calcularTotal() {
-    const total = ventas.reduce((sum, v) => sum + v.monto, 0);
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
+    
+    const total = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
     const totalEl = document.getElementById('totalDia');
     if (totalEl) totalEl.textContent = `S/ ${total.toFixed(2)}`;
 }
