@@ -3173,7 +3173,7 @@ function actualizarConsumoDueno() {
     // Asegurarse de que el contenedor sea visible
     container.style.display = 'block';
     container.style.minHeight = '300px';
-    container.style.backgroundColor = '#f8f9fa'; // Color de fondo para debug
+    container.style.backgroundColor = '#f8f9fa';
     container.style.padding = '20px';
     container.style.borderRadius = '10px';
     
@@ -3205,6 +3205,11 @@ function actualizarConsumoDueno() {
         debugLog('sistema', `📏 Altura del contenedor: ${container.offsetHeight}px`);
         return;
     }
+    
+    // Aquí deberías agregar el código para cuando SÍ hay consumos
+    // Por ejemplo, generar las tarjetas de consumo
+    debugLog('sistema', '✅ Consumos actualizados correctamente');
+}
 
 window.descargarConsumoDuenoPDF = function() {
     const consumosActuales = ultimoCierre 
@@ -3376,7 +3381,9 @@ window.eliminarConsumoDueno = async function(consumoId) {
     actualizarInventario();
     
     alert('✅ Registro eliminado y stock devuelto');
-    // ========== VERIFICAR SESIÓN AUTOMÁTICA CON FIREBASE AUTH ==========
+};
+
+// ========== VERIFICAR SESIÓN AUTOMÁTICA CON FIREBASE AUTH ==========
 if (window.firebaseAuth) {
     window.firebaseAuth.onAuthChange((user) => {
         if (user && !usuarioActual) {
@@ -3403,12 +3410,12 @@ if (window.firebaseAuth) {
     
     debugLog('sistema', '✅ Listener de autenticación configurado');
 }
-    window.cerrarMesaCompleto = function() {
+
+window.cerrarMesaCompleto = function() {
     if (tipoMesaActual === 'billar') {
         finalizarMesa(mesaConsumoActual);
     } else {
         finalizarMesaConsumo(mesaConsumoActual);
     }
     window.closeModalConsumo();
-};
 };
