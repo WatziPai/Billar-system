@@ -2632,19 +2632,29 @@ window.toggleUsuarios = function() {
     }
 };
 
-window.showModalUsuario = function(usuario = null) {
+window.showModalUsuario = function(usuarioIdOrNull = null) {
     if (usuarioActual.rol !== 'admin') return;
     
-    usuarioEditando = usuario;
+    // 👇 CAMBIO: Buscar el usuario en el array por ID
+    if (usuarioIdOrNull !== null) {
+        usuarioEditando = usuarios.find(u => u.id === usuarioIdOrNull);
+        if (!usuarioEditando) {
+            mostrarError('Usuario no encontrado');
+            return;
+        }
+    } else {
+        usuarioEditando = null;
+    }
+    
     const modal = document.getElementById('modalUsuario');
     const title = document.getElementById('usuarioModalTitle');
     
-    if (usuario) {
+    if (usuarioEditando) {
         title.textContent = 'Editar Usuario';
-        document.getElementById('nuevoNombre').value = usuario.nombre;
-        document.getElementById('nuevoUsername').value = usuario.username;
+        document.getElementById('nuevoNombre').value = usuarioEditando.nombre;
+        document.getElementById('nuevoUsername').value = usuarioEditando.username;
         document.getElementById('nuevoPassword').value = '';
-        document.getElementById('nuevoRol').value = usuario.rol;
+        document.getElementById('nuevoRol').value = usuarioEditando.rol;
     } else {
         title.textContent = 'Agregar Usuario';
         document.getElementById('nuevoNombre').value = '';
@@ -2730,7 +2740,7 @@ function actualizarUsuarios() {
     }
     
     tbody.innerHTML = usuarios.map(u => {
-        const usuarioJSON = JSON.stringify(u).replace(/"/g, '&quot;');
+        // 👇 CAMBIO: Pasar solo el ID en lugar del objeto completo
         return `
             <tr>
                 <td>${u.username}</td>
@@ -2741,7 +2751,7 @@ function actualizarUsuarios() {
                     </span>
                 </td>
                 <td style="text-align: center;">
-                    <button class="btn-small btn-green" onclick='showModalUsuario(${usuarioJSON})' style="margin-right: 5px;">✏️</button>
+                    <button class="btn-small btn-green" onclick='showModalUsuario(${u.id})' style="margin-right: 5px;">✏️</button>
                     ${usuarioActual.id !== u.id ? `<button class="btn-small btn-red" onclick="eliminarUsuario(${u.id})">🗑️</button>` : ''}
                 </td>
             </tr>
