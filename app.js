@@ -96,7 +96,112 @@ function cerrarSesionPorInactividad() {
     alert('🔒 Tu sesión se cerró automáticamente por 30 minutos de inactividad.');
 }
 
-// ========== INICIALIZACIÓN ==========
+// ===================================
+// ========== UTILIDADES (MOVIDO AL INICIO PARA EVITAR REFERENCE ERROR) ==========
+// ===================================
+
+function mostrarError(mensaje) {
+    alert('⚠️ ' + mensaje);
+    debugLog('error', '🚨 Error mostrado al usuario', mensaje);
+}
+
+function showLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function mostrarPantallaPrincipal() {
+    debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
+    
+    const loginScreen = document.getElementById('loginScreen');
+    const mainScreen = document.getElementById('mainScreen');
+    
+    if (!loginScreen || !mainScreen) {
+        debugLog('error', '❌ Elementos de pantalla no encontrados');
+        alert('Error: Elementos de la interfaz no encontrados. Recarga la página.');
+        return;
+    }
+    
+    loginScreen.classList.add('hidden');
+    mainScreen.classList.remove('hidden');
+    
+    const userName = document.getElementById('userName');
+    const userRole = document.getElementById('userRole');
+    
+    if (userName) userName.textContent = usuarioActual.nombre;
+    if (userRole) userRole.textContent = usuarioActual.rol.toUpperCase();
+    
+    iniciarMonitoreoInactividad();
+    
+    const toggleElement = (id, show) => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (show) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+        }
+    };
+    
+    if (usuarioActual.rol === 'admin') {
+        toggleElement('btnUsuarios', true);
+        toggleElement('btnAgregarMesa', true);
+        toggleElement('btnAgregarMesaConsumo', true);
+        toggleElement('tabErrores', true);
+        toggleElement('btnReportarError', false);
+        toggleElement('btnAgregarProducto', true);
+        toggleElement('tabConsumoDueno', true);
+    } else {
+        toggleElement('btnUsuarios', false);
+        toggleElement('btnAgregarMesa', false);
+        toggleElement('btnAgregarMesaConsumo', false);
+        toggleElement('tabErrores', false);
+        toggleElement('btnReportarError', true);
+        toggleElement('btnAgregarProducto', false);
+        toggleElement('tabConsumoDueno', false);
+    }
+    
+    // NOTA: Estas funciones deben estar definidas ANTES de mostrarPantallaPrincipal
+    // o deben ser accesibles globalmente (window.funcion) si están en otro archivo.
+    actualizarMesas(); 
+    actualizarMesasConsumo();
+    actualizarTablaVentas();
+    actualizarInventario();
+    calcularTotal();
+    
+    debugLog('sistema', '✅ Pantalla principal mostrada completamente');
+}
+
+// ========== TABS (Se mantiene la posición) ==========
+window.changeTab = function(tab, event) {
+    tabActual = tab;
+    debugLog('sistema', '📑 Cambiando tab', { tab });
+    
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    
+    const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+    if (tabContent) tabContent.classList.add('active');
+    
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    
+    if (tab === 'reportes') {
+        generarReporte();
+    } else if (tab === 'errores') {
+        actualizarErrores();
+    } else if (tab === 'inventario') {
+        actualizarInventario();
+    } else if (tab === 'consumoDueno') {
+        actualizarConsumoDueno();
+    }
+};
+
+// ===================================
+// ========== INICIALIZACIÓN (Se mantiene la posición) ==========
+// ===================================
 document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación...');
     showLoading();
@@ -123,14 +228,16 @@ document.addEventListener('DOMContentLoaded', async function() {
                     usuarioActual = usuario;
                     usuarioActual.uid = user.uid;
                     localStorage.setItem('ultimaActividad', Date.now().toString());
-                    mostrarPantallaPrincipal();
+                    // 🚀 Esta llamada ahora es segura porque mostrarPantallaPrincipal está definida
+                    mostrarPantallaPrincipal(); 
                 } else {
                     debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore');
                     await window.firebaseAuth.signOut();
                     alert('Error: Tu usuario no está registrado en el sistema. Contacta al administrador.');
                 }
             } catch (error) {
-                debugLog('error', '❌ Error al cargar datos', error);
+                // Si la carga de datos falla, se registra el error aquí
+                debugLog('error', '❌ Error al cargar datos', error); 
                 
                 if (error.code === 'permission-denied' || error.message.includes('permissions')) {
                     await window.firebaseAuth.signOut();
@@ -367,103 +474,7 @@ window.handleLogout = async function() {
     document.getElementById('mainScreen').classList.add('hidden');
 };
 
-// ========== UTILIDADES ==========
-function mostrarError(mensaje) {
-    alert('⚠️ ' + mensaje);
-    debugLog('error', '🚨 Error mostrado al usuario', mensaje);
-}
 
-function showLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.remove('hidden');
-}
-
-function hideLoading() {
-    const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.add('hidden');
-}
-
-function mostrarPantallaPrincipal() {
-    debugLog('sistema', '🔄 Mostrando pantalla principal...', { mesas: mesas.length });
-    
-    const loginScreen = document.getElementById('loginScreen');
-    const mainScreen = document.getElementById('mainScreen');
-    
-    if (!loginScreen || !mainScreen) {
-        debugLog('error', '❌ Elementos de pantalla no encontrados');
-        alert('Error: Elementos de la interfaz no encontrados. Recarga la página.');
-        return;
-    }
-    
-    loginScreen.classList.add('hidden');
-    mainScreen.classList.remove('hidden');
-    
-    const userName = document.getElementById('userName');
-    const userRole = document.getElementById('userRole');
-    
-    if (userName) userName.textContent = usuarioActual.nombre;
-    if (userRole) userRole.textContent = usuarioActual.rol.toUpperCase();
-    
-    iniciarMonitoreoInactividad();
-    
-    const toggleElement = (id, show) => {
-        const el = document.getElementById(id);
-        if (el) {
-            if (show) el.classList.remove('hidden');
-            else el.classList.add('hidden');
-        }
-    };
-    
-    if (usuarioActual.rol === 'admin') {
-        toggleElement('btnUsuarios', true);
-        toggleElement('btnAgregarMesa', true);
-        toggleElement('btnAgregarMesaConsumo', true);
-        toggleElement('tabErrores', true);
-        toggleElement('btnReportarError', false);
-        toggleElement('btnAgregarProducto', true);
-        toggleElement('tabConsumoDueno', true);
-    } else {
-        toggleElement('btnUsuarios', false);
-        toggleElement('btnAgregarMesa', false);
-        toggleElement('btnAgregarMesaConsumo', false);
-        toggleElement('tabErrores', false);
-        toggleElement('btnReportarError', true);
-        toggleElement('btnAgregarProducto', false);
-        toggleElement('tabConsumoDueno', false);
-    }
-    
-    actualizarMesas();
-    actualizarMesasConsumo();
-    actualizarTablaVentas();
-    actualizarInventario();
-    calcularTotal();
-    
-    debugLog('sistema', '✅ Pantalla principal mostrada completamente');
-}
-
-// ========== TABS ==========
-window.changeTab = function(tab, event) {
-    tabActual = tab;
-    debugLog('sistema', '📑 Cambiando tab', { tab });
-    
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    
-    const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
-    if (tabContent) tabContent.classList.add('active');
-    
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
-    
-    if (tab === 'reportes') {
-        generarReporte();
-    } else if (tab === 'errores') {
-        actualizarErrores();
-    } else if (tab === 'inventario') {
-        actualizarInventario();
-    } else if (tab === 'consumoDueno') {
-        actualizarConsumoDueno();
-    }
-};
 // ========== GESTIÓN DE MESAS ==========
 window.agregarMesa = async function() {
     if (usuarioActual.rol !== 'admin') {
@@ -560,8 +571,8 @@ function actualizarMesas() {
                 timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
             }
         } else if (timers[mesa.id]) {
-            clearInterval(timers[mesa.id]);
-            delete timers[mesa.id];
+            clearInterval(timers[id]);
+            delete timers[id];
         }
     });
 }
