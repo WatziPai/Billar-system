@@ -1,128 +1,74 @@
-// ========== CONFIGURACIÓN DE FIREBASE ==========
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    deleteDoc, 
-    getDocs,
-    query,
-    where
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+// 👇 NUEVAS LÍNEAS PARA AUTHENTICATION
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
-// Tu configuración de Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyCMJbPKQ434-pSvCXnleNkancO1RN7kn_Y",
-  authDomain: "billar-system.firebaseapp.com",
-  projectId: "billar-system",
-  storageBucket: "billar-system.firebasestorage.app",
-  messagingSenderId: "503671587493",
-  appId: "1:503671587493:web:88e1a1ddfb7bd21ba4c34c"
+    apiKey: "AIzaSyDK-RMY_j2PF8iXe_e6gYkvvKHM3kdGo9w",
+    authDomain: "billar-49f2f.firebaseapp.com",
+    projectId: "billar-49f2f",
+    storageBucket: "billar-49f2f.firebasestorage.app",
+    messagingSenderId: "1049576636913",
+    appId: "1:1049576636913:web:33e0f32f9930b4c9569d95"
 };
 
-// Inicializar Firebase
+console.log('🔥 Inicializando Firebase...');
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app); // 👈 NUEVA LÍNEA
 
-console.log('%c🔥 Firebase inicializado correctamente', 
-    'background: #ffc107; color: black; padding: 5px 10px; border-radius: 3px; font-weight: bold;');
+let isFirebaseReady = false;
 
-// ========== API SIMPLIFICADA ==========
+setTimeout(() => {
+    isFirebaseReady = true;
+    console.log('🔥 Firebase inicializado correctamente');
+}, 500);
+
 window.firebaseDB = {
-    /**
-     * Obtener un documento
-     * @param {string} tabla - Nombre de la colección
-     * @param {string} id - ID del documento
-     * @returns {Promise<object|null>}
-     */
-    async get(tabla, id) {
+    isReady: () => isFirebaseReady,
+    
+    get: async (collection, document) => {
         try {
-            const docRef = doc(db, tabla, id);
+            const docRef = doc(db, collection, document);
             const docSnap = await getDoc(docRef);
             
             if (docSnap.exists()) {
-                console.log(`📖 Documento obtenido: ${tabla}/${id}`);
                 return docSnap.data();
             } else {
-                console.log(`⚠️ Documento no existe: ${tabla}/${id}`);
+                console.log(`📭 Documento ${collection}/${document} no existe`);
                 return null;
             }
         } catch (error) {
-            console.error(`❌ Error al obtener ${tabla}/${id}:`, error);
+            console.error(`❌ Error obteniendo ${collection}/${document}:`, error);
             throw error;
         }
     },
-
-    /**
-     * Guardar un documento
-     * @param {string} tabla - Nombre de la colección
-     * @param {string} id - ID del documento
-     * @param {object} datos - Datos a guardar
-     * @returns {Promise<void>}
-     */
-    async set(tabla, id, datos) {
+    
+    set: async (collection, document, data) => {
         try {
-            const docRef = doc(db, tabla, id);
-            await setDoc(docRef, datos, { merge: true });
-            console.log(`💾 Documento guardado: ${tabla}/${id}`);
-        } catch (error) {
-            console.error(`❌ Error al guardar ${tabla}/${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Eliminar un documento
-     * @param {string} tabla - Nombre de la colección
-     * @param {string} id - ID del documento
-     * @returns {Promise<void>}
-     */
-    async delete(tabla, id) {
-        try {
-            const docRef = doc(db, tabla, id);
-            await deleteDoc(docRef);
-            console.log(`🗑️ Documento eliminado: ${tabla}/${id}`);
-        } catch (error) {
-            console.error(`❌ Error al eliminar ${tabla}/${id}:`, error);
-            throw error;
-        }
-    },
-
-    /**
-     * Obtener todos los documentos de una colección
-     * @param {string} tabla - Nombre de la colección
-     * @returns {Promise<Array>}
-     */
-    async getAll(tabla) {
-        try {
-            const querySnapshot = await getDocs(collection(db, tabla));
-            const documentos = [];
+            const docRef = doc(db, collection, document);
+            await setDoc(docRef, {
+                ...data,
+                ultimaActualizacion: serverTimestamp()
+            }, { merge: true });
             
-            querySnapshot.forEach((doc) => {
-                documentos.push({
-                    id: doc.id,
-                    ...doc.data()
-                });
-            });
-            
-            console.log(`📚 Documentos obtenidos de ${tabla}: ${documentos.length}`);
-            return documentos;
+            console.log(`✅ ${collection}/${document} guardado correctamente`);
+            return true;
         } catch (error) {
-            console.error(`❌ Error al obtener todos de ${tabla}:`, error);
+            console.error(`❌ Error guardando ${collection}/${document}:`, error);
             throw error;
         }
-    },
-
-    /**
-     * Verificar si Firebase está listo
-     * @returns {boolean}
-     */
-    isReady() {
-        return db !== null;
     }
 };
 
-console.log('%c✅ API de Firebase lista para usar', 
-    'color: #28a745; font-weight: bold;');
+// 👇 NUEVO: API DE AUTENTICACIÓN
+window.firebaseAuth = {
+    auth: auth,
+    signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+    signOut: () => signOut(auth),
+    onAuthChange: (callback) => onAuthStateChanged(auth, callback),
+    getCurrentUser: () => auth.currentUser
+};
+
+console.log('✅ API de Firebase lista para usar');
+console.log('🔐 Firebase Authentication configurado');
