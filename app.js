@@ -3164,12 +3164,24 @@ window.guardarConsumoDueno = async function() {
 };
 
 function actualizarConsumoDueno() {
+    console.log('🍽️ EJECUTANDO actualizarConsumoDueno');
+    console.log('consumosDueno:', consumosDueno);
+    console.log('ultimoCierre:', ultimoCierre);
+    
     const container = document.getElementById('consumoDuenoContainer');
-    if (!container) return;
+    console.log('Container encontrado:', container);
+    
+    if (!container) {
+        console.error('❌ Container NO encontrado');
+        return;
+    }
     
     const consumosActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
+    
+    console.log('consumosActuales filtrados:', consumosActuales);
+    console.log('Cantidad de consumos:', consumosActuales.length);
     
     if (consumosActuales.length === 0) {
         container.innerHTML = `
@@ -3240,6 +3252,8 @@ function actualizarConsumoDueno() {
             </div>
         `).join('')}
     `;
+    
+    console.log('✅ HTML generado correctamente');
 }
 
 window.descargarConsumoDuenoPDF = function() {
