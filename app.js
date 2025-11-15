@@ -308,18 +308,64 @@ async function guardarConfiguracion() {
 }
 
 // Alias para que funcione desde el HTML
-window.crearUsuario = window.guardarUsuario;
-window.guardarConfiguracion = guardarConfiguracion;
-
-function guardarSesion() {
-    if (usuarioActual) {
-        localStorage.setItem('sesion', JSON.stringify({ usuarioId: usuarioActual.id }));
-        localStorage.setItem('ultimaActividad', Date.now().toString());
-    } else {
-        localStorage.removeItem('sesion');
-        localStorage.removeItem('ultimaActividad');
+window.guardarUsuario = async function() {
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const username = document.getElementById('nuevoUsername').value.trim();
+    const password = document.getElementById('nuevoPassword').value;
+    const rol = document.getElementById('nuevoRol').value;
+    const errorDiv = document.getElementById('usuarioError');
+    
+    if (!nombre || !username || (!usuarioEditando && !password)) {
+        errorDiv.textContent = 'Por favor completa todos los campos';
+        errorDiv.classList.remove('hidden');
+        return;
     }
-}
+    
+    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
+    if (existente) {
+        errorDiv.textContent = 'El nombre de usuario ya existe';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    if (usuarioEditando) {
+        // 👇 ENCONTRAR EL ÍNDICE EN EL ARRAY
+        const index = usuarios.findIndex(u => u.id === usuarioEditando.id);
+        if (index !== -1) {
+            // Actualizar directamente en el array
+            usuarios[index].nombre = nombre;
+            usuarios[index].username = username;
+            if (password) {
+                usuarios[index].password = password;
+            }
+            usuarios[index].rol = rol;
+            
+            debugLog('sistema', '✏️ Usuario actualizado', { id: usuarioEditando.id, nombre });
+        }
+    } else {
+        usuarios.push({
+            id: Date.now(),
+            username,
+            password,
+            nombre,
+            rol
+        });
+        
+        debugLog('sistema', '➕ Usuario creado', { username, nombre });
+    }
+    
+    // 👇 GUARDAR EN FIREBASE
+    await guardarUsuarios();
+    
+    // 👇 ACTUALIZAR LA VISTA
+    actualizarUsuarios();
+    
+    // 👇 CERRAR EL MODAL
+    window.closeModalUsuario();
+    
+    // 👇 MOSTRAR CONFIRMACIÓN
+    alert(usuarioEditando ? '✅ Usuario actualizado correctamente' : '✅ Usuario creado correctamente');
+};
 
 // ========== UTILIDADES ==========
 function mostrarError(mensaje) {
