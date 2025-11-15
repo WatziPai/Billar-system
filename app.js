@@ -354,49 +354,94 @@ window.handleLogin = async function() {
     btnLogin.textContent = 'Iniciando...';
 
     try {
-        // 👇 NUEVO: Autenticar con Firebase Auth
-        const email = username.includes('@') ? username : `${username}@billar.app`;
-        debugLog('sistema', '🔐 Intentando autenticar con Firebase Auth...', { email });
+        // 🔐 DETECTAR TIPO DE LOGIN
+        const isEmailLogin = username.includes('@');
         
-        const userCredential = await window.firebaseAuth.signIn(email, password);
-        
-        debugLog('sistema', '✅ Autenticación exitosa en Firebase Auth', { uid: userCredential.user.uid });
-        
-        // Buscar datos del usuario en Firestore
-        const usuario = usuarios.find(u => u.username === username);
-        
-        if (usuario) {
-            usuarioActual = usuario;
-            usuarioActual.uid = userCredential.user.uid; // 👈 Agregar UID de Firebase
-            guardarSesion();
-            errorDiv.classList.add('hidden');
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-            debugLog('sistema', '✅ Login exitoso', { usuario: usuario.nombre });
-            mostrarPantallaPrincipal();
+        if (isEmailLogin) {
+            // ============================================
+            // 🔥 LOGIN ADMIN (Firebase Authentication)
+            // ============================================
+            debugLog('sistema', '🔐 Login ADMIN con Firebase Auth...', { email: username });
+            
+            const userCredential = await window.firebaseAuth.signIn(username, password);
+            
+            debugLog('sistema', '✅ Autenticación exitosa en Firebase Auth', { uid: userCredential.user.uid });
+            
+            // Buscar datos del usuario admin en Firestore
+            const usernameFromEmail = username.split('@')[0]; // "admin@billar.app" -> "admin"
+            const usuario = usuarios.find(u => u.username === usernameFromEmail && u.rol === 'admin');
+            
+            if (usuario) {
+                usuarioActual = usuario;
+                usuarioActual.uid = userCredential.user.uid;
+                guardarSesion();
+                errorDiv.classList.add('hidden');
+                document.getElementById('loginUsername').value = '';
+                document.getElementById('loginPassword').value = '';
+                debugLog('sistema', '✅ Login ADMIN exitoso', { usuario: usuario.nombre });
+                mostrarPantallaPrincipal();
+            } else {
+                // Si no existe en Firestore, crear uno automáticamente
+                const nuevoAdmin = {
+                    id: Date.now(),
+                    username: usernameFromEmail,
+                    password: password,
+                    nombre: 'Administrador',
+                    rol: 'admin'
+                };
+                usuarios.push(nuevoAdmin);
+                await guardarUsuarios();
+                
+                usuarioActual = nuevoAdmin;
+                usuarioActual.uid = userCredential.user.uid;
+                guardarSesion();
+                errorDiv.classList.add('hidden');
+                document.getElementById('loginUsername').value = '';
+                document.getElementById('loginPassword').value = '';
+                debugLog('sistema', '✅ Login ADMIN exitoso (usuario creado automáticamente)', { usuario: nuevoAdmin.nombre });
+                mostrarPantallaPrincipal();
+            }
         } else {
-            errorDiv.textContent = 'Usuario no encontrado en la base de datos';
-            errorDiv.classList.remove('hidden');
-            debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore', { username });
+            // ============================================
+            // 👤 LOGIN EMPLEADO (Autenticación Local)
+            // ============================================
+            debugLog('sistema', '👤 Login EMPLEADO con autenticación local...', { username });
+            
+            const usuario = usuarios.find(u => u.username === username && u.password === password);
+            
+            if (usuario) {
+                usuarioActual = usuario;
+                guardarSesion();
+                errorDiv.classList.add('hidden');
+                document.getElementById('loginUsername').value = '';
+                document.getElementById('loginPassword').value = '';
+                debugLog('sistema', '✅ Login EMPLEADO exitoso', { usuario: usuario.nombre });
+                mostrarPantallaPrincipal();
+            } else {
+                errorDiv.textContent = 'Usuario o contraseña incorrectos';
+                errorDiv.classList.remove('hidden');
+                debugLog('error', '❌ Login EMPLEADO fallido', { username });
+            }
         }
+        
     } catch (error) {
         console.error('❌ Error en login:', error);
         
-        // Mensajes de error más claros
+        // Mensajes de error más claros para Firebase Auth
         if (error.code === 'auth/user-not-found') {
-            errorDiv.textContent = 'Usuario no existe en el sistema';
+            errorDiv.textContent = 'Usuario administrador no existe en Firebase';
         } else if (error.code === 'auth/wrong-password') {
-            errorDiv.textContent = 'Contraseña incorrecta';
+            errorDiv.textContent = 'Contraseña de administrador incorrecta';
         } else if (error.code === 'auth/invalid-email') {
-            errorDiv.textContent = 'Usuario inválido';
+            errorDiv.textContent = 'Email de administrador inválido';
         } else if (error.code === 'auth/invalid-credential') {
-            errorDiv.textContent = 'Usuario o contraseña incorrectos';
+            errorDiv.textContent = 'Credenciales de administrador incorrectas';
         } else {
             errorDiv.textContent = 'Error al iniciar sesión. Intenta nuevamente.';
         }
         
         errorDiv.classList.remove('hidden');
-        debugLog('error', '❌ Login fallido', { username, error: error.code });
+        debugLog('error', '❌ Login fallido', { username, error: error.code || error.message });
     }
 
     btnLogin.disabled = false;
