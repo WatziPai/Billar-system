@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestión de Billar</title>
-    <link rel="stylesheet" href="styles.css">
+    <!-- Asumo que styles.css y los archivos JS existen en el entorno -->
+    <link rel="stylesheet" href="styles.css"> 
 </head>
 <body>
     <div id="loginScreen" class="login-screen">
@@ -310,6 +311,45 @@
         </div>
     </div>
 
+    <!-- Modal para Venta de Tiempo/Consumo de Mesa (Faltante) -->
+    <div id="modalConsumo" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;" id="consumoModalTitle">Consumo - Mesa XX</h2>
+                <button class="close-btn" onclick="closeModalConsumo()">×</button>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                <!-- Productos disponibles -->
+                <div>
+                    <h3 style="margin: 0 0 15px 0;">Productos Disponibles</h3>
+                    <div id="productosConsumoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto;">
+                        <!-- Productos se renderizarán aquí -->
+                    </div>
+                </div>
+                
+                <!-- Lista de Consumos de la Mesa -->
+                <div style="background: #e9f0f9; padding: 15px; border-radius: 8px;">
+                    <h3 style="margin: 0 0 15px 0;">🍺 Consumos de la Mesa</h3>
+                    <div id="listaConsumos" style="margin-bottom: 20px; max-height: 350px; overflow-y: auto;">
+                        <!-- Consumos de la mesa (producto, cantidad, eliminar) se renderizarán aquí -->
+                    </div>
+                    <div style="border-top: 2px solid #b3cde3; padding-top: 15px; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <strong style="font-size: 18px;">Total Consumo:</strong>
+                            <strong id="totalConsumo" style="font-size: 24px; color: #007bff;">S/ 0.00</strong>
+                        </div>
+                        <button id="btnCerrarMesa" class="btn btn-blue" onclick="cerrarMesaCompleto()" style="width: 100%; padding: 12px;">
+                            💵 Cerrar Mesa y Cobrar (Total: S/ 0.00)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Fin Modal Consumo Faltante -->
+
+
     <div id="modalVentaManual" class="modal">
         <div class="modal-content">
             <div class="modal-header">Venta Manual</div>
@@ -399,40 +439,38 @@
         </div>
     </div>
 
-   <!-- Modal Consumo Dueño -->
-<div id="modalConsumoDueno" class="modal">
-    <div class="modal-content" style="max-width: 900px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2 style="margin: 0;">🍽️ Registrar Consumo del Dueño</h2>
-            <button class="close-btn" onclick="closeModalConsumoDueno()">×</button>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
-            <!-- Productos disponibles -->
-            <div>
-                <h3 style="margin: 0 0 15px 0;">Productos Disponibles</h3>
-                <div id="productosConsumoDuenoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto;"></div>
+    <!-- Modal Consumo Dueño -->
+    <div id="modalConsumoDueno" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">🍽️ Registrar Consumo del Dueño</h2>
+                <button class="close-btn" onclick="closeModalConsumoDueno()">×</button>
             </div>
             
-            <!-- Carrito -->
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <h3 style="margin: 0 0 15px 0;">🛒 Carrito</h3>
-                <div id="carritoConsumoDuenoContainer" style="margin-bottom: 20px; max-height: 350px; overflow-y: auto;"></div>
-                <div style="border-top: 2px solid #dee2e6; padding-top: 15px; margin-top: 15px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <strong style="font-size: 18px;">Total:</strong>
-                        <strong id="totalConsumoDueno" style="font-size: 24px; color: #ff9800;">S/ 0.00</strong>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                <!-- Productos disponibles -->
+                <div>
+                    <h3 style="margin: 0 0 15px 0;">Productos Disponibles</h3>
+                    <div id="productosConsumoDuenoGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto;"></div>
+                </div>
+                
+                <!-- Carrito -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                    <h3 style="margin: 0 0 15px 0;">🛒 Carrito</h3>
+                    <div id="carritoConsumoDuenoContainer" style="margin-bottom: 20px; max-height: 350px; overflow-y: auto;"></div>
+                    <div style="border-top: 2px solid #dee2e6; padding-top: 15px; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <strong style="font-size: 18px;">Total:</strong>
+                            <strong id="totalConsumoDueno" style="font-size: 24px; color: #ff9800;">S/ 0.00</strong>
+                        </div>
+                        <button id="btnGuardarConsumoDueno" class="btn btn-primary" onclick="guardarConsumoDueno()" style="width: 100%; padding: 12px;" disabled>
+                            💾 Guardar Consumo
+                        </button>
                     </div>
-                    <button id="btnGuardarConsumoDueno" class="btn btn-primary" onclick="guardarConsumoDueno()" style="width: 100%; padding: 12px;" disabled>
-                        💾 Guardar Consumo
-                    </button>
                 </div>
             </div>
         </div>
     </div>
-</div>
-            
-
     <script type="module" src="firebase-config.js"></script>
     <script src="app.js"></script>
 </body>
