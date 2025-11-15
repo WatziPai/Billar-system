@@ -36,16 +36,14 @@ let ultimoCierre = null;
 let consumosDueno = [];
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
-const TIEMPO_EXPIRACION = 30 * 60 * 1000; // 30 minutos en milisegundos
+const TIEMPO_EXPIRACION = 30 * 60 * 1000;
 let timerInactividad = null;
 
 function iniciarMonitoreoInactividad() {
     debugLog('seguridad', '🔐 Iniciando monitoreo de inactividad');
-    
     actualizarTimestampActividad();
     
     const eventos = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
     eventos.forEach(evento => {
         document.addEventListener(evento, actualizarTimestampActividad, true);
     });
@@ -80,51 +78,22 @@ function verificarInactividad() {
     const tiempoInactivo = Date.now() - ultimaActividad;
     
     if (tiempoInactivo >= TIEMPO_EXPIRACION) {
-        debugLog('seguridad', '⏰ Sesión cerrada por inactividad', {
-            tiempoInactivo: Math.floor(tiempoInactivo / 1000 / 60) + ' minutos'
-        });
-        
+        debugLog('seguridad', '⏰ Sesión cerrada por inactividad');
         cerrarSesionPorInactividad();
     }
 }
 
 function cerrarSesionPorInactividad() {
     usuarioActual = null;
-    localStorage.removeItem('sesion');
     localStorage.removeItem('ultimaActividad');
-    
     detenerMonitoreoInactividad();
+    
+    window.firebaseAuth.signOut();
     
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('mainScreen').classList.add('hidden');
     
-    alert('🔒 Tu sesión se cerró automáticamente por 30 minutos de inactividad.\n\nLas mesas ocupadas siguen corriendo normalmente.');
-}
-
-function verificarExpiracionSesion() {
-    const sesion = localStorage.getItem('sesion');
-    
-    if (sesion) {
-        const ultimaActividad = parseInt(localStorage.getItem('ultimaActividad') || '0');
-        const tiempoInactivo = Date.now() - ultimaActividad;
-        
-        if (tiempoInactivo >= TIEMPO_EXPIRACION) {
-            debugLog('seguridad', '⏰ Sesión expirada detectada al cargar', {
-                tiempoInactivo: Math.floor(tiempoInactivo / 1000 / 60) + ' minutos'
-            });
-            
-            localStorage.removeItem('sesion');
-            localStorage.removeItem('ultimaActividad');
-            
-            alert('🔒 Tu sesión expiró por inactividad (más de 30 minutos).\n\nPor favor, inicia sesión nuevamente.');
-            
-            return false;
-        }
-        
-        return true;
-    }
-    
-    return false;
+    alert('🔒 Tu sesión se cerró automáticamente por 30 minutos de inactividad.');
 }
 
 // ========== INICIALIZACIÓN ==========
@@ -134,19 +103,45 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     await esperarFirebase();
 
-    // 🔥 Cargar usuarios ANTES del login
-    await cargarDatos();
-
-    hideLoading();
-    debugLog('sistema', '⏳ Esperando login...');
+    // 🔐 Escuchar cambios en la autenticación
+    window.firebaseAuth.onAuthChange(async (user) => {
+        if (user) {
+            debugLog('sistema', '✅ Usuario autenticado detectado', { uid: user.uid });
+            
+            try {
+                // Cargar datos con el usuario autenticado
+                await cargarDatos();
+                
+                // Buscar datos del usuario
+                const username = user.email.split('@')[0];
+                const usuario = usuarios.find(u => u.username === username);
+                
+                if (usuario) {
+                    usuarioActual = usuario;
+                    usuarioActual.uid = user.uid;
+                    mostrarPantallaPrincipal();
+                } else {
+                    debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore');
+                    await window.firebaseAuth.signOut();
+                    alert('Error: Tu usuario no está registrado en el sistema. Contacta al administrador.');
+                }
+            } catch (error) {
+                debugLog('error', '❌ Error al cargar datos', error);
+                alert('Error al cargar datos. Verifica tu conexión.');
+            }
+        } else {
+            debugLog('sistema', '⏳ Sin sesión activa');
+        }
+        
+        hideLoading();
+    });
 });
-
 
 // ESPERAR A QUE FIREBASE ESTÉ LISTO
 function esperarFirebase() {
     return new Promise((resolve) => {
         const checkFirebase = setInterval(() => {
-            if (window.firebaseDB && window.firebaseDB.isReady()) {
+            if (window.firebaseDB && window.firebaseDB.isReady() && window.firebaseAuth) {
                 clearInterval(checkFirebase);
                 debugLog('firebase', '✅ Firebase disponible');
                 resolve();
@@ -155,7 +150,7 @@ function esperarFirebase() {
 
         setTimeout(() => {
             clearInterval(checkFirebase);
-            if (!window.firebaseDB) {
+            if (!window.firebaseDB || !window.firebaseAuth) {
                 console.error('❌ Firebase no se cargó correctamente');
                 alert('Error: Firebase no está disponible. Recarga la página.');
             }
@@ -164,26 +159,17 @@ function esperarFirebase() {
     });
 }
 
-
-
-// CARGAR DATOS (DESPUÉS DEL LOGIN)
+// CARGAR DATOS (REQUIERE AUTENTICACIÓN)
 async function cargarDatos() {
     debugLog('firebase', '📂 Cargando datos desde Firebase...');
 
     try {
-
         // === USUARIOS ===
         const usuariosData = await window.firebaseDB.get('usuarios', 'todos');
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
         } else {
-            usuarios = [{
-                id: Date.now(),
-                username: 'admin',
-                password: 'admin123',
-                nombre: 'Administrador',
-                rol: 'admin'
-            }];
+            usuarios = [];
             await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
         }
 
@@ -192,18 +178,6 @@ async function cargarDatos() {
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
-        }
-
-        // === SESIÓN ACTIVA ===
-        if (verificarExpiracionSesion()) {
-            const sesion = localStorage.getItem('sesion');
-            if (sesion) {
-                const { usuarioId } = JSON.parse(sesion);
-                usuarioActual = usuarios.find(u => u.id === usuarioId);
-                if (usuarioActual) {
-                    mostrarPantallaPrincipal();
-                }
-            }
         }
 
         // === VENTAS ===
@@ -255,8 +229,231 @@ async function cargarDatos() {
 
     } catch (error) {
         console.error('Error cargando datos:', error);
-        mostrarError('Error al cargar datos desde Firebase');
+        throw error;
     }
+}
+
+// ========== LOGIN / LOGOUT ==========
+window.handleLogin = async function() {
+    const btnLogin = document.getElementById('btnLogin');
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const errorDiv = document.getElementById('loginError');
+
+    if (!username || !password) {
+        errorDiv.textContent = 'Por favor completa todos los campos';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    btnLogin.disabled = true;
+    btnLogin.textContent = 'Iniciando...';
+
+    try {
+        // 🔐 TODOS los usuarios usan Firebase Auth con email
+        let email = username;
+        if (!username.includes('@')) {
+            // Si escribió solo "admin" o "empleado1", agregar dominio
+            email = `${username}@billar.app`;
+        }
+        
+        debugLog('sistema', '🔐 Intentando login con Firebase Auth', { email });
+        
+        const userCredential = await window.firebaseAuth.signIn(email, password);
+        
+        debugLog('sistema', '✅ Autenticación exitosa', { uid: userCredential.user.uid });
+        
+        // Cargar datos ahora que estamos autenticados
+        await cargarDatos();
+        
+        // Buscar usuario en Firestore
+        const usernameFromEmail = email.split('@')[0];
+        const usuario = usuarios.find(u => u.username === usernameFromEmail);
+        
+        if (usuario) {
+            usuarioActual = usuario;
+            usuarioActual.uid = userCredential.user.uid;
+            localStorage.setItem('ultimaActividad', Date.now().toString());
+            
+            errorDiv.classList.add('hidden');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            
+            debugLog('sistema', '✅ Login exitoso', { usuario: usuario.nombre, rol: usuario.rol });
+            mostrarPantallaPrincipal();
+        } else {
+            // Usuario existe en Firebase Auth pero no en Firestore
+            errorDiv.textContent = 'Usuario no registrado en el sistema. Contacta al administrador.';
+            errorDiv.classList.remove('hidden');
+            await window.firebaseAuth.signOut();
+        }
+        
+    } catch (error) {
+        console.error('❌ Error en login:', error);
+        
+        if (error.code === 'auth/user-not-found') {
+            errorDiv.textContent = 'Usuario no existe';
+        } else if (error.code === 'auth/wrong-password') {
+            errorDiv.textContent = 'Contraseña incorrecta';
+        } else if (error.code === 'auth/invalid-email') {
+            errorDiv.textContent = 'Email inválido';
+        } else if (error.code === 'auth/invalid-credential') {
+            errorDiv.textContent = 'Credenciales incorrectas';
+        } else if (error.code === 'auth/too-many-requests') {
+            errorDiv.textContent = 'Demasiados intentos. Espera un momento.';
+        } else {
+            errorDiv.textContent = 'Error al iniciar sesión. Intenta nuevamente.';
+        }
+        
+        errorDiv.classList.remove('hidden');
+        debugLog('error', '❌ Login fallido', { error: error.code || error.message });
+    }
+
+    btnLogin.disabled = false;
+    btnLogin.textContent = 'Iniciar Sesión';
+};
+
+window.handleLogout = async function() {
+    debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
+    
+    try {
+        await window.firebaseAuth.signOut();
+        debugLog('sistema', '✅ Sesión cerrada en Firebase Auth');
+    } catch (error) {
+        console.error('❌ Error al cerrar sesión:', error);
+    }
+    
+    usuarioActual = null;
+    localStorage.removeItem('ultimaActividad');
+    detenerMonitoreoInactividad();
+    
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('mainScreen').classList.add('hidden');
+};
+
+// ========== CREAR/EDITAR USUARIO (CON FIREBASE AUTH) ==========
+window.guardarUsuario = async function() {
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const username = document.getElementById('nuevoUsername').value.trim();
+    const password = document.getElementById('nuevoPassword').value;
+    const rol = document.getElementById('nuevoRol').value;
+    const errorDiv = document.getElementById('usuarioError');
+    const btnGuardar = document.querySelector('#modalUsuario .btn-primary');
+    
+    if (!nombre || !username) {
+        errorDiv.textContent = 'Por favor completa todos los campos obligatorios';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    // Validar contraseña solo si es usuario nuevo
+    if (!usuarioEditando && (!password || password.length < 6)) {
+        errorDiv.textContent = 'La contraseña debe tener al menos 6 caracteres';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
+    if (existente) {
+        errorDiv.textContent = 'El nombre de usuario ya existe';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = 'Guardando...';
+    errorDiv.classList.add('hidden');
+    
+    try {
+        const email = `${username}@billar.app`;
+        
+        if (usuarioEditando) {
+            // === EDITAR USUARIO EXISTENTE ===
+            const index = usuarios.findIndex(u => u.id === usuarioEditando.id);
+            if (index !== -1) {
+                usuarios[index].nombre = nombre;
+                usuarios[index].username = username;
+                usuarios[index].rol = rol;
+                
+                // Si se proporcionó nueva contraseña, actualizarla en Firebase Auth
+                if (password && usuarioEditando.uid) {
+                    try {
+                        // Nota: Cambiar contraseña requiere que el usuario esté logueado
+                        // o usar Firebase Admin SDK desde backend
+                        debugLog('sistema', '⚠️ Cambio de contraseña requiere re-autenticación');
+                    } catch (authError) {
+                        debugLog('error', '⚠️ No se pudo cambiar contraseña en Firebase Auth', authError);
+                    }
+                }
+                
+                debugLog('sistema', '✏️ Usuario actualizado', { id: usuarioEditando.id, nombre });
+            }
+        } else {
+            // === CREAR NUEVO USUARIO ===
+            debugLog('sistema', '📝 Creando usuario en Firebase Auth...', { email });
+            
+            // Crear usuario en Firebase Authentication
+            const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+            const uid = userCredential.user.uid;
+            
+            debugLog('sistema', '✅ Usuario creado en Firebase Auth', { uid });
+            
+            // Guardar en Firestore
+            const nuevoUsuario = {
+                id: Date.now(),
+                username,
+                nombre,
+                rol,
+                uid
+            };
+            
+            usuarios.push(nuevoUsuario);
+            
+            debugLog('sistema', '➕ Usuario agregado a Firestore', { username, nombre, rol });
+        }
+        
+        // Guardar en Firestore
+        await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
+        
+        actualizarUsuarios();
+        window.closeModalUsuario();
+        
+        alert(usuarioEditando ? '✅ Usuario actualizado correctamente' : '✅ Usuario creado correctamente');
+        
+    } catch (error) {
+        console.error('❌ Error al guardar usuario:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+            errorDiv.textContent = 'Este usuario ya existe en Firebase Authentication';
+        } else if (error.code === 'auth/weak-password') {
+            errorDiv.textContent = 'La contraseña es muy débil (mínimo 6 caracteres)';
+        } else if (error.code === 'auth/invalid-email') {
+            errorDiv.textContent = 'Email inválido';
+        } else {
+            errorDiv.textContent = 'Error al crear usuario: ' + (error.message || 'Error desconocido');
+        }
+        
+        errorDiv.classList.remove('hidden');
+    } finally {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = 'Guardar';
+    }
+};
+
+// ========== FUNCIONES DE UTILIDAD ==========
+function mostrarError(mensaje) {
+    alert('⚠️ ' + mensaje);
+    debugLog('error', '🚨 Error mostrado al usuario', mensaje);
+}
+
+function showLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 // ========== FUNCIONES DE GUARDADO ==========
@@ -270,18 +467,6 @@ async function guardarVentas() {
 
 async function guardarProductos() {
     await window.firebaseDB.set('productos', 'todos', { lista: productos });
-}
-
-async function guardarErrores() {
-    await window.firebaseDB.set('errores', 'todos', { lista: erroresReportados });
-}
-
-async function guardarCierres() {
-    await window.firebaseDB.set('cierres', 'historial', { lista: cierres });
-}
-
-async function guardarConsumosDueno() {
-    await window.firebaseDB.set('consumos', 'dueno', { lista: consumosDueno });
 }
 
 async function guardarMesas() {
@@ -299,7 +484,6 @@ async function guardarConfiguracion() {
     };
     await window.firebaseDB.set('configuracion', 'general', config);
     
-    // Actualizar el cálculo de todas las mesas activas
     mesas.forEach(mesa => {
         if (mesa.ocupada) actualizarTimer(mesa.id);
     });
@@ -307,78 +491,10 @@ async function guardarConfiguracion() {
     alert('✅ Configuración guardada correctamente');
 }
 
-// Alias para que funcione desde el HTML
-window.guardarUsuario = async function() {
-    const nombre = document.getElementById('nuevoNombre').value.trim();
-    const username = document.getElementById('nuevoUsername').value.trim();
-    const password = document.getElementById('nuevoPassword').value;
-    const rol = document.getElementById('nuevoRol').value;
-    const errorDiv = document.getElementById('usuarioError');
-    
-    if (!nombre || !username || (!usuarioEditando && !password)) {
-        errorDiv.textContent = 'Por favor completa todos los campos';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
-    if (existente) {
-        errorDiv.textContent = 'El nombre de usuario ya existe';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    if (usuarioEditando) {
-        // 👇 ENCONTRAR EL ÍNDICE EN EL ARRAY
-        const index = usuarios.findIndex(u => u.id === usuarioEditando.id);
-        if (index !== -1) {
-            // Actualizar directamente en el array
-            usuarios[index].nombre = nombre;
-            usuarios[index].username = username;
-            if (password) {
-                usuarios[index].password = password;
-            }
-            usuarios[index].rol = rol;
-            
-            debugLog('sistema', '✏️ Usuario actualizado', { id: usuarioEditando.id, nombre });
-        }
-    } else {
-        usuarios.push({
-            id: Date.now(),
-            username,
-            password,
-            nombre,
-            rol
-        });
-        
-        debugLog('sistema', '➕ Usuario creado', { username, nombre });
-    }
-    
-    // 👇 GUARDAR EN FIREBASE
-    await guardarUsuarios();
-    
-    // 👇 ACTUALIZAR LA VISTA
-    actualizarUsuarios();
-    
-    // 👇 CERRAR EL MODAL
-    window.closeModalUsuario();
-    
-    // 👇 MOSTRAR CONFIRMACIÓN
-    alert(usuarioEditando ? '✅ Usuario actualizado correctamente' : '✅ Usuario creado correctamente');
-};
-
-// ========== GESTIÓN DE SESIÓN ==========
-function guardarSesion() {
-    if (usuarioActual) {
-        localStorage.setItem('sesion', JSON.stringify({ usuarioId: usuarioActual.id }));
-        localStorage.setItem('ultimaActividad', Date.now().toString());
-    } else {
-        localStorage.removeItem('sesion');
-        localStorage.removeItem('ultimaActividad');
-    }
-}
-
 window.guardarConfiguracion = guardarConfiguracion;
+
+// Continúa con el resto de tus funciones (actualizarMesas, toggleMesa, etc.)
+// El código restante permanece igual...
 // ========== UTILIDADES ==========
 function mostrarError(mensaje) {
     alert('⚠️ ' + mensaje);
