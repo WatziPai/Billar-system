@@ -166,12 +166,19 @@ function mostrarPantallaPrincipal() {
     
     // NOTA: Estas funciones deben estar definidas ANTES de mostrarPantallaPrincipal
     // o deben ser accesibles globalmente (window.funcion) si están en otro archivo.
-    actualizarMesas(); 
-    actualizarMesasConsumo();
-    actualizarTablaVentas();
-    actualizarInventario();
-    calcularTotal();
-    
+   try {
+        actualizarMesas(); 
+        actualizarMesasConsumo();
+        actualizarTablaVentas();
+        actualizarInventario();
+        calcularTotal();
+    } catch (e) {
+        // Si hay un ReferenceError porque faltan funciones (stubs), esto lo atrapará
+        // pero permitirá que el resto de la interfaz cargue y la seguridad funcione.
+        debugLog('error', '❌ Error al cargar datos de pantalla (Puede faltar una definición de función)', e);
+    }
+    // === FIN DE LA CORRECCIÓN ===
+
     debugLog('sistema', '✅ Pantalla principal mostrada completamente');
 }
 
