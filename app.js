@@ -2541,6 +2541,12 @@ window.guardarUsuario = async function() {
     const rol = document.getElementById('nuevoRol').value;
     const errorDiv = document.getElementById('usuarioError');
     
+    // Construir el email que Firebase espera
+    const email = `${username}@billar.app`; 
+    
+    // Limpiar errores
+    errorDiv.classList.add('hidden');
+    
     if (!nombre || !username || (!usuarioEditando && !password)) {
         errorDiv.textContent = 'Por favor completa todos los campos';
         errorDiv.classList.remove('hidden');
@@ -2554,26 +2560,63 @@ window.guardarUsuario = async function() {
         return;
     }
     
-    if (usuarioEditando) {
-        usuarioEditando.nombre = nombre;
-        usuarioEditando.username = username;
-        if (password) {
-            usuarioEditando.password = password;
-        }
-        usuarioEditando.rol = rol;
-    } else {
-        usuarios.push({
-            id: Date.now(),
-            username,
-            password,
-            nombre,
-            rol
-        });
-    }
+    // =========================================================
+    //         INICIO DE LA LÓGICA DE AUTENTICACIÓN
+    // =========================================================
     
-    await guardarUsuarios();
-    actualizarUsuarios();
-    window.closeModalUsuario();
+    try {
+        if (usuarioEditando) {
+            // 1. Lógica de edición
+            usuarioEditando.nombre = nombre;
+            usuarioEditando.username = username;
+            usuarioEditando.rol = rol;
+
+            if (password) {
+                // Si el usuario cambia la contraseña, actualiza Firebase Auth
+                await window.firebaseAuth.updatePassword(usuarioEditando.uid, password); 
+                usuarioEditando.password = password; // Actualizar en el array local
+                debugLog('seguridad', '✅ Contraseña de usuario actualizada en Firebase Auth');
+            }
+            
+        } else {
+
+            const userCredential = await window.firebaseAuth.createUser(email, password); 
+            
+            debugLog('seguridad', '✅ Cuenta de Firebase Auth creada', { email });
+  
+            usuarios.push({
+                id: Date.now(),
+                uid: userCredential.user.uid, // Guardamos el ID único de Firebase
+                username,
+                password, // Guardar en el array local
+                nombre,
+                rol
+            });
+        }
+        
+        // =========================================================
+        //         FIN DE LA LÓGICA DE AUTENTICACIÓN
+        // =========================================================
+
+        await guardarUsuarios();
+        actualizarUsuarios();
+        window.closeModalUsuario();
+
+    } catch (error) {
+        console.error('❌ Error al guardar usuario:', error);
+        
+        // Mapear los errores de Firebase y mostrarlos
+        if (error.code === 'auth/email-already-in-use') {
+            errorDiv.textContent = 'El nombre de usuario ya existe (usado en Firebase)';
+        } else if (error.code === 'auth/weak-password') {
+            errorDiv.textContent = 'Contraseña muy débil (mínimo 6 caracteres)';
+        } else if (error.code === 'auth/invalid-email') {
+            errorDiv.textContent = 'El formato del usuario es inválido.';
+        } else {
+            errorDiv.textContent = `Error al guardar: ${error.message}`;
+        }
+        errorDiv.classList.remove('hidden');
+    }
 };
 
 window.eliminarUsuario = async function(id) {
