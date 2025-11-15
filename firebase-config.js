@@ -1,6 +1,15 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { 
+    getAuth, 
+    signInWithEmailAndPassword, 
+    signOut, 
+    onAuthStateChanged,
+    // === NUEVAS IMPORTACIONES ===
+    createUserWithEmailAndPassword, // Para crear nuevos empleados
+    updatePassword // Para cambiar contraseñas
+    // ===========================
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
 // ========== CONFIGURACIÓN DE FIREBASE ==========
 const firebaseConfig = {
@@ -62,13 +71,19 @@ window.firebaseDB = {
     }
 };
 
-// ========== API DE AUTENTICACIÓN ==========
+// ========== API DE AUTENTICACIÓN (CORREGIDA) ==========
 window.firebaseAuth = {
     auth: auth,
     signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
     signOut: () => signOut(auth),
     onAuthChange: (callback) => onAuthStateChanged(auth, callback),
-    getCurrentUser: () => auth.currentUser
+    getCurrentUser: () => auth.currentUser,
+    
+    // === NUEVAS FUNCIONES EXPUESTAS ===
+    createUser: (email, password) => createUserWithEmailAndPassword(auth, email, password),
+    // NOTA: updatePassword necesita el objeto User, lo pasamos a la función
+    updatePassword: (user, newPassword) => updatePassword(user, newPassword)
+    // ==================================
 };
 
 console.log('✅ API de Firebase lista para usar');
