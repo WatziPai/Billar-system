@@ -1,6 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-// 👇 NUEVAS LÍNEAS PARA AUTHENTICATION
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
 const firebaseConfig = {
@@ -15,7 +14,7 @@ const firebaseConfig = {
 console.log('🔥 Inicializando Firebase...');
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app); // 👈 NUEVA LÍNEA
+const auth = getAuth(app);
 
 let isFirebaseReady = false;
 
@@ -24,6 +23,7 @@ setTimeout(() => {
     console.log('🔥 Firebase inicializado correctamente');
 }, 500);
 
+// API DE FIRESTORE
 window.firebaseDB = {
     isReady: () => isFirebaseReady,
     
@@ -61,7 +61,7 @@ window.firebaseDB = {
     }
 };
 
-// 👇 NUEVO: API DE AUTENTICACIÓN
+// API DE AUTENTICACIÓN
 window.firebaseAuth = {
     auth: auth,
     signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
