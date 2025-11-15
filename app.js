@@ -3170,12 +3170,15 @@ function actualizarConsumoDueno() {
         return;
     }
     
-    // Asegurarse de que el contenedor sea visible
+    // FORZAR VISIBILIDAD DEL CONTENEDOR
     container.style.display = 'block';
     container.style.minHeight = '300px';
+    container.style.height = 'auto'; // AÑADE ESTO
     container.style.backgroundColor = '#f8f9fa';
     container.style.padding = '20px';
     container.style.borderRadius = '10px';
+    container.style.visibility = 'visible'; // AÑADE ESTO
+    container.style.opacity = '1'; // AÑADE ESTO
     
     const consumosActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
@@ -3186,7 +3189,7 @@ function actualizarConsumoDueno() {
     
     if (consumosActuales.length === 0) {
         const htmlVacio = `
-            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
                 <p style="font-size: 64px; margin: 0;">🍽️</p>
                 <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
                     No hay consumos registrados
@@ -3201,14 +3204,18 @@ function actualizarConsumoDueno() {
         `;
         
         container.innerHTML = htmlVacio;
-        debugLog('sistema', '✅ HTML vacío insertado correctamente');
-        debugLog('sistema', `📏 Altura del contenedor: ${container.offsetHeight}px`);
+        
+        // VERIFICAR DESPUÉS DE INSERTAR
+        setTimeout(() => {
+            debugLog('sistema', '✅ HTML vacío insertado correctamente');
+            debugLog('sistema', `📏 Altura del contenedor: ${container.offsetHeight}px`);
+            debugLog('sistema', `📏 Altura del hijo: ${container.firstElementChild?.offsetHeight}px`);
+        }, 100);
         return;
     }
     
-    // Aquí deberías agregar el código para cuando SÍ hay consumos
-    // Por ejemplo, generar las tarjetas de consumo
     debugLog('sistema', '✅ Consumos actualizados correctamente');
+}
 }
 
 window.descargarConsumoDuenoPDF = function() {
