@@ -2955,10 +2955,9 @@ function actualizarListaConsumos() {
     } else {
         mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
     }
-    
-    // Usar los IDs correctos del HTML
-    const container = document.getElementById('cuentaActualLista');
-    const totalEl = document.getElementById('totalCuentaActual');
+
+    const container = document.getElementById('listaConsumos');
+    const totalEl = document.getElementById('totalConsumo');
     
     if (!container || !totalEl) {
         debugLog('error', '⚠️ Elementos de consumo no encontrados en el HTML', {
@@ -2990,6 +2989,11 @@ function actualizarListaConsumos() {
     `).join('');
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
+    // Actualizar el botón de cerrar mesa
+    const btnCerrar = document.getElementById('btnCerrarMesa');
+    if (btnCerrar) {
+        btnCerrar.textContent = `💵 Cerrar Mesa y Cobrar (Total: S/ ${total.toFixed(2)})`;
+    }
 }
 
 // ========== CONSUMO DEL DUEÑO ==========
@@ -3431,4 +3435,12 @@ if (window.firebaseAuth) {
     
     debugLog('sistema', '✅ Listener de autenticación configurado');
 }
+    window.cerrarMesaCompleto = function() {
+    if (tipoMesaActual === 'billar') {
+        finalizarMesa(mesaConsumoActual);
+    } else {
+        finalizarMesaConsumo(mesaConsumoActual);
+    }
+    window.closeModalConsumo();
+};
 };
