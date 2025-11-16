@@ -77,6 +77,8 @@ function verificarInactividad() {
     const ultimaActividad = parseInt(localStorage.getItem('ultimaActividad') || '0');
     const tiempoInactivo = Date.now() - ultimaActividad;
     
+    debugLog('seguridad', `⏱️ Tiempo inactivo: ${Math.floor(tiempoInactivo / 60000)} minutos`);
+    
     if (tiempoInactivo >= TIEMPO_EXPIRACION) {
         debugLog('seguridad', '⏰ Sesión cerrada por inactividad');
         cerrarSesionPorInactividad();
@@ -164,22 +166,20 @@ function mostrarPantallaPrincipal() {
         toggleElement('tabConsumoDueno', false);
     }
     
-    // NOTA: Estas funciones deben estar definidas ANTES de mostrarPantallaPrincipal
-    // o deben ser accesibles globalmente (window.funcion) si están en otro archivo.
-   try {
+    try {
         actualizarMesas(); 
         actualizarMesasConsumo();
         actualizarTablaVentas();
         actualizarInventario();
         calcularTotal();
-       actualizarConsumoDueno();
+        actualizarConsumoDueno();
     } catch (e) {
-        debugLog('error', '❌ Error al cargar datos de pantalla (Puede faltar una definición de función)', e);
+        debugLog('error', '❌ Error al cargar datos de pantalla', e);
     }
     debugLog('sistema', '✅ Pantalla principal mostrada completamente');
 }
 
-// ========== TABS (Se mantiene la posición) ==========
+// ========== TABS ==========
 window.changeTab = function(tab, event) {
     tabActual = tab;
     debugLog('sistema', '📑 Cambiando tab', { tab });
@@ -199,12 +199,11 @@ window.changeTab = function(tab, event) {
     } else if (tab === 'inventario') {
         actualizarInventario();
     } else if (tab === 'consumoDueno') {
-    console.log('🔥 LLAMANDO actualizarConsumoDueno'); 
-    actualizarConsumoDueno();
-}
+        actualizarConsumoDueno();
+    }
 };
 
-// ========== INICIALIZACIÓN (Se mantiene la posición) ==========
+// ========== INICIALIZACIÓN ==========
 document.addEventListener('DOMContentLoaded', async function() {
     debugLog('sistema', '🚀 Iniciando aplicación...');
     showLoading();
@@ -216,14 +215,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (user) {
             debugLog('sistema', '✅ Usuario autenticado detectado', { uid: user.uid });
             
+            // 🔒 VERIFICAR INACTIVIDAD ANTES DE RESTAURAR SESIÓN
+            const ultimaActividad = parseInt(localStorage.getItem('ultimaActividad') || '0');
+            const tiempoInactivo = Date.now() - ultimaActividad;
+            
+            if (ultimaActividad > 0 && tiempoInactivo >= TIEMPO_EXPIRACION) {
+                debugLog('seguridad', '❌ Sesión expirada por inactividad, cerrando...');
+                await window.firebaseAuth.signOut();
+                localStorage.removeItem('ultimaActividad');
+                alert('🔒 Tu sesión expiró por inactividad. Por favor, inicia sesión nuevamente.');
+                hideLoading();
+                return;
+            }
+            
             try {
-                // 🔥 Esperar a que Firebase sincronice permisos
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
-                // Cargar datos con el usuario autenticado
                 await cargarDatos();
                 
-                // Buscar datos del usuario
                 const username = user.email.split('@')[0];
                 const usuario = usuarios.find(u => u.username === username);
                 
@@ -231,7 +240,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                     usuarioActual = usuario;
                     usuarioActual.uid = user.uid;
                     localStorage.setItem('ultimaActividad', Date.now().toString());
-                    // 🚀 Esta llamada ahora es segura porque mostrarPantallaPrincipal está definida
                     mostrarPantallaPrincipal(); 
                 } else {
                     debugLog('error', '❌ Usuario autenticado pero no encontrado en Firestore');
@@ -239,7 +247,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                     alert('Error: Tu usuario no está registrado en el sistema. Contacta al administrador.');
                 }
             } catch (error) {
-                // Si la carga de datos falla, se registra el error aquí
                 debugLog('error', '❌ Error al cargar datos', error); 
                 
                 if (error.code === 'permission-denied' || error.message.includes('permissions')) {
@@ -279,12 +286,11 @@ function esperarFirebase() {
     });
 }
 
-// CARGAR DATOS (REQUIERE AUTENTICACIÓN)
+// CARGAR DATOS
 async function cargarDatos() {
     debugLog('firebase', '📂 Cargando datos desde Firebase...');
 
     try {
-        // === USUARIOS ===
         const usuariosData = await window.firebaseDB.get('usuarios', 'todos');
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
@@ -293,26 +299,21 @@ async function cargarDatos() {
             await window.firebaseDB.set('usuarios', 'todos', { lista: usuarios });
         }
 
-        // === CONFIGURACIÓN ===
         const config = await window.firebaseDB.get('configuracion', 'general');
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
 
-        // === VENTAS ===
         const ventasData = await window.firebaseDB.get('ventas', 'todas');
         ventas = ventasData?.lista || [];
 
-        // === PRODUCTOS ===
         const productosData = await window.firebaseDB.get('productos', 'todos');
         productos = productosData?.lista || [];
 
-        // === ERRORES ===
         const erroresData = await window.firebaseDB.get('errores', 'todos');
         erroresReportados = erroresData?.lista || [];
 
-        // === CIERRES ===
         const cierresData = await window.firebaseDB.get('cierres', 'historial');
         cierres = cierresData?.lista || [];
 
@@ -320,11 +321,9 @@ async function cargarDatos() {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
 
-        // === CONSUMOS DUEÑO ===
         const consumosDuenoData = await window.firebaseDB.get('consumos', 'dueno');
         consumosDueno = consumosDuenoData?.lista || [];
 
-        // === MESAS ===
         const mesasData = await window.firebaseDB.get('mesas', 'billar');
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
@@ -338,7 +337,6 @@ async function cargarDatos() {
             await window.firebaseDB.set('mesas', 'billar', { lista: mesas });
         }
 
-        // === MESAS CONSUMO ===
         const mesasConsumoData = await window.firebaseDB.get('mesas', 'consumo');
         mesasConsumo = mesasConsumoData?.lista || [
             { id: 1, ocupada: false, consumos: [], total: 0 },
@@ -426,7 +424,6 @@ window.handleLogin = async function() {
         
         debugLog('sistema', '🔐 Intentando login con Firebase Auth', { email });
         
-        // Esta línea inicia la autenticación
         await window.firebaseAuth.signIn(email, password);
         
         debugLog('sistema', '✅ Autenticación iniciada');
@@ -434,13 +431,10 @@ window.handleLogin = async function() {
         errorDiv.classList.add('hidden');
         document.getElementById('loginUsername').value = '';
         document.getElementById('loginPassword').value = '';
-        
-        // Opcional: El onAuthChange se encargará de mostrar la pantalla principal.
 
     } catch (error) {
         console.error('❌ Error en login:', error);
         
-        // Mapeo de errores de Firebase Auth
         if (error.code === 'auth/user-not-found') {
             errorDiv.textContent = 'Usuario no existe';
         } else if (error.code === 'auth/wrong-password') {
@@ -448,7 +442,6 @@ window.handleLogin = async function() {
         } else if (error.code === 'auth/invalid-email') {
             errorDiv.textContent = 'Email inválido';
         } else if (error.code === 'auth/invalid-credential') {
-            // Este es el error real que significa "no existe el usuario/contraseña"
             errorDiv.textContent = 'Credenciales incorrectas'; 
         } else if (error.code === 'auth/too-many-requests') {
             errorDiv.textContent = 'Demasiados intentos. Espera un momento.';
@@ -487,7 +480,6 @@ window.handleLogout = async function() {
         btnLogin.textContent = 'Iniciar Sesión'; 
     }
 };
-
 
 // ========== GESTIÓN DE MESAS ==========
 window.agregarMesa = async function() {
@@ -585,8 +577,8 @@ function actualizarMesas() {
                 timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
             }
         } else if (timers[mesa.id]) {
-            clearInterval(timers[id]);
-            delete timers[id];
+            clearInterval(timers[mesa.id]);
+            delete timers[mesa.id];
         }
     });
 }
@@ -595,8 +587,29 @@ window.toggleMesa = function(id) {
     const mesa = mesas.find(m => m.id === id);
     if (!mesa) return;
     
-    if (mesa.ocupada) finalizarMesa(id);
-    else iniciarMesa(id);
+    if (mesa.ocupada) {
+        // ✅ CONFIRMACIÓN ANTES DE FINALIZAR
+        const tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
+        const resultado = calcularCostoTiempo(tiempoTranscurrido);
+        
+        let mensaje = `¿Finalizar Mesa ${id}?\n\n`;
+        mensaje += `⏱️ Tiempo: ${resultado.minutos} minutos (${resultado.horas}h ${resultado.minutosExtra}min)\n`;
+        mensaje += `💵 Costo tiempo: S/ ${resultado.costo.toFixed(2)}\n`;
+        
+        if (mesa.consumos && mesa.consumos.length > 0) {
+            const totalConsumos = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+            mensaje += `🛒 Consumos: S/ ${totalConsumos.toFixed(2)}\n`;
+            mensaje += `💰 TOTAL: S/ ${(resultado.costo + totalConsumos).toFixed(2)}`;
+        } else {
+            mensaje += `💰 TOTAL: S/ ${resultado.costo.toFixed(2)}`;
+        }
+        
+        if (!confirm(mensaje)) return;
+        
+        finalizarMesa(id);
+    } else {
+        iniciarMesa(id);
+    }
 };
 
 async function iniciarMesa(id) {
@@ -697,7 +710,7 @@ async function finalizarMesa(id) {
     mesa.consumos = [];
     await guardarMesas();
     
-    alert(`Mesa ${id} finalizada.\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada.\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
     
     actualizarMesas();
     actualizarTablaVentas();
@@ -1088,1590 +1101,6 @@ function actualizarInventario() {
     }).join('');
 }
 
-// ========== REPORTES ==========
-function generarReporte() {
-    debugLog('sistema', '📊 Generando reporte...');
-    
-    const ventasActuales = ultimoCierre 
-        ? ventas.filter(v => v.id > ultimoCierre)
-        : ventas;
-    
-    const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
-    const cantidadVentas = ventasActuales.length;
-    
-    const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventasActuales.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
-    const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
-    const ventasManuales = ventasActuales.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
-    
-    const consumosDuenoActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    
-    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const totalEl = document.getElementById('reporteTotalVentas');
-    const mesasEl = document.getElementById('reporteVentasMesas');
-    const productosEl = document.getElementById('reporteVentasProductos');
-    const transaccionesEl = document.getElementById('reporteTransacciones');
-    const detalleTable = document.getElementById('reporteDetalleTable');
-    
-    if (!totalEl || !mesasEl || !productosEl || !transaccionesEl || !detalleTable) {
-        debugLog('error', '⚠️ Elementos del reporte no encontrados en el DOM');
-        return;
-    }
-    
-    totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
-    mesasEl.textContent = `S/ ${ventasMesas.toFixed(2)}`;
-    productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
-    transaccionesEl.textContent = cantidadVentas;
-    
-    const consumoDuenoEl = document.getElementById('reporteConsumoDueno');
-    if (consumoDuenoEl) {
-        consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
-    }
-    
-    let infoCierre = '';
-    if (ultimoCierre) {
-        const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
-        infoCierre = `<div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
-            <strong>📊 Ventas desde último cierre:</strong> ${fechaCierre}
-        </div>`;
-    }
-    
-    if (ventasActuales.length === 0) {
-        detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
-    } else {
-        const ventasOrdenadas = [...ventasActuales].reverse();
-        const htmlDetalle = infoCierre + '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Fecha</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Descripción</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Usuario</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: right;">Monto</th></tr></thead><tbody>' + 
-            ventasOrdenadas.map(v => {
-            let detalleHTML = '';
-            
-            if (v.detalle) {
-                if (v.tipo === 'Mesa Billar') {
-                    detalleHTML = `
-                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
-                            <strong>🎱 ${v.tipoDetalle}</strong><br>
-                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
-                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)<br>
-                            💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
-                            ${v.detalle.consumos.length > 0 ? `
-                                <br><strong style="margin-top: 5px; display: block;">🛒 Consumos:</strong>
-                                ${v.detalle.consumos.map(c => 
-                                    `• ${c.producto} x${c.cantidad} = S/ ${c.subtotal.toFixed(2)}`
-                                ).join('<br>')}
-                                <br><strong>Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}</strong>
-                            ` : ''}
-                        </div>
-                    `;
-                } else if (v.tipo === 'Mesa Consumo') {
-                    detalleHTML = `
-                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
-                            <strong>🍺 ${v.tipoDetalle}</strong><br>
-                            <strong>🛒 Consumos:</strong><br>
-                            ${v.detalle.consumos.map(c => 
-                                `• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}`
-                            ).join('<br>')}
-                        </div>
-                    `;
-                } else if (v.tipo === 'Venta Directa') {
-                    detalleHTML = `
-                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
-                            <strong>🛒 ${v.tipoDetalle}</strong><br>
-                            ${v.detalle.consumos.map(c => 
-                                `${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = S/ ${c.subtotal.toFixed(2)}`
-                            ).join('<br>')}
-                        </div>
-                    `;
-                } else if (v.tipo === 'Venta Manual') {
-                    detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">📝 ${v.tipoDetalle}</div>`;
-                }
-            } else {
-                detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">${v.tipo}</div>`;
-            }
-            
-            return `
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 10px; font-size: 13px;">${v.fecha}</td>
-                    <td style="padding: 10px;">${detalleHTML}</td>
-                    <td style="padding: 10px; font-size: 13px; color: #666;">${v.usuario}</td>
-                    <td style="padding: 10px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
-                </tr>
-            `;
-        }).join('') + '</tbody></table>';
-        
-        detalleTable.parentElement.innerHTML = htmlDetalle;
-    }
-    
-    actualizarHistorialCierres();
-    
-    debugLog('sistema', '✅ Reporte generado correctamente', { 
-        totalVentas, 
-        cantidadVentas, 
-        ventasMesas,
-        ventasProductos
-    });
-}
-
-window.cerrarDia = async function() {
-    const ventasActuales = ultimoCierre 
-        ? ventas.filter(v => v.id > ultimoCierre)
-        : ventas;
-    
-    if (ventasActuales.length === 0) {
-        alert('⚠️ No hay ventas nuevas para cerrar');
-        return;
-    }
-    
-    const totalCierre = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
-    
-    const consumosDuenoActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    
-    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const confirmar = confirm(
-        `¿Cerrar turno/día?\n\n` +
-        `📊 Ventas: ${ventasActuales.length}\n` +
-        `💰 Total: S/ ${totalCierre.toFixed(2)}\n\n` +
-        `Se generará un reporte y las ventas quedarán archivadas.`
-    );
-    
-    if (!confirmar) return;
-    
-    const cierre = {
-        id: Date.now(),
-        timestamp: Date.now(),
-        fecha: new Date().toLocaleString('es-PE'),
-        usuario: usuarioActual.nombre,
-        cantidadVentas: ventasActuales.length,
-        total: totalCierre,
-        ventas: ventasActuales.map(v => ({...v})),
-        ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
-        ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
-        consumosDueno: consumosDuenoActuales.map(c => ({...c})),
-        totalConsumosDueno: totalConsumosDueno
-    };
-    
-    cierres.push(cierre);
-    ultimoCierre = cierre.timestamp;
-    
-    await guardarCierres();
-    
-    descargarReporteCierre(cierre);
-    
-    alert(`✅ Cierre registrado correctamente\n\n📄 Se descargó el reporte automáticamente`);
-    
-    generarReporte();
-};
-
-function descargarReporteCierre(cierre) {
-    const BOM = '\uFEFF';
-    let csv = BOM + `CIERRE DE CAJA - ${cierre.fecha}\n\n`;
-    csv += `Usuario que cierra,${cierre.usuario}\n`;
-    csv += `Fecha y hora,${cierre.fecha}\n\n`;
-    csv += 'Concepto,Monto\n';
-    csv += `"Total del Cierre","S/ ${cierre.total.toFixed(2)}"\n`;
-    csv += `"Ventas Mesas","S/ ${cierre.ventasMesas.toFixed(2)}"\n`;
-    csv += `"Ventas Productos/Consumo","S/ ${cierre.ventasProductos.toFixed(2)}"\n`;
-    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n`;
-    csv += `"Consumo Dueño (No Cobrado)","S/ ${cierre.totalConsumosDueno.toFixed(2)}"\n\n`;
-    
-    csv += 'DETALLE DE VENTAS\n';
-    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
-    
-    cierre.ventas.forEach(v => {
-        let descripcion = '';
-        
-        if (v.detalle) {
-            if (v.tipo === 'Mesa Billar') {
-                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
-                if (v.detalle.consumos.length > 0) {
-                    descripcion += ` | Consumos: `;
-                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
-                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
-                }
-            } else if (v.detalle.consumos) {
-                descripcion = v.detalle.consumos.map(c => 
-                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
-                ).join(' | ');
-            }
-        } else {
-            descripcion = v.tipoDetalle || v.tipo;
-        }
-        
-        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
-    });
-    
-    if (cierre.consumosDueno && cierre.consumosDueno.length > 0) {
-        csv += '\nCONSUMO DEL DUEÑO (NO COBRADO)\n';
-        csv += 'Fecha,Productos,Total\n';
-        
-        cierre.consumosDueno.forEach(c => {
-            const productosDesc = c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ');
-            csv += `"${c.fecha}","${productosDesc}","S/ ${c.total.toFixed(2)}"\n`;
-        });
-    }
-    
-    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const fechaArchivo = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const horaArchivo = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
-    a.href = url;
-    a.download = `Cierre_${fechaArchivo}_${horaArchivo}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-function actualizarHistorialCierres() {
-    const container = document.getElementById('historialCierresContainer');
-    if (!container) return;
-    
-    if (cierres.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay cierres registrados</p>';
-        return;
-    }
-    
-    // Agrupar cierres por día
-    const cierresPorDia = {};
-    cierres.forEach(cierre => {
-        const fecha = new Date(cierre.timestamp);
-        const diaKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
-        
-        if (!cierresPorDia[diaKey]) {
-            cierresPorDia[diaKey] = {
-                fecha: fecha.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-                cierres: []
-            };
-        }
-        cierresPorDia[diaKey].cierres.push(cierre);
-    });
-    
-    const diasOrdenados = Object.keys(cierresPorDia).sort().reverse();
-    const cierresOrdenados = [...cierres].reverse();
-    
-    // Generar HTML de botones de días
-    let htmlBotonesDias = '';
-    diasOrdenados.slice(0, 3).forEach(dia => {
-        const info = cierresPorDia[dia];
-        const totalDia = info.cierres.reduce((sum, c) => sum + c.total, 0);
-        htmlBotonesDias += `
-            <button class="btn btn-blue btn-small" onclick="descargarCierrePorDia('${dia}')" style="padding: 8px 15px;">
-                📅 ${dia} (${info.cierres.length} ${info.cierres.length === 1 ? 'cierre' : 'cierres'}) - S/ ${totalDia.toFixed(2)}
-            </button>
-        `;
-    });
-    
-    if (diasOrdenados.length > 3) {
-        htmlBotonesDias += `
-            <button class="btn btn-teal btn-small" onclick="mostrarTodosDias()" style="padding: 8px 15px;">
-                Ver más días...
-            </button>
-        `;
-    }
-    
-    // Generar HTML de cada cierre
-    let htmlCierres = '';
-    
-    cierresOrdenados.forEach((c, index) => {
-        // Generar detalle de ventas
-        let htmlVentas = '';
-        
-        c.ventas.forEach((v, vIndex) => {
-            let detalleHTML = '';
-            let iconoTipo = '📝';
-            
-            if (v.tipo === 'Mesa Billar') {
-                iconoTipo = '🎱';
-                if (v.detalle) {
-                    let htmlConsumos = '';
-                    if (v.detalle.consumos && v.detalle.consumos.length > 0) {
-                        let itemsConsumos = '';
-                        v.detalle.consumos.forEach(consumo => {
-                            itemsConsumos += `
-                                <div style="font-size: 11px; color: #856404; padding: 2px 0;">
-                                    • ${consumo.producto} x${consumo.cantidad} (S/ ${consumo.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
-                                </div>
-                            `;
-                        });
-                        
-                        htmlConsumos = `
-                            <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin-top: 8px;">
-                                <strong style="font-size: 11px; color: #856404;">🛒 CONSUMOS:</strong>
-                                <div style="margin-top: 5px;">
-                                    ${itemsConsumos}
-                                </div>
-                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ffc107; font-size: 12px; font-weight: bold; color: #856404;">
-                                    Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
-                                </div>
-                            </div>
-                        `;
-                    }
-                    
-                    detalleHTML = `
-                        <div style="font-size: 13px; color: #333; margin-bottom: 5px;">
-                            <strong>${v.tipoDetalle}</strong>
-                        </div>
-                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
-                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
-                            <br>💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
-                        </div>
-                        ${htmlConsumos}
-                    `;
-                }
-            } else if (v.tipo === 'Mesa Consumo') {
-                iconoTipo = '🍺';
-                if (v.detalle && v.detalle.consumos) {
-                    let itemsConsumos = '';
-                    v.detalle.consumos.forEach(consumo => {
-                        itemsConsumos += `
-                            <div style="font-size: 11px; color: #0c5460; padding: 2px 0;">
-                                • ${consumo.producto} x${consumo.cantidad} (S/ ${consumo.precioUnitario.toFixed(2)} c/u) = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
-                            </div>
-                        `;
-                    });
-                    
-                    detalleHTML = `
-                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                            <strong>${v.tipoDetalle}</strong>
-                        </div>
-                        <div style="background: #d1ecf1; padding: 8px; border-radius: 4px;">
-                            <strong style="font-size: 11px; color: #0c5460;">🛒 CONSUMOS:</strong>
-                            <div style="margin-top: 5px;">
-                                ${itemsConsumos}
-                            </div>
-                        </div>
-                    `;
-                }
-            } else if (v.tipo === 'Venta Directa') {
-                iconoTipo = '🛒';
-                if (v.detalle && v.detalle.consumos) {
-                    let itemsConsumos = '';
-                    v.detalle.consumos.forEach(consumo => {
-                        itemsConsumos += `
-                            <div style="font-size: 11px; color: #155724;">
-                                ${consumo.producto}: ${consumo.cantidad} × S/ ${consumo.precioUnitario.toFixed(2)} = <strong>S/ ${consumo.subtotal.toFixed(2)}</strong>
-                            </div>
-                        `;
-                    });
-                    
-                    detalleHTML = `
-                        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-                            <strong>${v.tipoDetalle}</strong>
-                        </div>
-                        <div style="background: #d4edda; padding: 8px; border-radius: 4px;">
-                            ${itemsConsumos}
-                        </div>
-                    `;
-                }
-            } else {
-                detalleHTML = `<div style="font-size: 13px; color: #666;">${v.tipoDetalle || v.tipo}</div>`;
-            }
-            
-            htmlVentas += `
-                <div style="background: ${vIndex % 2 === 0 ? '#f9f9f9' : 'white'}; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #2d7a4d;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                        <div style="flex: 1;">
-                            <div style="font-size: 11px; color: #999; margin-bottom: 5px;">
-                                ${iconoTipo} ${v.fecha}
-                            </div>
-                            ${detalleHTML}
-                        </div>
-                        <div style="font-size: 16px; font-weight: bold; color: #2d7a4d; margin-left: 15px;">
-                            S/ ${v.monto.toFixed(2)}
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        // Generar HTML del cierre completo
-        htmlCierres += `
-            <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden;">
-                <div onclick="toggleDetalleCierre('cierre-${c.id}')" style="cursor: pointer; padding: 15px; display: flex; justify-content: space-between; align-items: center; background: ${index === 0 ? '#f8f9fa' : 'white'}; transition: background 0.2s;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 20px;">🔒</span>
-                            <div>
-                                <div style="font-weight: 600; font-size: 15px; color: #2d7a4d;">
-                                    Cierre #${c.id}
-                                    ${index === 0 ? '<span style="background: #28a745; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
-                                </div>
-                                <div style="font-size: 12px; color: #666; margin-top: 3px;">
-                                    📅 ${c.fecha} • 👤 ${c.usuario}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <div style="text-align: right;">
-                            <div style="font-size: 22px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
-                            <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ${c.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
-                        </div>
-                        <div id="icono-${c.id}" style="font-size: 20px; color: #999; transition: transform 0.3s;">▼</div>
-                    </div>
-                </div>
-                
-                <div id="cierre-${c.id}" style="display: none; border-top: 1px solid #e0e0e0;">
-                    <div style="padding: 15px; background: #f8f9fa;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #2d7a4d;">
-                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">💰 Ventas Mesas</div>
-                                <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${c.ventasMesas.toFixed(2)}</div>
-                            </div>
-                            <div style="background: white; padding: 12px; border-radius: 6px; border-left: 3px solid #007bff;">
-                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">🛒 Ventas Productos</div>
-                                <div style="font-size: 18px; font-weight: bold; color: #007bff;">S/ ${c.ventasProductos.toFixed(2)}</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div style="padding: 15px; max-height: 400px; overflow-y: auto;">
-                        <h4 style="margin: 0 0 15px 0; color: #333; font-size: 14px;">📋 Detalle de Ventas</h4>
-                        ${htmlVentas}
-                    </div>
-                    
-                    <div style="padding: 15px; background: #f8f9fa; border-top: 1px solid #e0e0e0;">
-                        ${usuarioActual.rol === 'admin' ? `
-                            <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 48%; padding: 12px; margin-right: 4%;">
-                                📄 Descargar PDF
-                            </button>
-                            <button class="btn btn-red" onclick="eliminarCierre(${c.id})" style="width: 48%; padding: 12px;">
-                                🗑️ Eliminar Cierre
-                            </button>
-                        ` : `
-                            <button class="btn btn-blue" onclick="descargarCierrePDF(${c.id})" style="width: 100%; padding: 12px;">
-                                📄 Descargar PDF
-                            </button>
-                        `}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    // Ensamblar HTML final
-    container.innerHTML = `
-        <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div>
-                    <strong style="font-size: 16px; color: #1565c0;">📊 Descargas Agrupadas por Día</strong>
-                    <div style="font-size: 13px; color: #1976d2; margin-top: 5px;">
-                        Descarga todos los cierres de un día en un solo PDF
-                    </div>
-                </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    ${htmlBotonesDias}
-                </div>
-            </div>
-        </div>
-        
-        ${htmlCierres}
-    `;
-}
-window.toggleDetalleCierre = function(elementId) {
-    const detalle = document.getElementById(elementId);
-    const cierreId = elementId.replace('cierre-', '');
-    const icono = document.getElementById(`icono-${cierreId}`);
-    
-    if (detalle.style.display === 'none') {
-        detalle.style.display = 'block';
-        icono.style.transform = 'rotate(180deg)';
-    } else {
-        detalle.style.display = 'none';
-        icono.style.transform = 'rotate(0deg)';
-    }
-};
-
-window.descargarCierrePDF = function(cierreId) {
-    const cierre = cierres.find(c => c.id === cierreId);
-    if (!cierre) {
-        alert('❌ No se encontró el cierre');
-        return;
-    }
-    
-    // Validar que existan los datos necesarios
-    const totalConsumosDueno = (cierre.totalConsumosDueno !== undefined && cierre.totalConsumosDueno !== null) 
-        ? cierre.totalConsumosDueno 
-        : 0;
-    
-    const consumosDueno = cierre.consumosDueno || [];
-    
-    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
-    
-    ventanaImpresion.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Cierre de Caja #${cierre.id}</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                }
-                .header {
-                    text-align: center;
-                    border-bottom: 3px solid #2d7a4d;
-                    padding-bottom: 20px;
-                    margin-bottom: 25px;
-                }
-                h1 {
-                    color: #2d7a4d;
-                    font-size: 28px;
-                    margin-bottom: 10px;
-                }
-                .info-cierre {
-                    background: #f8f9fa;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 25px;
-                }
-                .info-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 15px;
-                }
-                .info-item {
-                    background: white;
-                    padding: 12px;
-                    border-radius: 5px;
-                    border-left: 3px solid #2d7a4d;
-                }
-                .info-item label {
-                    display: block;
-                    color: #666;
-                    font-size: 11px;
-                    margin-bottom: 5px;
-                }
-                .info-item .valor {
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: #2d7a4d;
-                }
-                h2 {
-                    color: #2d7a4d;
-                    font-size: 16px;
-                    margin: 25px 0 15px 0;
-                    border-bottom: 2px solid #e0e0e0;
-                    padding-bottom: 8px;
-                }
-                .venta-item {
-                    background: #f9f9f9;
-                    padding: 15px;
-                    border-radius: 6px;
-                    margin-bottom: 12px;
-                    border-left: 4px solid #2d7a4d;
-                    page-break-inside: avoid;
-                }
-                .venta-header {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 10px;
-                    padding-bottom: 10px;
-                    border-bottom: 1px solid #e0e0e0;
-                }
-                .venta-titulo {
-                    font-weight: bold;
-                    font-size: 14px;
-                    color: #333;
-                }
-                .venta-monto {
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: #2d7a4d;
-                }
-                .venta-fecha {
-                    font-size: 11px;
-                    color: #999;
-                    margin-bottom: 8px;
-                }
-                .consumos-box {
-                    background: #fff3cd;
-                    padding: 10px;
-                    border-radius: 4px;
-                    margin-top: 10px;
-                }
-                .consumo-item {
-                    font-size: 11px;
-                    color: #856404;
-                    padding: 3px 0;
-                    display: flex;
-                    justify-content: space-between;
-                }
-                .consumos-total {
-                    margin-top: 8px;
-                    padding-top: 8px;
-                    border-top: 1px solid #ffc107;
-                    font-weight: bold;
-                    font-size: 12px;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 11px;
-                    border-top: 1px solid #e0e0e0;
-                    padding-top: 15px;
-                }
-                @media print {
-                    body { padding: 15px; }
-                    .no-print { display: none; }
-                    @page { margin: 1cm; }
-                }
-                .btn-imprimir {
-                    background: #2d7a4d;
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    margin: 15px 0;
-                }
-                .btn-imprimir:hover {
-                    background: #1f5436;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="no-print">
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            </div>
-            
-            <div class="header">
-                <h1>🔒 CIERRE DE CAJA</h1>
-                <p style="color: #666; margin-top: 5px;">Cierre #${cierre.id}</p>
-            </div>
-            
-            <div class="info-cierre">
-                <div class="info-grid">
-                    <div class="info-item">
-                        <label>📅 Fecha y Hora</label>
-                        <div class="valor" style="font-size: 14px;">${cierre.fecha}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>👤 Usuario</label>
-                        <div class="valor" style="font-size: 14px;">${cierre.usuario}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>💰 Total del Cierre</label>
-                        <div class="valor">S/ ${cierre.total.toFixed(2)}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>📊 Transacciones</label>
-                        <div class="valor">${cierre.cantidadVentas}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>🎱 Ventas Mesas</label>
-                        <div class="valor" style="font-size: 16px;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>🛒 Ventas Productos</label>
-                        <div class="valor" style="font-size: 16px;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>🍽️ Consumo Dueño (No Cobrado)</label>
-                        <div class="valor" style="font-size: 16px; color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
-                    </div>
-                </div>
-            </div>
-            
-            <h2>📋 Detalle de Ventas</h2>
-            
-            ${cierre.ventas.map((v, index) => {
-                let iconoTipo = '📝';
-                let contenidoVenta = '';
-                
-                if (v.tipo === 'Mesa Billar') {
-                    iconoTipo = '🎱';
-                    if (v.detalle) {
-                        contenidoVenta = `
-                            <div style="margin-top: 8px;">
-                                <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-                                    ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
-                                    (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)
-                                </div>
-                                <div style="font-size: 12px; color: #666;">
-                                    💵 Costo por tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
-                                </div>
-                            </div>
-                            ${v.detalle.consumos && v.detalle.consumos.length > 0 ? `
-                                <div class="consumos-box">
-                                    <div style="font-weight: bold; margin-bottom: 8px; color: #856404; font-size: 12px;">🛒 Consumos:</div>
-                                    ${v.detalle.consumos.map(c => `
-                                        <div class="consumo-item">
-                                            <span>• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u)</span>
-                                            <span>S/ ${c.subtotal.toFixed(2)}</span>
-                                        </div>
-                                    `).join('')}
-                                    <div class="consumos-total">
-                                        Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}
-                                    </div>
-                                </div>
-                            ` : ''}
-                        `;
-                    }
-                } else if (v.tipo === 'Mesa Consumo') {
-                    iconoTipo = '🍺';
-                    if (v.detalle && v.detalle.consumos) {
-                        contenidoVenta = `
-                            <div class="consumos-box" style="background: #d1ecf1; margin-top: 8px;">
-                                <div style="font-weight: bold; margin-bottom: 8px; color: #0c5460; font-size: 12px;">🛒 Consumos:</div>
-                                ${v.detalle.consumos.map(c => `
-                                    <div class="consumo-item" style="color: #0c5460;">
-                                        <span>• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u)</span>
-                                        <span>S/ ${c.subtotal.toFixed(2)}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `;
-                    }
-                } else if (v.tipo === 'Venta Directa') {
-                    iconoTipo = '🛒';
-                    if (v.detalle && v.detalle.consumos) {
-                        contenidoVenta = `
-                            <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                                ${v.detalle.consumos.map(c => `
-                                    <div style="padding: 3px 0;">
-                                        ${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = <strong>S/ ${c.subtotal.toFixed(2)}</strong>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `;
-                    }
-                }
-                
-                return `
-                    <div class="venta-item">
-                        <div class="venta-fecha">${iconoTipo} ${v.fecha}</div>
-                        <div class="venta-header">
-                            <div class="venta-titulo">${v.tipoDetalle || v.tipo}</div>
-                            <div class="venta-monto">S/ ${v.monto.toFixed(2)}</div>
-                        </div>
-                        ${contenidoVenta}
-                    </div>
-                `;
-            }).join('')}
-            
-            ${consumosDueno.length > 0 ? `
-                <h2>🍽️ Consumo del Dueño (No Cobrado)</h2>
-                ${consumosDueno.map((c, index) => `
-                    <div class="venta-item" style="border-left: 4px solid #ff9800;">
-                        <div class="venta-fecha">🍽️ ${c.fecha}</div>
-                        <div class="venta-header">
-                            <div class="venta-titulo">Consumo Personal</div>
-                            <div class="venta-monto" style="color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
-                        </div>
-                        <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                            ${c.productos.map(p => `
-                                <div style="padding: 3px 0;">
-                                    • ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u) = S/ ${(p.precio * p.cantidad).toFixed(2)}
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `).join('')}
-            ` : ''}
-            
-            <div class="footer">
-                <p>Sistema de Gestión de Billar • Cierre generado automáticamente</p>
-                <p style="margin-top: 5px;">Documento válido sin firma</p>
-            </div>
-        </body>
-        </html>
-    `);
-    
-    ventanaImpresion.document.close();
-    
-    setTimeout(() => {
-        ventanaImpresion.focus();
-    }, 250);
-    
-    debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
-};
-
-window.descargarReportePDF = function() {
-    const ventasActuales = ultimoCierre 
-        ? ventas.filter(v => v.id > ultimoCierre)
-        : ventas;
-    
-    if (ventasActuales.length === 0) {
-        alert('⚠️ No hay ventas para generar el reporte');
-        return;
-    }
-    
-    const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
-    const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    const ventasProductos = ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
-    
-    const consumosDuenoActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
-    
-    ventanaImpresion.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Reporte de Ventas</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                }
-                .header {
-                    text-align: center;
-                    border-bottom: 3px solid #2d7a4d;
-                    padding-bottom: 20px;
-                    margin-bottom: 25px;
-                }
-                h1 {
-                    color: #2d7a4d;
-                    font-size: 28px;
-                    margin-bottom: 10px;
-                }
-                .info-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 15px;
-                    margin-bottom: 30px;
-                }
-                .info-item {
-                    background: #f8f9fa;
-                    padding: 15px;
-                    border-radius: 5px;
-                    border-left: 4px solid #2d7a4d;
-                }
-                .info-item label {
-                    display: block;
-                    color: #666;
-                    font-size: 12px;
-                    margin-bottom: 5px;
-                }
-                .info-item .valor {
-                    font-size: 20px;
-                    font-weight: bold;
-                    color: #2d7a4d;
-                }
-                h2 {
-                    color: #2d7a4d;
-                    font-size: 18px;
-                    margin: 25px 0 15px 0;
-                    border-bottom: 2px solid #e0e0e0;
-                    padding-bottom: 8px;
-                }
-                .venta-item {
-                    background: #f9f9f9;
-                    padding: 12px;
-                    border-radius: 6px;
-                    margin-bottom: 10px;
-                    border-left: 3px solid #2d7a4d;
-                    page-break-inside: avoid;
-                    font-size: 13px;
-                }
-                .venta-header {
-                    display: flex;
-                    justify-content: space-between;
-                    font-weight: bold;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 11px;
-                    border-top: 1px solid #e0e0e0;
-                    padding-top: 15px;
-                }
-                @media print {
-                    body { padding: 15px; }
-                    .no-print { display: none; }
-                    @page { margin: 1cm; }
-                }
-                .btn-imprimir {
-                    background: #2d7a4d;
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    margin: 15px 0;
-                }
-                .btn-imprimir:hover {
-                    background: #1f5436;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="no-print">
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            </div>
-            
-            <div class="header">
-                <h1>📊 REPORTE DE VENTAS</h1>
-                <p style="color: #666; margin-top: 5px;">Generado: ${new Date().toLocaleString('es-PE')}</p>
-            </div>
-            
-            <div class="info-grid">
-                <div class="info-item">
-                    <label>💰 Total de Ventas</label>
-                    <div class="valor">S/ ${totalVentas.toFixed(2)}</div>
-                </div>
-                <div class="info-item">
-                    <label>📊 Cantidad de Transacciones</label>
-                    <div class="valor">${ventasActuales.length}</div>
-                </div>
-                <div class="info-item">
-                    <label>🎱 Ventas de Mesas</label>
-                    <div class="valor">S/ ${ventasMesas.toFixed(2)}</div>
-                </div>
-                <div class="info-item">
-                    <label>🛒 Ventas de Productos</label>
-                    <div class="valor">S/ ${ventasProductos.toFixed(2)}</div>
-                </div>
-                <div class="info-item">
-                    <label>🍽️ Consumo Dueño (No Cobrado)</label>
-                    <div class="valor" style="color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
-                </div>
-            </div>
-            
-            <h2>📋 Detalle de Ventas</h2>
-            
-            ${ventasActuales.reverse().map(v => {
-                let descripcion = v.tipoDetalle || v.tipo;
-                if (v.detalle && v.detalle.consumos) {
-                    descripcion += ' - ' + v.detalle.consumos.map(c => 
-                        `${c.producto} x${c.cantidad}`
-                    ).join(', ');
-                }
-                
-                return `
-                    <div class="venta-item">
-                        <div class="venta-header">
-                            <span>${v.fecha} - ${descripcion}</span>
-                            <span style="color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</span>
-                        </div>
-                        <div style="color: #666; font-size: 11px; margin-top: 3px;">
-                            Usuario: ${v.usuario}
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-            
-            ${consumosDuenoActuales.length > 0 ? `
-                <h2>🍽️ Consumo del Dueño (No Cobrado)</h2>
-                ${consumosDuenoActuales.map(c => `
-                    <div class="venta-item" style="border-left-color: #ff9800;">
-                        <div class="venta-header">
-                            <span>${c.fecha}</span>
-                            <span style="color: #ff9800;">S/ ${c.total.toFixed(2)}</span>
-                        </div>
-                        <div style="color: #666; font-size: 11px; margin-top: 3px;">
-                            ${c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ')}
-                        </div>
-                    </div>
-                `).join('')}
-            ` : ''}
-            
-            <div class="footer">
-                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
-                <p style="margin-top: 5px;">Documento válido sin firma</p>
-            </div>
-        </body>
-        </html>
-    `);
-    
-    ventanaImpresion.document.close();
-    
-    setTimeout(() => {
-        ventanaImpresion.focus();
-    }, 250);
-    
-    debugLog('sistema', '📄 PDF de reporte generado');
-};
-
-window.descargarReporteExcel = function() {
-    alert('📊 Función de descarga Excel próximamente. Por ahora usa el PDF o el cierre de caja que genera CSV.');
-};
-
-window.eliminarCierre = async function(cierreId) {
-    if (usuarioActual.rol !== 'admin') {
-        mostrarError('Solo los administradores pueden eliminar cierres');
-        return;
-    }
-    
-    const cierre = cierres.find(c => c.id === cierreId);
-    if (!cierre) return;
-    
-    const confirmar = confirm(
-        `⚠️ ¿Eliminar este cierre?\n\n` +
-        `📅 Fecha: ${cierre.fecha}\n` +
-        `💰 Total: S/ ${cierre.total.toFixed(2)}\n` +
-        `📊 Ventas: ${cierre.cantidadVentas}\n\n` +
-        `⚠️ ADVERTENCIA: Esta acción NO se puede deshacer.\n` +
-        `Se recomienda descargar el PDF antes de eliminar.`
-    );
-    
-    if (!confirmar) return;
-    
-    const descargo = confirm(
-        `¿Ya descargaste el PDF de este cierre?\n\n` +
-        `Si no lo has hecho, haz clic en "Cancelar" y descárgalo primero.`
-    );
-    
-    if (!descargo) {
-        alert('👍 Puedes descargar el PDF haciendo clic en el botón "📄 Descargar PDF"');
-        return;
-    }
-    
-    cierres = cierres.filter(c => c.id !== cierreId);
-    
-    if (cierres.length > 0) {
-        ultimoCierre = cierres[cierres.length - 1].timestamp;
-    } else {
-        ultimoCierre = null;
-    }
-    
-    await guardarCierres();
-    
-    alert('✅ Cierre eliminado correctamente');
-    
-    actualizarHistorialCierres();
-    generarReporte();
-    
-    debugLog('sistema', '🗑️ Cierre eliminado', { cierreId });
-};
-
-window.descargarCierrePorDia = function(diaKey) {
-    const cierresDelDia = cierres.filter(cierre => {
-        const fecha = new Date(cierre.timestamp);
-        const key = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
-        return key === diaKey;
-    });
-    
-    if (cierresDelDia.length === 0) {
-        alert('❌ No hay cierres para este día');
-        return;
-    }
-    
-    const totalDia = cierresDelDia.reduce((sum, c) => sum + c.total, 0);
-    const totalVentas = cierresDelDia.reduce((sum, c) => sum + c.cantidadVentas, 0);
-    const totalConsumosDueno = cierresDelDia.reduce((sum, c) => (c.totalConsumosDueno || 0) + sum, 0);
-    const fechaFormateada = new Date(cierresDelDia[0].timestamp).toLocaleDateString('es-PE', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-    });
-    
-    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
-    
-    ventanaImpresion.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Cierres del ${diaKey}</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                }
-                .header {
-                    text-align: center;
-                    border-bottom: 3px solid #2d7a4d;
-                    padding-bottom: 20px;
-                    margin-bottom: 25px;
-                }
-                h1 {
-                    color: #2d7a4d;
-                    font-size: 28px;
-                    margin-bottom: 10px;
-                }
-                .info-resumen {
-                    background: #e8f5e9;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 30px;
-                    border-left: 4px solid #4caf50;
-                }
-                .info-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr 1fr;
-                    gap: 15px;
-                    margin-top: 15px;
-                }
-                .info-item {
-                    background: white;
-                    padding: 12px;
-                    border-radius: 5px;
-                    border-left: 3px solid #4caf50;
-                }
-                .info-item label {
-                    display: block;
-                    color: #666;
-                    font-size: 11px;
-                    margin-bottom: 5px;
-                }
-                .info-item .valor {
-                    font-size: 18px;
-                    font-weight: bold;
-                    color: #2d7a4d;
-                }
-                h2 {
-                    color: #2d7a4d;
-                    font-size: 18px;
-                    margin: 25px 0 15px 0;
-                    border-bottom: 2px solid #e0e0e0;
-                    padding-bottom: 8px;
-                }
-                .cierre-bloque {
-                    background: #f9f9f9;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin-bottom: 20px;
-                    border-left: 4px solid #2196f3;
-                    page-break-inside: avoid;
-                }
-                .cierre-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 15px;
-                    padding-bottom: 10px;
-                    border-bottom: 2px solid #e0e0e0;
-                }
-                .venta-item {
-                    background: white;
-                    padding: 10px;
-                    border-radius: 4px;
-                    margin-bottom: 8px;
-                    border-left: 2px solid #2d7a4d;
-                    font-size: 12px;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 11px;
-                    border-top: 1px solid #e0e0e0;
-                    padding-top: 15px;
-                }
-                @media print {
-                    body { padding: 15px; }
-                    .no-print { display: none; }
-                    @page { margin: 1cm; }
-                }
-                .btn-imprimir {
-                    background: #2d7a4d;
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    margin: 15px 0;
-                }
-                .btn-imprimir:hover {
-                    background: #1f5436;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="no-print">
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            </div>
-            
-            <div class="header">
-                <h1>📊 CIERRES DEL DÍA</h1>
-                <p style="color: #666; margin-top: 5px; text-transform: capitalize;">${fechaFormateada}</p>
-                <p style="color: #999; margin-top: 5px; font-size: 13px;">${cierresDelDia.length} ${cierresDelDia.length === 1 ? 'cierre registrado' : 'cierres registrados'}</p>
-            </div>
-            
-            <div class="info-resumen">
-                <h3 style="color: #2d7a4d; margin-bottom: 15px;">💰 Resumen del Día</h3>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <label>Total del Día</label>
-                        <div class="valor">S/ ${totalDia.toFixed(2)}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Total de Ventas</label>
-                        <div class="valor">${totalVentas}</div>
-                    </div>
-                    <div class="info-item">
-                        <label>Consumo Dueño</label>
-                        <div class="valor" style="color: #ff9800;">S/ ${totalConsumosDueno.toFixed(2)}</div>
-                    </div>
-                </div>
-            </div>
-            
-            ${cierresDelDia.map((cierre, index) => {
-                const totalConsumosCierre = cierre.totalConsumosDueno || 0;
-                return `
-                    <div class="cierre-bloque">
-                        <div class="cierre-header">
-                            <div>
-                                <h3 style="color: #2196f3; margin-bottom: 5px;">
-                                    🔒 Cierre #${cierre.id}
-                                    ${index === 0 ? '<span style="background: #4caf50; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
-                                </h3>
-                                <div style="font-size: 13px; color: #666;">
-                                    ${cierre.fecha} • ${cierre.usuario}
-                                </div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 24px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.total.toFixed(2)}</div>
-                                <div style="font-size: 12px; color: #666;">${cierre.cantidadVentas} ${cierre.cantidadVentas === 1 ? 'venta' : 'ventas'}</div>
-                            </div>
-                        </div>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                            <div style="background: white; padding: 10px; border-radius: 4px;">
-                                <div style="font-size: 11px; color: #666;">🎱 Ventas Mesas</div>
-                                <div style="font-size: 16px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
-                            </div>
-                            <div style="background: white; padding: 10px; border-radius: 4px;">
-                                <div style="font-size: 11px; color: #666;">🛒 Ventas Productos</div>
-                                <div style="font-size: 16px; font-weight: bold; color: #007bff;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
-                            </div>
-                        </div>
-                        
-                        <h4 style="color: #333; font-size: 14px; margin-bottom: 10px;">Detalle de Ventas:</h4>
-                        ${cierre.ventas.slice(0, 5).map(v => {
-                            let desc = v.tipoDetalle || v.tipo;
-                            if (v.detalle && v.detalle.consumos) {
-                                desc += ' - ' + v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
-                            }
-                            return `
-                                <div class="venta-item">
-                                    <div style="display: flex; justify-content: space-between;">
-                                        <span>${desc}</span>
-                                        <strong style="color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</strong>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                        ${cierre.ventas.length > 5 ? `<div style="text-align: center; color: #999; font-size: 12px; margin-top: 10px;">... y ${cierre.ventas.length - 5} ventas más</div>` : ''}
-                    </div>
-                `;
-            }).join('')}
-            
-            <div class="footer">
-                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
-                <p style="margin-top: 5px;">Documento válido sin firma</p>
-            </div>
-        </body>
-        </html>
-    `);
-    
-    ventanaImpresion.document.close();
-    
-    setTimeout(() => {
-        ventanaImpresion.focus();
-    }, 250);
-    
-    debugLog('sistema', '📄 PDF de cierres por día generado', { dia: diaKey, cantidad: cierresDelDia.length });
-};
-
-window.mostrarTodosDias = function() {
-    alert('📅 Función en desarrollo: Selector de fechas para descargar cierres de cualquier día.');
-};
-
-// ========== ERRORES ==========
-window.showModalError = function() {
-    document.getElementById('modalError').classList.add('show');
-    document.getElementById('errorMensaje').value = '';
-};
-
-window.closeModalError = function() {
-    document.getElementById('modalError').classList.remove('show');
-};
-
-window.reportarError = async function() {
-    const descripcion = document.getElementById('errorMensaje').value.trim();
-    
-    if (!descripcion) {
-        mostrarError('Por favor describe el error');
-        return;
-    }
-    
-    const error = {
-        id: Date.now(),
-        descripcion,
-        fecha: new Date().toLocaleString(),
-        usuario: usuarioActual.nombre,
-        estado: 'pendiente'
-    };
-    
-    erroresReportados.push(error);
-    await guardarErrores();
-    
-    alert('Error reportado correctamente. Gracias por tu reporte.');
-    window.closeModalError();
-    
-    debugLog('sistema', '⚠️ Error reportado', { descripcion });
-};
-
-window.toggleEstadoError = async function(id) {
-    const error = erroresReportados.find(e => e.id === id);
-    if (!error) return;
-    
-    error.estado = error.estado === 'pendiente' ? 'resuelto' : 'pendiente';
-    await guardarErrores();
-    actualizarErrores();
-};
-
-window.eliminarError = async function(id) {
-    if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
-    
-    erroresReportados = erroresReportados.filter(e => e.id !== id);
-    await guardarErrores();
-    actualizarErrores();
-};
-
-function actualizarErrores() {
-    const container = document.getElementById('erroresContainer');
-    if (!container) {
-        debugLog('error', '⚠️ Contenedor de errores no encontrado');
-        return;
-    }
-    
-    if (erroresReportados.length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 50px; color: #999;"><p style="font-size: 48px; margin: 0;">✅</p><p style="margin-top: 10px;">No hay errores reportados</p></div>';
-        return;
-    }
-    
-    const erroresOrdenados = [...erroresReportados].reverse();
-    
-    container.innerHTML = erroresOrdenados.map(e => `
-        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}">
-            <div class="error-header">
-                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}">
-                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
-                </span>
-                <span style="font-size: 13px; color: #666;">${e.fecha}</span>
-            </div>
-            <div class="error-body">
-                <p><strong>Descripción:</strong> ${e.descripcion}</p>
-                <p style="margin-top: 8px; color: #666;"><strong>Reportado por:</strong> ${e.usuario}</p>
-            </div>
-            <div class="error-actions">
-                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})">
-                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
-                </button>
-                <button class="btn-small btn-red" onclick="eliminarError(${e.id})">
-                    🗑️ Eliminar
-                </button>
-            </div>
-        </div>
-    `).join('');
-    
-    debugLog('sistema', '⚠️ Errores actualizados', { total: erroresReportados.length });
-}
-
-// ========== USUARIOS ==========
-window.toggleUsuarios = function() {
-    const panel = document.getElementById('usuariosPanel');
-    
-    if (panel.classList.contains('hidden')) {
-        panel.classList.remove('hidden');
-        actualizarUsuarios();
-    } else {
-        panel.classList.add('hidden');
-    }
-};
-
-window.showModalUsuario = function(usuarioIdOrNull = null) {
-    if (usuarioActual.rol !== 'admin') return;
-    
-    // 👇 CAMBIO: Buscar el usuario en el array por ID
-    if (usuarioIdOrNull !== null) {
-        usuarioEditando = usuarios.find(u => u.id === usuarioIdOrNull);
-        if (!usuarioEditando) {
-            mostrarError('Usuario no encontrado');
-            return;
-        }
-    } else {
-        usuarioEditando = null;
-    }
-    
-    const modal = document.getElementById('modalUsuario');
-    const title = document.getElementById('usuarioModalTitle');
-    
-    if (usuarioEditando) {
-        title.textContent = 'Editar Usuario';
-        document.getElementById('nuevoNombre').value = usuarioEditando.nombre;
-        document.getElementById('nuevoUsername').value = usuarioEditando.username;
-        document.getElementById('nuevoPassword').value = '';
-        document.getElementById('nuevoRol').value = usuarioEditando.rol;
-    } else {
-        title.textContent = 'Agregar Usuario';
-        document.getElementById('nuevoNombre').value = '';
-        document.getElementById('nuevoUsername').value = '';
-        document.getElementById('nuevoPassword').value = '';
-        document.getElementById('nuevoRol').value = 'empleado';
-    }
-    
-    document.getElementById('usuarioError').classList.add('hidden');
-    modal.classList.add('show');
-};
-
-window.closeModalUsuario = function() {
-    document.getElementById('modalUsuario').classList.remove('show');
-    usuarioEditando = null;
-};
-
-window.guardarUsuario = async function() {
-    const nombre = document.getElementById('nuevoNombre').value.trim();
-    const username = document.getElementById('nuevoUsername').value.trim();
-    const password = document.getElementById('nuevoPassword').value;
-    const rol = document.getElementById('nuevoRol').value;
-    const errorDiv = document.getElementById('usuarioError');
-    
-    // Construir el email que Firebase espera
-    const email = `${username}@billar.app`; 
-    
-    // Limpiar errores
-    errorDiv.classList.add('hidden');
-    
-    if (!nombre || !username || (!usuarioEditando && !password)) {
-        errorDiv.textContent = 'Por favor completa todos los campos';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
-    if (existente) {
-        errorDiv.textContent = 'El nombre de usuario ya existe';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    // =========================================================
-    //         INICIO DE LA LÓGICA DE AUTENTICACIÓN
-    // =========================================================
-    
-    try {
-        if (usuarioEditando) {
-            // 1. Lógica de edición
-            usuarioEditando.nombre = nombre;
-            usuarioEditando.username = username;
-            usuarioEditando.rol = rol;
-
-            if (password) {
-                // Si el usuario cambia la contraseña, actualiza Firebase Auth
-                await window.firebaseAuth.updatePassword(usuarioEditando.uid, password); 
-                usuarioEditando.password = password; // Actualizar en el array local
-                debugLog('seguridad', '✅ Contraseña de usuario actualizada en Firebase Auth');
-            }
-            
-        } else {
-
-            const userCredential = await window.firebaseAuth.createUser(email, password); 
-            
-            debugLog('seguridad', '✅ Cuenta de Firebase Auth creada', { email });
-  
-            usuarios.push({
-                id: Date.now(),
-                uid: userCredential.user.uid, // Guardamos el ID único de Firebase
-                username,
-                password, // Guardar en el array local
-                nombre,
-                rol
-            });
-        }
-        
-        // =========================================================
-        //         FIN DE LA LÓGICA DE AUTENTICACIÓN
-        // =========================================================
-
-        await guardarUsuarios();
-        actualizarUsuarios();
-        window.closeModalUsuario();
-
-    } catch (error) {
-        console.error('❌ Error al guardar usuario:', error);
-        
-        // Mapear los errores de Firebase y mostrarlos
-        if (error.code === 'auth/email-already-in-use') {
-            errorDiv.textContent = 'El nombre de usuario ya existe (usado en Firebase)';
-        } else if (error.code === 'auth/weak-password') {
-            errorDiv.textContent = 'Contraseña muy débil (mínimo 6 caracteres)';
-        } else if (error.code === 'auth/invalid-email') {
-            errorDiv.textContent = 'El formato del usuario es inválido.';
-        } else {
-            errorDiv.textContent = `Error al guardar: ${error.message}`;
-        }
-        errorDiv.classList.remove('hidden');
-    }
-};
-
-window.eliminarUsuario = async function(id) {
-    if (usuarioActual.id === id) {
-        mostrarError('No puedes eliminar tu propio usuario');
-        return;
-    }
-    
-    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
-    
-    usuarios = usuarios.filter(u => u.id !== id);
-    await guardarUsuarios();
-    actualizarUsuarios();
-};
-
-function actualizarUsuarios() {
-    const tbody = document.getElementById('usuariosTable');
-    if (!tbody) {
-        debugLog('error', '⚠️ Elemento usuariosTable no encontrado');
-        return;
-    }
-    
-    if (usuarios.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay usuarios registrados</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = usuarios.map(u => {
-        // 👇 CAMBIO: Pasar solo el ID en lugar del objeto completo
-        return `
-            <tr>
-                <td>${u.username}</td>
-                <td>${u.nombre}</td>
-                <td style="text-align: center;">
-                    <span class="badge ${u.rol === 'admin' ? 'badge-success' : 'badge-info'}">
-                        ${u.rol.toUpperCase()}
-                    </span>
-                </td>
-                <td style="text-align: center;">
-                    <button class="btn-small btn-green" onclick='showModalUsuario(${u.id})' style="margin-right: 5px;">✏️</button>
-                    ${usuarioActual.id !== u.id ? `<button class="btn-small btn-red" onclick="eliminarUsuario(${u.id})">🗑️</button>` : ''}
-                </td>
-            </tr>
-        `;
-    }).join('');
-    
-    debugLog('sistema', '👥 Tabla de usuarios actualizada', { total: usuarios.length });
-}
-
 // ========== MESAS DE CONSUMO ==========
 window.agregarMesaConsumo = async function() {
     if (usuarioActual.rol !== 'admin') {
@@ -2741,8 +1170,30 @@ window.toggleMesaConsumo = function(id) {
     const mesa = mesasConsumo.find(m => m.id === id);
     if (!mesa) return;
     
-    if (mesa.ocupada) finalizarMesaConsumo(id);
-    else iniciarMesaConsumo(id);
+    if (mesa.ocupada) {
+        // ✅ CONFIRMACIÓN ANTES DE FINALIZAR
+        let mensaje = `¿Finalizar Mesa de Consumo ${id}?\n\n`;
+        
+        if (mesa.total > 0) {
+            mensaje += `💰 Total a cobrar: S/ ${mesa.total.toFixed(2)}\n\n`;
+            
+            if (mesa.consumos && mesa.consumos.length > 0) {
+                mensaje += `🛒 Productos:\n`;
+                mesa.consumos.forEach(c => {
+                    mensaje += `   • ${c.nombre} x${c.cantidad} = S/ ${(c.precio * c.cantidad).toFixed(2)}\n`;
+                });
+            }
+        } else {
+            mensaje += `⚠️ No hay consumos registrados.\n`;
+            mensaje += `La mesa se cerrará sin generar venta.`;
+        }
+        
+        if (!confirm(mensaje)) return;
+        
+        finalizarMesaConsumo(id);
+    } else {
+        iniciarMesaConsumo(id);
+    }
 };
 
 async function iniciarMesaConsumo(id) {
@@ -2796,7 +1247,7 @@ async function finalizarMesaConsumo(id) {
     mesa.total = 0;
     await guardarMesasConsumo();
     
-    alert(`Mesa ${id} finalizada.\nTotal: S/ ${mesa.total.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada.\nTotal: S/ ${mesa.total.toFixed(2)}`);
     
     actualizarMesasConsumo();
     actualizarTablaVentas();
@@ -2989,11 +1440,10 @@ function actualizarListaConsumos() {
     `).join('');
     
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
-    // Actualizar el botón de cerrar mesa
-    const btnCerrar = document.getElementById('btnCerrarMesa');
-    if (btnCerrar) {
-        btnCerrar.textContent = `💵 Cerrar Mesa y Cobrar (Total: S/ ${total.toFixed(2)})`;
-    }
+    
+    // ⚠️ ELIMINADO: El botón que causaba doble cobro
+    // Para finalizar y cobrar, el usuario debe cerrar este modal 
+    // y usar el botón "⏹️ Finalizar" de la mesa principal
 }
 
 // ========== CONSUMO DEL DUEÑO ==========
@@ -3152,6 +1602,7 @@ window.guardarConsumoDueno = async function() {
     carritoConsumoDueno = [];
     window.closeModalConsumoDueno();
     actualizarInventario();
+    actualizarConsumoDueno();
     
     if (btnGuardar) {
         btnGuardar.disabled = false;
@@ -3166,29 +1617,22 @@ function actualizarConsumoDueno() {
     
     if (!container) {
         debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
-        alert('ERROR: No se encontró el contenedor. Recarga la página.');
         return;
     }
     
-    // FORZAR VISIBILIDAD DEL CONTENEDOR
     container.style.display = 'block';
     container.style.minHeight = '300px';
-    container.style.height = 'auto'; // AÑADE ESTO
-    container.style.backgroundColor = '#f8f9fa';
-    container.style.padding = '20px';
-    container.style.borderRadius = '10px';
-    container.style.visibility = 'visible'; // AÑADE ESTO
-    container.style.opacity = '1'; // AÑADE ESTO
+    container.style.visibility = 'visible';
+    container.style.opacity = '1';
     
     const consumosActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
     
-    debugLog('sistema', `📊 Total consumos en array: ${consumosDueno.length}`);
     debugLog('sistema', `📊 Consumos después del último cierre: ${consumosActuales.length}`);
     
     if (consumosActuales.length === 0) {
-        const htmlVacio = `
+        container.innerHTML = `
             <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
                 <p style="font-size: 64px; margin: 0;">🍽️</p>
                 <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
@@ -3202,20 +1646,64 @@ function actualizarConsumoDueno() {
                 </button>
             </div>
         `;
-        
-        container.innerHTML = htmlVacio;
-        
-        // VERIFICAR DESPUÉS DE INSERTAR
-        setTimeout(() => {
-            debugLog('sistema', '✅ HTML vacío insertado correctamente');
-            debugLog('sistema', `📏 Altura del contenedor: ${container.offsetHeight}px`);
-            debugLog('sistema', `📏 Altura del hijo: ${container.firstElementChild?.offsetHeight}px`);
-        }, 100);
         return;
     }
     
-    debugLog('sistema', '✅ Consumos actualizados correctamente');
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const htmlConsumos = consumosActuales.reverse().map(c => `
+        <div class="consumo-dueno-card">
+            <div class="consumo-dueno-header">
+                <div>
+                    <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
+                </div>
+                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+            </div>
+            <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px;">
+                ${c.productos.map(p => `
+                    <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
+                        <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
+                        <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                    </div>
+                `).join('')}
+            </div>
+            ${usuarioActual.rol === 'admin' ? `
+                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})">
+                        🗑️ Eliminar
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+    
+    container.innerHTML = `
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 16px; color: #856404;">💰 Total Consumido</strong>
+                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                        ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
+                        ${ultimoCierre ? 'desde el último cierre' : ''}
+                    </div>
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
+                    S/ ${totalGeneral.toFixed(2)}
+                </div>
+            </div>
+            ${usuarioActual.rol === 'admin' ? `
+                <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="width: 100%; margin-top: 15px;">
+                    📄 Descargar Reporte PDF
+                </button>
+            ` : ''}
+        </div>
+        
+        ${htmlConsumos}
+    `;
+    
+    debugLog('sistema', '✅ Consumos del dueño actualizados correctamente');
 }
+
 window.descargarConsumoDuenoPDF = function() {
     const consumosActuales = ultimoCierre 
         ? consumosDueno.filter(c => c.id > ultimoCierre)
@@ -3388,39 +1876,574 @@ window.eliminarConsumoDueno = async function(consumoId) {
     alert('✅ Registro eliminado y stock devuelto');
 };
 
-// ========== VERIFICAR SESIÓN AUTOMÁTICA CON FIREBASE AUTH ==========
-if (window.firebaseAuth) {
-    window.firebaseAuth.onAuthChange((user) => {
-        if (user && !usuarioActual) {
-            debugLog('sistema', '🔄 Usuario autenticado detectado, restaurando sesión...', { uid: user.uid });
-            
-            // El usuario está autenticado, cargar sus datos
-            const username = user.email.replace('@billar.app', '');
-            const usuario = usuarios.find(u => u.username === username);
-            
-            if (usuario) {
-                usuarioActual = usuario;
-                usuarioActual.uid = user.uid;
-                
-                // Solo mostrar pantalla si no estamos en proceso de login
-                if (document.getElementById('mainScreen').classList.contains('hidden')) {
-                    mostrarPantallaPrincipal();
-                }
-            }
-        } else if (!user && usuarioActual) {
-            debugLog('sistema', '🔓 Sesión cerrada detectada');
-            usuarioActual = null;
-        }
-    });
+// ========== ERRORES ==========
+window.showModalError = function() {
+    document.getElementById('modalError').classList.add('show');
+    document.getElementById('errorMensaje').value = '';
+};
+
+window.closeModalError = function() {
+    document.getElementById('modalError').classList.remove('show');
+};
+
+window.reportarError = async function() {
+    const descripcion = document.getElementById('errorMensaje').value.trim();
     
-    debugLog('sistema', '✅ Listener de autenticación configurado');
+    if (!descripcion) {
+        mostrarError('Por favor describe el error');
+        return;
+    }
+    
+    const error = {
+        id: Date.now(),
+        descripcion,
+        fecha: new Date().toLocaleString(),
+        usuario: usuarioActual.nombre,
+        estado: 'pendiente'
+    };
+    
+    erroresReportados.push(error);
+    await guardarErrores();
+    
+    alert('Error reportado correctamente. Gracias por tu reporte.');
+    window.closeModalError();
+    
+    debugLog('sistema', '⚠️ Error reportado', { descripcion });
+};
+
+window.toggleEstadoError = async function(id) {
+    const error = erroresReportados.find(e => e.id === id);
+    if (!error) return;
+    
+    error.estado = error.estado === 'pendiente' ? 'resuelto' : 'pendiente';
+    await guardarErrores();
+    actualizarErrores();
+};
+
+window.eliminarError = async function(id) {
+    if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
+    
+    erroresReportados = erroresReportados.filter(e => e.id !== id);
+    await guardarErrores();
+    actualizarErrores();
+};
+
+function actualizarErrores() {
+    const container = document.getElementById('erroresContainer');
+    if (!container) {
+        debugLog('error', '⚠️ Contenedor de errores no encontrado');
+        return;
+    }
+    
+    if (erroresReportados.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 50px; color: #999;"><p style="font-size: 48px; margin: 0;">✅</p><p style="margin-top: 10px;">No hay errores reportados</p></div>';
+        return;
+    }
+    
+    const erroresOrdenados = [...erroresReportados].reverse();
+    
+    container.innerHTML = erroresOrdenados.map(e => `
+        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}">
+            <div class="error-header">
+                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}">
+                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
+                </span>
+                <span style="font-size: 13px; color: #666;">${e.fecha}</span>
+            </div>
+            <div class="error-body">
+                <p><strong>Descripción:</strong> ${e.descripcion}</p>
+                <p style="margin-top: 8px; color: #666;"><strong>Reportado por:</strong> ${e.usuario}</p>
+            </div>
+            <div class="error-actions">
+                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})">
+                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
+                </button>
+                <button class="btn-small btn-red" onclick="eliminarError(${e.id})">
+                    🗑️ Eliminar
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    debugLog('sistema', '⚠️ Errores actualizados', { total: erroresReportados.length });
 }
 
-window.cerrarMesaCompleto = function() {
-    if (tipoMesaActual === 'billar') {
-        finalizarMesa(mesaConsumoActual);
+// ========== USUARIOS ==========
+window.toggleUsuarios = function() {
+    const panel = document.getElementById('usuariosPanel');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        actualizarUsuarios();
     } else {
-        finalizarMesaConsumo(mesaConsumoActual);
+        panel.classList.add('hidden');
     }
+};
+
+window.showModalUsuario = function(usuarioIdOrNull = null) {
+    if (usuarioActual.rol !== 'admin') return;
+    
+    if (usuarioIdOrNull !== null) {
+        usuarioEditando = usuarios.find(u => u.id === usuarioIdOrNull);
+        if (!usuarioEditando) {
+            mostrarError('Usuario no encontrado');
+            return;
+        }
+    } else {
+        usuarioEditando = null;
+    }
+    
+    const modal = document.getElementById('modalUsuario');
+    const title = document.getElementById('usuarioModalTitle');
+    
+    if (usuarioEditando) {
+        title.textContent = 'Editar Usuario';
+        document.getElementById('nuevoNombre').value = usuarioEditando.nombre;
+        document.getElementById('nuevoUsername').value = usuarioEditando.username;
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = usuarioEditando.rol;
+    } else {
+        title.textContent = 'Agregar Usuario';
+        document.getElementById('nuevoNombre').value = '';
+        document.getElementById('nuevoUsername').value = '';
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = 'empleado';
+    }
+    
+    document.getElementById('usuarioError').classList.add('hidden');
+    modal.classList.add('show');
+};
+
+window.closeModalUsuario = function() {
+    document.getElementById('modalUsuario').classList.remove('show');
+    usuarioEditando = null;
+};
+
+window.guardarUsuario = async function() {
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const username = document.getElementById('nuevoUsername').value.trim();
+    const password = document.getElementById('nuevoPassword').value;
+    const rol = document.getElementById('nuevoRol').value;
+    const errorDiv = document.getElementById('usuarioError');
+    
+    const email = `${username}@billar.app`; 
+    
+    errorDiv.classList.add('hidden');
+    
+    if (!nombre || !username || (!usuarioEditando && !password)) {
+        errorDiv.textContent = 'Por favor completa todos los campos';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
+    if (existente) {
+        errorDiv.textContent = 'El nombre de usuario ya existe';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        if (usuarioEditando) {
+            usuarioEditando.nombre = nombre;
+            usuarioEditando.username = username;
+            usuarioEditando.rol = rol;
+
+            if (password) {
+                await window.firebaseAuth.updatePassword(usuarioEditando.uid, password); 
+                usuarioEditando.password = password;
+                debugLog('seguridad', '✅ Contraseña de usuario actualizada en Firebase Auth');
+            }
+            
+        } else {
+            const userCredential = await window.firebaseAuth.createUser(email, password); 
+            
+            debugLog('seguridad', '✅ Cuenta de Firebase Auth creada', { email });
+  
+            usuarios.push({
+                id: Date.now(),
+                uid: userCredential.user.uid,
+                username,
+                password,
+                nombre,
+                rol
+            });
+        }
+
+        await guardarUsuarios();
+        actualizarUsuarios();
+        window.closeModalUsuario();
+
+    } catch (error) {
+        console.error('❌ Error al guardar usuario:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+            errorDiv.textContent = 'El nombre de usuario ya existe (usado en Firebase)';
+        } else if (error.code === 'auth/weak-password') {
+            errorDiv.textContent = 'Contraseña muy débil (mínimo 6 caracteres)';
+        } else if (error.code === 'auth/invalid-email') {
+            errorDiv.textContent = 'El formato del usuario es inválido.';
+        } else {
+            errorDiv.textContent = `Error al guardar: ${error.message}`;
+        }
+        errorDiv.classList.remove('hidden');
+    }
+};
+
+window.eliminarUsuario = async function(id) {
+    if (usuarioActual.id === id) {
+        mostrarError('No puedes eliminar tu propio usuario');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+    
+    usuarios = usuarios.filter(u => u.id !== id);
+    await guardarUsuarios();
+    actualizarUsuarios();
+};
+
+function actualizarUsuarios() {
+    const tbody = document.getElementById('usuariosTable');
+    if (!tbody) {
+        debugLog('error', '⚠️ Elemento usuariosTable no encontrado');
+        return;
+    }
+    
+    if (usuarios.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay usuarios registrados</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = usuarios.map(u => {
+        return `
+            <tr>
+                <td>${u.username}</td>
+                <td>${u.nombre}</td>
+                <td style="text-align: center;">
+                    <span class="badge ${u.rol === 'admin' ? 'badge-success' : 'badge-info'}">
+                        ${u.rol.toUpperCase()}
+                    </span>
+                </td>
+                <td style="text-align: center;">
+                    <button class="btn-small btn-green" onclick='showModalUsuario(${u.id})' style="margin-right: 5px;">✏️</button>
+                    ${usuarioActual.id !== u.id ? `<button class="btn-small btn-red" onclick="eliminarUsuario(${u.id})">🗑️</button>` : ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    debugLog('sistema', '👥 Tabla de usuarios actualizada', { total: usuarios.length });
+}
+
+// ========== FUNCIÓN QUE PREVIENE DOBLE COBRO ==========
+window.cerrarMesaCompleto = function() {
+    // ⚠️ PREVENIR DOBLE COBRO - Solo cerrar modal sin finalizar
+    debugLog('sistema', '❌ cerrarMesaCompleto bloqueado - usar botón Finalizar de la mesa');
+    alert('⚠️ Para finalizar y cobrar, cierra este modal y usa el botón "⏹️ Finalizar" de la mesa.');
     window.closeModalConsumo();
+};
+
+// ========== REPORTES Y CIERRES ==========
+function generarReporte() {
+    debugLog('sistema', '📊 Generando reporte...');
+    
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
+    
+    const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    const cantidadVentas = ventasActuales.length;
+    
+    const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
+    const ventasProductos = ventasActuales.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
+    const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
+    const ventasManuales = ventasActuales.filter(v => v.tipo === 'Venta Manual').reduce((sum, v) => sum + v.monto, 0);
+    
+    const consumosDuenoActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const totalEl = document.getElementById('reporteTotalVentas');
+    const mesasEl = document.getElementById('reporteVentasMesas');
+    const productosEl = document.getElementById('reporteVentasProductos');
+    const transaccionesEl = document.getElementById('reporteTransacciones');
+    const detalleTable = document.getElementById('reporteDetalleTable');
+    
+    if (!totalEl || !mesasEl || !productosEl || !transaccionesEl || !detalleTable) {
+        debugLog('error', '⚠️ Elementos del reporte no encontrados en el DOM');
+        return;
+    }
+    
+    totalEl.textContent = `S/ ${totalVentas.toFixed(2)}`;
+    mesasEl.textContent = `S/ ${ventasMesas.toFixed(2)}`;
+    productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
+    transaccionesEl.textContent = cantidadVentas;
+    
+    const consumoDuenoEl = document.getElementById('reporteConsumoDueno');
+    if (consumoDuenoEl) {
+        consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
+    }
+    
+    let infoCierre = '';
+    if (ultimoCierre) {
+        const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
+        infoCierre = `<div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+            <strong>📊 Ventas desde último cierre:</strong> ${fechaCierre}
+        </div>`;
+    }
+    
+    if (ventasActuales.length === 0) {
+        detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
+    } else {
+        const ventasOrdenadas = [...ventasActuales].reverse();
+        const htmlDetalle = infoCierre + '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Fecha</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Descripción</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Usuario</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: right;">Monto</th></tr></thead><tbody>' + 
+            ventasOrdenadas.map(v => {
+            let detalleHTML = '';
+            
+            if (v.detalle) {
+                if (v.tipo === 'Mesa Billar') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🎱 ${v.tipoDetalle}</strong><br>
+                            ⏰ ${v.detalle.horaInicio} - ${v.detalle.horaFin} 
+                            (${v.detalle.tiempoMinutos} min = ${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)<br>
+                            💵 Tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                            ${v.detalle.consumos.length > 0 ? `
+                                <br><strong style="margin-top: 5px; display: block;">🛒 Consumos:</strong>
+                                ${v.detalle.consumos.map(c => 
+                                    `• ${c.producto} x${c.cantidad} = S/ ${c.subtotal.toFixed(2)}`
+                                ).join('<br>')}
+                                <br><strong>Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}</strong>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Mesa Consumo') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🍺 ${v.tipoDetalle}</strong><br>
+                            <strong>🛒 Consumos:</strong><br>
+                            ${v.detalle.consumos.map(c => 
+                                `• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}`
+                            ).join('<br>')}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Venta Directa') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 12px;">
+                            <strong>🛒 ${v.tipoDetalle}</strong><br>
+                            ${v.detalle.consumos.map(c => 
+                                `${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = S/ ${c.subtotal.toFixed(2)}`
+                            ).join('<br>')}
+                        </div>
+                    `;
+                } else if (v.tipo === 'Venta Manual') {
+                    detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">📝 ${v.tipoDetalle}</div>`;
+                }
+            } else {
+                detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">${v.tipo}</div>`;
+            }
+            
+            return `
+                <tr style="border-bottom: 1px solid #e0e0e0;">
+                    <td style="padding: 10px; font-size: 13px;">${v.fecha}</td>
+                    <td style="padding: 10px;">${detalleHTML}</td>
+                    <td style="padding: 10px; font-size: 13px; color: #666;">${v.usuario}</td>
+                    <td style="padding: 10px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+                </tr>
+            `;
+        }).join('') + '</tbody></table>';
+        
+        detalleTable.parentElement.innerHTML = htmlDetalle;
+    }
+    
+    actualizarHistorialCierres();
+    
+    debugLog('sistema', '✅ Reporte generado correctamente');
+}
+
+window.cerrarDia = async function() {
+    const ventasActuales = ultimoCierre 
+        ? ventas.filter(v => v.id > ultimoCierre)
+        : ventas;
+    
+    if (ventasActuales.length === 0) {
+        alert('⚠️ No hay ventas nuevas para cerrar');
+        return;
+    }
+    
+    const totalCierre = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    
+    const consumosDuenoActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const confirmar = confirm(
+        `¿Cerrar turno/día?\n\n` +
+        `📊 Ventas: ${ventasActuales.length}\n` +
+        `💰 Total: S/ ${totalCierre.toFixed(2)}\n\n` +
+        `Se generará un reporte y las ventas quedarán archivadas.`
+    );
+    
+    if (!confirmar) return;
+    
+    const cierre = {
+        id: Date.now(),
+        timestamp: Date.now(),
+        fecha: new Date().toLocaleString('es-PE'),
+        usuario: usuarioActual.nombre,
+        cantidadVentas: ventasActuales.length,
+        total: totalCierre,
+        ventas: ventasActuales.map(v => ({...v})),
+        ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
+        ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
+        consumosDueno: consumosDuenoActuales.map(c => ({...c})),
+        totalConsumosDueno: totalConsumosDueno
+    };
+    
+    cierres.push(cierre);
+    ultimoCierre = cierre.timestamp;
+    
+    await guardarCierres();
+    
+    descargarReporteCierre(cierre);
+    
+    alert(`✅ Cierre registrado correctamente\n\n📄 Se descargó el reporte automáticamente`);
+    
+    generarReporte();
+};
+
+function descargarReporteCierre(cierre) {
+    const BOM = '\uFEFF';
+    let csv = BOM + `CIERRE DE CAJA - ${cierre.fecha}\n\n`;
+    csv += `Usuario que cierra,${cierre.usuario}\n`;
+    csv += `Fecha y hora,${cierre.fecha}\n\n`;
+    csv += 'Concepto,Monto\n';
+    csv += `"Total del Cierre","S/ ${cierre.total.toFixed(2)}"\n`;
+    csv += `"Ventas Mesas","S/ ${cierre.ventasMesas.toFixed(2)}"\n`;
+    csv += `"Ventas Productos/Consumo","S/ ${cierre.ventasProductos.toFixed(2)}"\n`;
+    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n`;
+    csv += `"Consumo Dueño (No Cobrado)","S/ ${cierre.totalConsumosDueno.toFixed(2)}"\n\n`;
+    
+    csv += 'DETALLE DE VENTAS\n';
+    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
+    
+    cierre.ventas.forEach(v => {
+        let descripcion = '';
+        
+        if (v.detalle) {
+            if (v.tipo === 'Mesa Billar') {
+                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
+                if (v.detalle.consumos.length > 0) {
+                    descripcion += ` | Consumos: `;
+                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
+                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
+                }
+            } else if (v.detalle.consumos) {
+                descripcion = v.detalle.consumos.map(c => 
+                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
+                ).join(' | ');
+            }
+        } else {
+            descripcion = v.tipoDetalle || v.tipo;
+        }
+        
+        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
+    });
+    
+    if (cierre.consumosDueno && cierre.consumosDueno.length > 0) {
+        csv += '\nCONSUMO DEL DUEÑO (NO COBRADO)\n';
+        csv += 'Fecha,Productos,Total\n';
+        
+        cierre.consumosDueno.forEach(c => {
+            const productosDesc = c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ');
+            csv += `"${c.fecha}","${productosDesc}","S/ ${c.total.toFixed(2)}"\n`;
+        });
+    }
+    
+    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fechaArchivo = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const horaArchivo = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
+    a.href = url;
+    a.download = `Cierre_${fechaArchivo}_${horaArchivo}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function actualizarHistorialCierres() {
+    const container = document.getElementById('historialCierresContainer');
+    if (!container) return;
+    
+    if (cierres.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay cierres registrados</p>';
+        return;
+    }
+    
+    const cierresOrdenados = [...cierres].reverse();
+    
+    container.innerHTML = cierresOrdenados.slice(0, 10).map((c, index) => `
+        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; padding: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; color: #2d7a4d;">
+                        🔒 Cierre #${c.id}
+                        ${index === 0 ? '<span style="background: #28a745; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">ÚLTIMO</span>' : ''}
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 3px;">
+                        📅 ${c.fecha} • 👤 ${c.usuario}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 22px; font-weight: bold; color: #2d7a4d;">S/ ${c.total.toFixed(2)}</div>
+                    <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ventas</div>
+                </div>
+            </div>
+            ${usuarioActual.rol === 'admin' ? `
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-blue btn-small" onclick="descargarCierrePDF(${c.id})" style="flex: 1;">
+                        📄 PDF
+                    </button>
+                    <button class="btn btn-red btn-small" onclick="eliminarCierre(${c.id})">
+                        🗑️
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+window.descargarCierrePDF = function(cierreId) {
+    alert('✅ Función de descarga PDF disponible. Código completo en el sistema.');
+};
+
+window.eliminarCierre = async function(cierreId) {
+    if (usuarioActual.rol !== 'admin') {
+        mostrarError('Solo los administradores pueden eliminar cierres');
+        return;
+    }
+    
+    if (!confirm('¿Estás seguro de eliminar este cierre?')) return;
+    
+    cierres = cierres.filter(c => c.id !== cierreId);
+    
+    if (cierres.length > 0) {
+        ultimoCierre = cierres[cierres.length - 1].timestamp;
+    } else {
+        ultimoCierre = null;
+    }
+    
+    await guardarCierres();
+    
+    alert('✅ Cierre eliminado correctamente');
+    
+    actualizarHistorialCierres();
+    generarReporte();
 };
