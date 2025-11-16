@@ -1,5 +1,5 @@
 totalEl.textContent = `S/ ${total.toFixed(2)}`;
-}
+
 
 // ========== CONSUMO DEL DUEÑO ==========
 window.showModalConsumoDueno = function() {
