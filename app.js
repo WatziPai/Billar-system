@@ -1,685 +1,4 @@
-totalEl.textContent = `S/ ${total.toFixed(2)}`;
-
-
-// ========== CONSUMO DEL DUEÑO ==========
-window.showModalConsumoDueno = function() {
-    document.getElementById('modalConsumoDueno').classList.add('show');
-    renderProductosConsumoDueno();
-    actualizarCarritoConsumoDueno();
-};
-
-window.closeModalConsumoDueno = function() {
-    document.getElementById('modalConsumoDueno').classList.remove('show');
-};
-
-let carritoConsumoDueno = [];
-
-function renderProductosConsumoDueno() {
-    const container = document.getElementById('productosConsumoDuenoGrid');
-    
-    if (!container) return;
-    
-    if (productos.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No hay productos disponibles.</p>';
-        return;
-    }
-    
-    container.innerHTML = productos.map(p => {
-        const disponible = p.stock > 0;
-        
-        return `
-            <div class="producto-consumo-card ${!disponible ? 'no-stock' : ''}">
-                <div class="producto-consumo-info">
-                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">${p.nombre}</div>
-                    <div style="font-size: 14px; color: #666; margin-bottom: 5px;">S/ ${p.precio.toFixed(2)}</div>
-                    <div style="font-size: 13px; color: ${p.stock <= 5 ? '#dc3545' : '#28a745'};">
-                        Stock: ${p.stock}
-                    </div>
-                </div>
-                ${disponible ? `
-                    <button class="btn btn-primary btn-small" onclick="agregarProductoConsumoDueno(${p.id})" style="width: 100%;">
-                        ➕ Agregar
-                    </button>
-                ` : `
-                    <button class="btn btn-red btn-small" disabled style="width: 100%;">
-                        Agotado
-                    </button>
-                `}
-            </div>
-        `;
-    }).join('');
-}
-
-window.agregarProductoConsumoDueno = function(productoId) {
-    const producto = productos.find(p => p.id === productoId);
-    if (!producto || producto.stock <= 0) {
-        mostrarError('Producto no disponible');
-        return;
-    }
-    
-    const existente = carritoConsumoDueno.find(c => c.id === productoId);
-    if (existente) {
-        if (existente.cantidad < producto.stock) {
-            existente.cantidad++;
-        } else {
-            mostrarError('No hay suficiente stock');
-            return;
-        }
-    } else {
-        carritoConsumoDueno.push({
-            id: productoId,
-            nombre: producto.nombre,
-            precio: producto.precio,
-            cantidad: 1
-        });
-    }
-    
-    actualizarCarritoConsumoDueno();
-};
-
-window.quitarProductoConsumoDueno = function(productoId) {
-    carritoConsumoDueno = carritoConsumoDueno.filter(c => c.id !== productoId);
-    actualizarCarritoConsumoDueno();
-};
-
-function actualizarCarritoConsumoDueno() {
-    const container = document.getElementById('carritoConsumoDuenoContainer');
-    const totalEl = document.getElementById('totalConsumoDueno');
-    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
-    
-    if (!container || !totalEl) return;
-    
-    if (carritoConsumoDueno.length === 0) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay productos en el carrito</p>';
-        totalEl.textContent = 'S/ 0.00';
-        if (btnGuardar) btnGuardar.disabled = true;
-        return;
-    }
-    
-    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
-    
-    container.innerHTML = carritoConsumoDueno.map(c => `
-        <div class="consumo-item">
-            <div>
-                <div style="font-weight: 600;">${c.nombre}</div>
-                <div style="font-size: 14px; color: #666;">S/ ${c.precio.toFixed(2)} x ${c.cantidad}</div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="font-weight: 600; color: #ff9800;">S/ ${(c.precio * c.cantidad).toFixed(2)}</div>
-                <button class="btn btn-red btn-small" onclick="quitarProductoConsumoDueno(${c.id})">🗑️</button>
-            </div>
-        </div>
-    `).join('');
-    
-    totalEl.textContent = `S/ ${total.toFixed(2)}`;
-    if (btnGuardar) btnGuardar.disabled = false;
-}
-
-window.guardarConsumoDueno = async function() {
-    if (carritoConsumoDueno.length === 0) {
-        mostrarError('El carrito está vacío');
-        return;
-    }
-    
-    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
-    if (btnGuardar) {
-        btnGuardar.disabled = true;
-        btnGuardar.textContent = 'Guardando...';
-    }
-    
-    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
-    
-    const consumo = {
-        id: Date.now(),
-        fecha: new Date().toLocaleString('es-PE'),
-        productos: carritoConsumoDueno.map(c => ({
-            nombre: c.nombre,
-            precio: c.precio,
-            cantidad: c.cantidad
-        })),
-        total: total
-    };
-    
-    carritoConsumoDueno.forEach(c => {
-        const producto = productos.find(p => p.id === c.id);
-        if (producto) {
-            producto.stock -= c.cantidad;
-        }
-    });
-    
-    consumosDueno.push(consumo);
-    
-    await guardarConsumosDueno();
-    await guardarProductos();
-    
-    alert(`✅ Consumo registrado por S/ ${total.toFixed(2)}\n\nNota: Este consumo NO se cobra pero se descuenta del stock.`);
-    
-    carritoConsumoDueno = [];
-    window.closeModalConsumoDueno();
-    actualizarInventario();
-    actualizarConsumoDueno();
-    
-    if (btnGuardar) {
-        btnGuardar.disabled = false;
-        btnGuardar.textContent = 'Guardar Consumo';
-    }
-};
-
-function actualizarConsumoDueno() {
-    debugLog('sistema', '🍽️ Actualizando consumo dueño...');
-    
-    const container = document.getElementById('consumoDuenoContainer');
-    
-    if (!container) {
-        debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
-        return;
-    }
-    
-    container.style.display = 'block';
-    container.style.minHeight = '300px';
-    container.style.visibility = 'visible';
-    container.style.opacity = '1';
-    
-    const consumosActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    
-    debugLog('sistema', `📊 Total consumos: ${consumosDueno.length}, Actuales: ${consumosActuales.length}`);
-    
-    if (consumosActuales.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
-                <p style="font-size: 64px; margin: 0;">🍽️</p>
-                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
-                    No hay consumos registrados
-                </p>
-                <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                    ${ultimoCierre ? 'desde el último cierre' : 'en el sistema'}
-                </p>
-                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 30px; padding: 15px 40px; font-size: 16px;">
-                    ➕ Registrar Primer Consumo
-                </button>
-            </div>
-        `;
-        debugLog('sistema', '✅ Mostrado estado vacío');
-        return;
-    }
-    
-    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const htmlConsumos = consumosActuales.slice().reverse().map(c => `
-        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                <div>
-                    <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
-                </div>
-                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
-            </div>
-            <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px;">
-                ${c.productos.map(p => `
-                    <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
-                        <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
-                        <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
-                    </div>
-                `).join('')}
-            </div>
-            ${usuarioActual.rol === 'admin' ? `
-                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})">
-                        🗑️ Eliminar
-                    </button>
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
-    
-    container.innerHTML = `
-        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong style="font-size: 16px; color: #856404;">💰 Total Consumido</strong>
-                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                        ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
-                        ${ultimoCierre ? 'desde el último cierre' : ''}
-                    </div>
-                </div>
-                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                    S/ ${totalGeneral.toFixed(2)}
-                </div>
-            </div>
-            ${usuarioActual.rol === 'admin' ? `
-                <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="width: 100%; margin-top: 15px;">
-                    📄 Descargar Reporte PDF
-                </button>
-            ` : ''}
-        </div>
-        
-        ${htmlConsumos}
-    `;
-    
-    debugLog('sistema', '✅ Consumos del dueño actualizados correctamente');
-}
-
-window.descargarConsumoDuenoPDF = function() {
-    const consumosActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    
-    if (consumosActuales.length === 0) {
-        alert('⚠️ No hay consumos para descargar');
-        return;
-    }
-    
-    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
-    
-    ventanaImpresion.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Consumo del Dueño</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                }
-                .header {
-                    text-align: center;
-                    border-bottom: 3px solid #ff9800;
-                    padding-bottom: 20px;
-                    margin-bottom: 25px;
-                }
-                h1 {
-                    color: #ff9800;
-                    font-size: 28px;
-                    margin-bottom: 10px;
-                }
-                .total-box {
-                    background: #fff3cd;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 30px;
-                    border-left: 4px solid #ff9800;
-                }
-                .consumo-item {
-                    background: #f9f9f9;
-                    padding: 15px;
-                    border-radius: 6px;
-                    margin-bottom: 12px;
-                    border-left: 4px solid #ff9800;
-                    page-break-inside: avoid;
-                }
-                .consumo-header {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 10px;
-                    padding-bottom: 10px;
-                    border-bottom: 1px solid #e0e0e0;
-                }
-                .footer {
-                    margin-top: 30px;
-                    text-align: center;
-                    color: #999;
-                    font-size: 11px;
-                    border-top: 1px solid #e0e0e0;
-                    padding-top: 15px;
-                }
-                @media print {
-                    body { padding: 15px; }
-                    .no-print { display: none; }
-                    @page { margin: 1cm; }
-                }
-                .btn-imprimir {
-                    background: #ff9800;
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    margin: 15px 0;
-                }
-                .btn-imprimir:hover {
-                    background: #e68900;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="no-print">
-                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            </div>
-            
-            <div class="header">
-                <h1>🍽️ CONSUMO DEL DUEÑO</h1>
-                <p style="color: #666; margin-top: 5px;">Generado: ${new Date().toLocaleString('es-PE')}</p>
-                <p style="color: #856404; margin-top: 10px; font-size: 14px;">⚠️ Estos consumos NO fueron cobrados pero se descontaron del stock</p>
-            </div>
-            
-            <div class="total-box">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong style="font-size: 16px; color: #856404;">Total Consumido</strong>
-                        <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                            ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
-                        </div>
-                    </div>
-                    <div style="font-size: 32px; font-weight: bold; color: #ff9800;">
-                        S/ ${totalGeneral.toFixed(2)}
-                    </div>
-                </div>
-            </div>
-            
-            ${consumosActuales.reverse().map(c => `
-                <div class="consumo-item">
-                    <div class="consumo-header">
-                        <div style="font-weight: bold; color: #333;">${c.fecha}</div>
-                        <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
-                    </div>
-                    <div style="background: #fff3cd; padding: 10px; border-radius: 4px;">
-                        ${c.productos.map(p => `
-                            <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
-                                <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
-                                <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('')}
-            
-            <div class="footer">
-                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
-                <p style="margin-top: 5px;">Documento válido sin firma</p>
-            </div>
-        </body>
-        </html>
-    `);
-    
-    ventanaImpresion.document.close();
-    
-    setTimeout(() => {
-        ventanaImpresion.focus();
-    }, 250);
-    
-    debugLog('sistema', '📄 PDF de consumo dueño generado');
-};
-
-window.eliminarConsumoDueno = async function(consumoId) {
-    if (!confirm('¿Estás seguro de eliminar este registro de consumo?')) return;
-    
-    const consumo = consumosDueno.find(c => c.id === consumoId);
-    if (!consumo) return;
-    
-    consumo.productos.forEach(p => {
-        const producto = productos.find(prod => prod.nombre === p.nombre);
-        if (producto) {
-            producto.stock += p.cantidad;
-        }
-    });
-    
-    consumosDueno = consumosDueno.filter(c => c.id !== consumoId);
-    
-    await guardarConsumosDueno();
-    await guardarProductos();
-    
-    actualizarConsumoDueno();
-    actualizarInventario();
-    
-    alert('✅ Registro eliminado y stock devuelto');
-};
-
-// ========== ERRORES ==========
-window.showModalError = function() {
-    document.getElementById('modalError').classList.add('show');
-    document.getElementById('errorMensaje').value = '';
-};
-
-window.closeModalError = function() {
-    document.getElementById('modalError').classList.remove('show');
-};
-
-window.reportarError = async function() {
-    const descripcion = document.getElementById('errorMensaje').value.trim();
-    
-    if (!descripcion) {
-        mostrarError('Por favor describe el error');
-        return;
-    }
-    
-    const error = {
-        id: Date.now(),
-        descripcion,
-        fecha: new Date().toLocaleString(),
-        usuario: usuarioActual.nombre,
-        estado: 'pendiente'
-    };
-    
-    erroresReportados.push(error);
-    await guardarErrores();
-    
-    alert('Error reportado correctamente. Gracias por tu reporte.');
-    window.closeModalError();
-    
-    debugLog('sistema', '⚠️ Error reportado', { descripcion });
-};
-
-window.toggleEstadoError = async function(id) {
-    const error = erroresReportados.find(e => e.id === id);
-    if (!error) return;
-    
-    error.estado = error.estado === 'pendiente' ? 'resuelto' : 'pendiente';
-    await guardarErrores();
-    actualizarErrores();
-};
-
-window.eliminarError = async function(id) {
-    if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
-    
-    erroresReportados = erroresReportados.filter(e => e.id !== id);
-    await guardarErrores();
-    actualizarErrores();
-};
-
-function actualizarErrores() {
-    let container = document.getElementById('erroresContainer');
-    
-    if (!container) {
-        debugLog('error', '❌ erroresContainer NO encontrado');
-        const tabErrores = document.getElementById('tabErrores');
-        if (!tabErrores) {
-            debugLog('error', '❌ CRÍTICO: tabErrores tampoco existe');
-            return;
-        }
-        
-        container = document.createElement('div');
-        container.id = 'erroresContainer';
-        container.style.padding = '20px';
-        container.style.minHeight = '400px';
-        tabErrores.appendChild(container);
-        
-        debugLog('sistema', '✅ erroresContainer creado dinámicamente');
-    }
-    
-    container.style.display = 'block';
-    container.style.minHeight = '300px';
-    container.style.visibility = 'visible';
-    container.style.opacity = '1';
-    container.style.background = 'white';
-    container.style.padding = '20px';
-    
-    let parent = container.parentElement;
-    let nivel = 0;
-    while (parent && parent !== document.body && nivel < 10) {
-        parent.style.display = 'block';
-        parent.style.visibility = 'visible';
-        parent.style.opacity = '1';
-        
-        debugLog('sistema', `✅ Nivel ${nivel} visible: ${parent.className || parent.id || parent.tagName}`);
-        
-        parent = parent.parentElement;
-        nivel++;
-    }
-    
-    debugLog('sistema', `⚠️ Actualizando errores... Total: ${erroresReportados.length}`);
-    
-    if (erroresReportados.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #333; background: #f0f0f0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px; border: 3px solid #28a745;">
-                <p style="font-size: 64px; margin: 0;">✅</p>
-                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
-                    No hay errores reportados
-                </p>
-                <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                    El sistema está funcionando correctamente
-                </p>
-            </div>
-        `;
-        debugLog('sistema', '✅ Mostrado estado sin errores');
-        return;
-    }
-    
-    const erroresOrdenados = [...erroresReportados].reverse();
-    
-    container.innerHTML = erroresOrdenados.map(e => `
-        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}" style="background: white; border: 3px solid #dc3545; border-radius: 8px; margin-bottom: 12px; padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); min-height: 80px;">
-            <div class="error-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}" style="padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; ${e.estado === 'pendiente' ? 'background: #ffc107; color: #000;' : 'background: #28a745; color: white;'}">
-                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
-                </span>
-                <span style="font-size: 13px; color: #666; font-weight: bold;">${e.fecha}</span>
-            </div>
-            <div class="error-body" style="margin: 12px 0; background: #f8f9fa; padding: 10px; border-radius: 5px;">
-                <p style="margin: 8px 0;"><strong style="color: #dc3545;">📝 Descripción:</strong> <span style="color: #333;">${e.descripcion}</span></p>
-                <p style="margin: 8px 0; color: #666;"><strong>👤 Reportado por:</strong> ${e.usuario}</p>
-            </div>
-            <div class="error-actions" style="display: flex; gap: 8px; margin-top: 12px;">
-                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: bold;">
-                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
-                </button>
-                <button class="btn-small btn-red" onclick="eliminarError(${e.id})" style="padding: 8px 12px; font-size: 13px; font-weight: bold;">
-                    🗑️ Eliminar
-                </button>
-            </div>
-        </div>
-    `).join('');
-    
-    debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
-}
-
-// ========== USUARIOS ==========
-window.toggleUsuarios = function() {
-    const panel = document.getElementById('usuariosPanel');
-    
-    if (panel.classList.contains('hidden')) {
-        panel.classList.remove('hidden');
-        actualizarUsuarios();
-    } else {
-        panel.classList.add('hidden');
-    }
-};
-
-window.showModalUsuario = function(usuarioIdOrNull = null) {
-    if (usuarioActual.rol !== 'admin') return;
-    
-    if (usuarioIdOrNull !== null) {
-        usuarioEditando = usuarios.find(u => u.id === usuarioIdOrNull);
-        if (!usuarioEditando) {
-            mostrarError('Usuario no encontrado');
-            return;
-        }
-    } else {
-        usuarioEditando = null;
-    }
-    
-    const modal = document.getElementById('modalUsuario');
-    const title = document.getElementById('usuarioModalTitle');
-    
-    if (usuarioEditando) {
-        title.textContent = 'Editar Usuario';
-        document.getElementById('nuevoNombre').value = usuarioEditando.nombre;
-        document.getElementById('nuevoUsername').value = usuarioEditando.username;
-        document.getElementById('nuevoPassword').value = '';
-        document.getElementById('nuevoRol').value = usuarioEditando.rol;
-    } else {
-        title.textContent = 'Agregar Usuario';
-        document.getElementById('nuevoNombre').value = '';
-        document.getElementById('nuevoUsername').value = '';
-        document.getElementById('nuevoPassword').value = '';
-        document.getElementById('nuevoRol').value = 'empleado';
-    }
-    
-    document.getElementById('usuarioError').classList.add('hidden');
-    modal.classList.add('show');
-};
-
-window.closeModalUsuario = function() {
-    document.getElementById('modalUsuario').classList.remove('show');
-    usuarioEditando = null;
-};
-
-window.guardarUsuario = async function() {
-    const nombre = document.getElementById('nuevoNombre').value.trim();
-    const username = document.getElementById('nuevoUsername').value.trim();
-    const password = document.getElementById('nuevoPassword').value;
-    const rol = document.getElementById('nuevoRol').value;
-    const errorDiv = document.getElementById('usuarioError');
-    
-    const email = `${username}@billar.app`; 
-    
-    errorDiv.classList.add('hidden');
-    
-    if (!nombre || !username || (!usuarioEditando && !password)) {
-        errorDiv.textContent = 'Por favor completa todos los campos';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
-    if (existente) {
-        errorDiv.textContent = 'El nombre de usuario ya existe';
-        errorDiv.classList.remove('hidden');
-        return;
-    }
-    
-    try {
-        if (usuarioEditando) {
-            usuarioEditando.nombre = nombre;
-            usuarioEditando.username = username;
-            usuarioEditando.rol = rol;
-
-            if (password) {
-                await window.firebaseAuth.updatePassword(usuarioEditando.uid, password); 
-                usuarioEditando.password = password;
-                debugLog('seguridad', '✅ Contraseña de usuario actualizada en Firebase Auth');
-            }
-            
-        } else {
-            const userCredential = await window.firebaseAuth.createUser(email, password); 
-            
-            debugLog('seguridad', '✅ Cuenta de Firebase Auth creada', { email });
-  
-            usuarios.push({
-                id: Date.now(),
-                uid: userCredential.user.uid,
-                username,
-                password,
-                nombre,
-                rol
-            });
-        }
-
-        await guardarUsuarios();
-        actualizarUsuarios();
-        window.closeModalUsuario();
-
-    } catch (error) {
-        console.error('❌ Error al guardar usuario:', error);
-        
-        if// ========== CONFIGURACIÓN DE DEBUGGING ==========
+// ========== CONFIGURACIÓN DE DEBUGGING ==========
 const DEBUG_MODE = true;
 
 function debugLog(categoria, mensaje, datos = null) {
@@ -2126,7 +1445,688 @@ function actualizarListaConsumos() {
         </div>
     `).join('');
     
-    totalEl.textContent =(error.code === 'auth/email-already-in-use') {
+    totalEl.textContent = `S/ ${total.toFixed(2)}`;
+}
+
+// ========== CONSUMO DEL DUEÑO ==========
+window.showModalConsumoDueno = function() {
+    document.getElementById('modalConsumoDueno').classList.add('show');
+    renderProductosConsumoDueno();
+    actualizarCarritoConsumoDueno();
+};
+
+window.closeModalConsumoDueno = function() {
+    document.getElementById('modalConsumoDueno').classList.remove('show');
+};
+
+let carritoConsumoDueno = [];
+
+function renderProductosConsumoDueno() {
+    const container = document.getElementById('productosConsumoDuenoGrid');
+    
+    if (!container) return;
+    
+    if (productos.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No hay productos disponibles.</p>';
+        return;
+    }
+    
+    container.innerHTML = productos.map(p => {
+        const disponible = p.stock > 0;
+        
+        return `
+            <div class="producto-consumo-card ${!disponible ? 'no-stock' : ''}">
+                <div class="producto-consumo-info">
+                    <div style="font-weight: 600; font-size: 16px; margin-bottom: 5px;">${p.nombre}</div>
+                    <div style="font-size: 14px; color: #666; margin-bottom: 5px;">S/ ${p.precio.toFixed(2)}</div>
+                    <div style="font-size: 13px; color: ${p.stock <= 5 ? '#dc3545' : '#28a745'};">
+                        Stock: ${p.stock}
+                    </div>
+                </div>
+                ${disponible ? `
+                    <button class="btn btn-primary btn-small" onclick="agregarProductoConsumoDueno(${p.id})" style="width: 100%;">
+                        ➕ Agregar
+                    </button>
+                ` : `
+                    <button class="btn btn-red btn-small" disabled style="width: 100%;">
+                        Agotado
+                    </button>
+                `}
+            </div>
+        `;
+    }).join('');
+}
+
+window.agregarProductoConsumoDueno = function(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto || producto.stock <= 0) {
+        mostrarError('Producto no disponible');
+        return;
+    }
+    
+    const existente = carritoConsumoDueno.find(c => c.id === productoId);
+    if (existente) {
+        if (existente.cantidad < producto.stock) {
+            existente.cantidad++;
+        } else {
+            mostrarError('No hay suficiente stock');
+            return;
+        }
+    } else {
+        carritoConsumoDueno.push({
+            id: productoId,
+            nombre: producto.nombre,
+            precio: producto.precio,
+            cantidad: 1
+        });
+    }
+    
+    actualizarCarritoConsumoDueno();
+};
+
+window.quitarProductoConsumoDueno = function(productoId) {
+    carritoConsumoDueno = carritoConsumoDueno.filter(c => c.id !== productoId);
+    actualizarCarritoConsumoDueno();
+};
+
+function actualizarCarritoConsumoDueno() {
+    const container = document.getElementById('carritoConsumoDuenoContainer');
+    const totalEl = document.getElementById('totalConsumoDueno');
+    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
+    
+    if (!container || !totalEl) return;
+    
+    if (carritoConsumoDueno.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999;">No hay productos en el carrito</p>';
+        totalEl.textContent = 'S/ 0.00';
+        if (btnGuardar) btnGuardar.disabled = true;
+        return;
+    }
+    
+    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    
+    container.innerHTML = carritoConsumoDueno.map(c => `
+        <div class="consumo-item">
+            <div>
+                <div style="font-weight: 600;">${c.nombre}</div>
+                <div style="font-size: 14px; color: #666;">S/ ${c.precio.toFixed(2)} x ${c.cantidad}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="font-weight: 600; color: #ff9800;">S/ ${(c.precio * c.cantidad).toFixed(2)}</div>
+                <button class="btn btn-red btn-small" onclick="quitarProductoConsumoDueno(${c.id})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+    
+    totalEl.textContent = `S/ ${total.toFixed(2)}`;
+    if (btnGuardar) btnGuardar.disabled = false;
+}
+
+window.guardarConsumoDueno = async function() {
+    if (carritoConsumoDueno.length === 0) {
+        mostrarError('El carrito está vacío');
+        return;
+    }
+    
+    const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
+    if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = 'Guardando...';
+    }
+    
+    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    
+    const consumo = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString('es-PE'),
+        productos: carritoConsumoDueno.map(c => ({
+            nombre: c.nombre,
+            precio: c.precio,
+            cantidad: c.cantidad
+        })),
+        total: total
+    };
+    
+    carritoConsumoDueno.forEach(c => {
+        const producto = productos.find(p => p.id === c.id);
+        if (producto) {
+            producto.stock -= c.cantidad;
+        }
+    });
+    
+    consumosDueno.push(consumo);
+    
+    await guardarConsumosDueno();
+    await guardarProductos();
+    
+    alert(`✅ Consumo registrado por S/ ${total.toFixed(2)}\n\nNota: Este consumo NO se cobra pero se descuenta del stock.`);
+    
+    carritoConsumoDueno = [];
+    window.closeModalConsumoDueno();
+    actualizarInventario();
+    actualizarConsumoDueno();
+    
+    if (btnGuardar) {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = 'Guardar Consumo';
+    }
+};
+
+function actualizarConsumoDueno() {
+    debugLog('sistema', '🍽️ Actualizando consumo dueño...');
+    
+    const container = document.getElementById('consumoDuenoContainer');
+    
+    if (!container) {
+        debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
+        return;
+    }
+    
+    container.style.display = 'block';
+    container.style.minHeight = '300px';
+    container.style.visibility = 'visible';
+    container.style.opacity = '1';
+    
+    const consumosActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    debugLog('sistema', `📊 Total consumos: ${consumosDueno.length}, Actuales: ${consumosActuales.length}`);
+    
+    if (consumosActuales.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
+                <p style="font-size: 64px; margin: 0;">🍽️</p>
+                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
+                    No hay consumos registrados
+                </p>
+                <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                    ${ultimoCierre ? 'desde el último cierre' : 'en el sistema'}
+                </p>
+                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 30px; padding: 15px 40px; font-size: 16px;">
+                    ➕ Registrar Primer Consumo
+                </button>
+            </div>
+        `;
+        debugLog('sistema', '✅ Mostrado estado vacío');
+        return;
+    }
+    
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const htmlConsumos = consumosActuales.slice().reverse().map(c => `
+        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                <div>
+                    <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
+                </div>
+                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+            </div>
+            <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px;">
+                ${c.productos.map(p => `
+                    <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
+                        <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
+                        <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                    </div>
+                `).join('')}
+            </div>
+            ${usuarioActual.rol === 'admin' ? `
+                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})">
+                        🗑️ Eliminar
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+    
+    container.innerHTML = `
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 16px; color: #856404;">💰 Total Consumido</strong>
+                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                        ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
+                        ${ultimoCierre ? 'desde el último cierre' : ''}
+                    </div>
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
+                    S/ ${totalGeneral.toFixed(2)}
+                </div>
+            </div>
+            ${usuarioActual.rol === 'admin' ? `
+                <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="width: 100%; margin-top: 15px;">
+                    📄 Descargar Reporte PDF
+                </button>
+            ` : ''}
+        </div>
+        
+        ${htmlConsumos}
+    `;
+    
+    debugLog('sistema', '✅ Consumos del dueño actualizados correctamente');
+}
+
+window.descargarConsumoDuenoPDF = function() {
+    const consumosActuales = ultimoCierre 
+        ? consumosDueno.filter(c => c.id > ultimoCierre)
+        : consumosDueno;
+    
+    if (consumosActuales.length === 0) {
+        alert('⚠️ No hay consumos para descargar');
+        return;
+    }
+    
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
+    
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Consumo del Dueño</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #ff9800;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #ff9800;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .total-box {
+                    background: #fff3cd;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    border-left: 4px solid #ff9800;
+                }
+                .consumo-item {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin-bottom: 12px;
+                    border-left: 4px solid #ff9800;
+                    page-break-inside: avoid;
+                }
+                .consumo-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #ff9800;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #e68900;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>🍽️ CONSUMO DEL DUEÑO</h1>
+                <p style="color: #666; margin-top: 5px;">Generado: ${new Date().toLocaleString('es-PE')}</p>
+                <p style="color: #856404; margin-top: 10px; font-size: 14px;">⚠️ Estos consumos NO fueron cobrados pero se descontaron del stock</p>
+            </div>
+            
+            <div class="total-box">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="font-size: 16px; color: #856404;">Total Consumido</strong>
+                        <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                            ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
+                        </div>
+                    </div>
+                    <div style="font-size: 32px; font-weight: bold; color: #ff9800;">
+                        S/ ${totalGeneral.toFixed(2)}
+                    </div>
+                </div>
+            </div>
+            
+            ${consumosActuales.reverse().map(c => `
+                <div class="consumo-item">
+                    <div class="consumo-header">
+                        <div style="font-weight: bold; color: #333;">${c.fecha}</div>
+                        <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+                    </div>
+                    <div style="background: #fff3cd; padding: 10px; border-radius: 4px;">
+                        ${c.productos.map(p => `
+                            <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
+                                <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
+                                <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('')}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    ventanaImpresion.document.close();
+    
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
+    
+    debugLog('sistema', '📄 PDF de consumo dueño generado');
+};
+
+window.eliminarConsumoDueno = async function(consumoId) {
+    if (!confirm('¿Estás seguro de eliminar este registro de consumo?')) return;
+    
+    const consumo = consumosDueno.find(c => c.id === consumoId);
+    if (!consumo) return;
+    
+    consumo.productos.forEach(p => {
+        const producto = productos.find(prod => prod.nombre === p.nombre);
+        if (producto) {
+            producto.stock += p.cantidad;
+        }
+    });
+    
+    consumosDueno = consumosDueno.filter(c => c.id !== consumoId);
+    
+    await guardarConsumosDueno();
+    await guardarProductos();
+    
+    actualizarConsumoDueno();
+    actualizarInventario();
+    
+    alert('✅ Registro eliminado y stock devuelto');
+};
+
+// ========== ERRORES ==========
+window.showModalError = function() {
+    document.getElementById('modalError').classList.add('show');
+    document.getElementById('errorMensaje').value = '';
+};
+
+window.closeModalError = function() {
+    document.getElementById('modalError').classList.remove('show');
+};
+
+window.reportarError = async function() {
+    const descripcion = document.getElementById('errorMensaje').value.trim();
+    
+    if (!descripcion) {
+        mostrarError('Por favor describe el error');
+        return;
+    }
+    
+    const error = {
+        id: Date.now(),
+        descripcion,
+        fecha: new Date().toLocaleString(),
+        usuario: usuarioActual.nombre,
+        estado: 'pendiente'
+    };
+    
+    erroresReportados.push(error);
+    await guardarErrores();
+    
+    alert('Error reportado correctamente. Gracias por tu reporte.');
+    window.closeModalError();
+    
+    debugLog('sistema', '⚠️ Error reportado', { descripcion });
+};
+
+window.toggleEstadoError = async function(id) {
+    const error = erroresReportados.find(e => e.id === id);
+    if (!error) return;
+    
+    error.estado = error.estado === 'pendiente' ? 'resuelto' : 'pendiente';
+    await guardarErrores();
+    actualizarErrores();
+};
+
+window.eliminarError = async function(id) {
+    if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
+    
+    erroresReportados = erroresReportados.filter(e => e.id !== id);
+    await guardarErrores();
+    actualizarErrores();
+};
+
+function actualizarErrores() {
+    let container = document.getElementById('erroresContainer');
+    
+    if (!container) {
+        debugLog('error', '❌ erroresContainer NO encontrado');
+        const tabErrores = document.getElementById('tabErrores');
+        if (!tabErrores) {
+            debugLog('error', '❌ CRÍTICO: tabErrores tampoco existe');
+            return;
+        }
+        
+        container = document.createElement('div');
+        container.id = 'erroresContainer';
+        container.style.padding = '20px';
+        container.style.minHeight = '400px';
+        tabErrores.appendChild(container);
+        
+        debugLog('sistema', '✅ erroresContainer creado dinámicamente');
+    }
+    
+    container.style.display = 'block';
+    container.style.minHeight = '300px';
+    container.style.visibility = 'visible';
+    container.style.opacity = '1';
+    container.style.background = 'white';
+    container.style.padding = '20px';
+    
+    let parent = container.parentElement;
+    let nivel = 0;
+    while (parent && parent !== document.body && nivel < 10) {
+        parent.style.display = 'block';
+        parent.style.visibility = 'visible';
+        parent.style.opacity = '1';
+        
+        debugLog('sistema', `✅ Nivel ${nivel} visible: ${parent.className || parent.id || parent.tagName}`);
+        
+        parent = parent.parentElement;
+        nivel++;
+    }
+    
+    debugLog('sistema', `⚠️ Actualizando errores... Total: ${erroresReportados.length}`);
+    
+    if (erroresReportados.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 50px; color: #333; background: #f0f0f0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px; border: 3px solid #28a745;">
+                <p style="font-size: 64px; margin: 0;">✅</p>
+                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
+                    No hay errores reportados
+                </p>
+                <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                    El sistema está funcionando correctamente
+                </p>
+            </div>
+        `;
+        debugLog('sistema', '✅ Mostrado estado sin errores');
+        return;
+    }
+    
+    const erroresOrdenados = [...erroresReportados].reverse();
+    
+    container.innerHTML = erroresOrdenados.map(e => `
+        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}" style="background: white; border: 3px solid #dc3545; border-radius: 8px; margin-bottom: 12px; padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); min-height: 80px;">
+            <div class="error-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}" style="padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; ${e.estado === 'pendiente' ? 'background: #ffc107; color: #000;' : 'background: #28a745; color: white;'}">
+                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
+                </span>
+                <span style="font-size: 13px; color: #666; font-weight: bold;">${e.fecha}</span>
+            </div>
+            <div class="error-body" style="margin: 12px 0; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+                <p style="margin: 8px 0;"><strong style="color: #dc3545;">📝 Descripción:</strong> <span style="color: #333;">${e.descripcion}</span></p>
+                <p style="margin: 8px 0; color: #666;"><strong>👤 Reportado por:</strong> ${e.usuario}</p>
+            </div>
+            <div class="error-actions" style="display: flex; gap: 8px; margin-top: 12px;">
+                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: bold;">
+                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
+                </button>
+                <button class="btn-small btn-red" onclick="eliminarError(${e.id})" style="padding: 8px 12px; font-size: 13px; font-weight: bold;">
+                    🗑️ Eliminar
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
+}
+
+// ========== USUARIOS ==========
+window.toggleUsuarios = function() {
+    const panel = document.getElementById('usuariosPanel');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        actualizarUsuarios();
+    } else {
+        panel.classList.add('hidden');
+    }
+};
+
+window.showModalUsuario = function(usuarioIdOrNull = null) {
+    if (usuarioActual.rol !== 'admin') return;
+    
+    if (usuarioIdOrNull !== null) {
+        usuarioEditando = usuarios.find(u => u.id === usuarioIdOrNull);
+        if (!usuarioEditando) {
+            mostrarError('Usuario no encontrado');
+            return;
+        }
+    } else {
+        usuarioEditando = null;
+    }
+    
+    const modal = document.getElementById('modalUsuario');
+    const title = document.getElementById('usuarioModalTitle');
+    
+    if (usuarioEditando) {
+        title.textContent = 'Editar Usuario';
+        document.getElementById('nuevoNombre').value = usuarioEditando.nombre;
+        document.getElementById('nuevoUsername').value = usuarioEditando.username;
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = usuarioEditando.rol;
+    } else {
+        title.textContent = 'Agregar Usuario';
+        document.getElementById('nuevoNombre').value = '';
+        document.getElementById('nuevoUsername').value = '';
+        document.getElementById('nuevoPassword').value = '';
+        document.getElementById('nuevoRol').value = 'empleado';
+    }
+    
+    document.getElementById('usuarioError').classList.add('hidden');
+    modal.classList.add('show');
+};
+
+window.closeModalUsuario = function() {
+    document.getElementById('modalUsuario').classList.remove('show');
+    usuarioEditando = null;
+};
+
+window.guardarUsuario = async function() {
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const username = document.getElementById('nuevoUsername').value.trim();
+    const password = document.getElementById('nuevoPassword').value;
+    const rol = document.getElementById('nuevoRol').value;
+    const errorDiv = document.getElementById('usuarioError');
+    
+    const email = `${username}@billar.app`; 
+    
+    errorDiv.classList.add('hidden');
+    
+    if (!nombre || !username || (!usuarioEditando && !password)) {
+        errorDiv.textContent = 'Por favor completa todos los campos';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    const existente = usuarios.find(u => u.username === username && u.id !== (usuarioEditando ? usuarioEditando.id : null));
+    if (existente) {
+        errorDiv.textContent = 'El nombre de usuario ya existe';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        if (usuarioEditando) {
+            usuarioEditando.nombre = nombre;
+            usuarioEditando.username = username;
+            usuarioEditando.rol = rol;
+
+            if (password) {
+                await window.firebaseAuth.updatePassword(usuarioEditando.uid, password); 
+                usuarioEditando.password = password;
+                debugLog('seguridad', '✅ Contraseña de usuario actualizada en Firebase Auth');
+            }
+            
+        } else {
+            const userCredential = await window.firebaseAuth.createUser(email, password); 
+            
+            debugLog('seguridad', '✅ Cuenta de Firebase Auth creada', { email });
+  
+            usuarios.push({
+                id: Date.now(),
+                uid: userCredential.user.uid,
+                username,
+                password,
+                nombre,
+                rol
+            });
+        }
+
+        await guardarUsuarios();
+        actualizarUsuarios();
+        window.closeModalUsuario();
+
+    } catch (error) {
+        console.error('❌ Error al guardar usuario:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
             errorDiv.textContent = 'El nombre de usuario ya existe (usado en Firebase)';
         } else if (error.code === 'auth/weak-password') {
             errorDiv.textContent = 'Contraseña muy débil (mínimo 6 caracteres)';
@@ -2338,7 +2338,7 @@ window.cerrarDia = async function() {
     
     const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
     
-    const confirmar = confirm(
+   const confirmar = confirm(
         `¿Cerrar turno/día?\n\n` +
         `📊 Ventas: ${ventasActuales.length}\n` +
         `💰 Total: S/ ${totalCierre.toFixed(2)}\n\n` +
@@ -2477,7 +2477,13 @@ function actualizarHistorialCierres() {
 }
 
 window.descargarCierrePDF = function(cierreId) {
-    alert('✅ Función de descarga PDF disponible. Código completo en el sistema.');
+    const cierre = cierres.find(c => c.id === cierreId);
+    if (!cierre) {
+        alert('⚠️ Cierre no encontrado');
+        return;
+    }
+    
+    descargarReporteCierre(cierre);
 };
 
 window.eliminarCierre = async function(cierreId) {
@@ -2503,98 +2509,3 @@ window.eliminarCierre = async function(cierreId) {
     actualizarHistorialCierres();
     generarReporte();
 };
-
-function actualizarConsumoDueno() {
-    debugLog('sistema', '🍽️ Actualizando consumo dueño...');
-    
-    const container = document.getElementById('consumoDuenoContainer');
-    
-    if (!container) {
-        debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
-        return;
-    }
-    
-    container.style.display = 'block';
-    container.style.minHeight = '300px';
-    container.style.visibility = 'visible';
-    container.style.opacity = '1';
-    
-    const consumosActuales = ultimoCierre 
-        ? consumosDueno.filter(c => c.id > ultimoCierre)
-        : consumosDueno;
-    
-    debugLog('sistema', `📊 Total consumos: ${consumosDueno.length}, Actuales: ${consumosActuales.length}`);
-    
-    if (consumosActuales.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #666; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
-                <p style="font-size: 64px; margin: 0;">🍽️</p>
-                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
-                    No hay consumos registrados
-                </p>
-                <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                    ${ultimoCierre ? 'desde el último cierre' : 'en el sistema'}
-                </p>
-                <button class="btn btn-primary" onclick="showModalConsumoDueno()" style="margin-top: 30px; padding: 15px 40px; font-size: 16px;">
-                    ➕ Registrar Primer Consumo
-                </button>
-            </div>
-        `;
-        debugLog('sistema', '✅ Mostrado estado vacío');
-        return;
-    }
-    
-    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
-    
-    const htmlConsumos = consumosActuales.slice().reverse().map(c => `
-        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                <div>
-                    <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
-                </div>
-                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
-            </div>
-            <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px;">
-                ${c.productos.map(p => `
-                    <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
-                        <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
-                        <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
-                    </div>
-                `).join('')}
-            </div>
-            ${usuarioActual.rol === 'admin' ? `
-                <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
-                    <button class="btn btn-red btn-small" onclick="eliminarConsumoDueno(${c.id})">
-                        🗑️ Eliminar
-                    </button>
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
-    
-    container.innerHTML = `
-        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong style="font-size: 16px; color: #856404;">💰 Total Consumido</strong>
-                    <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                        ${consumosActuales.length} ${consumosActuales.length === 1 ? 'registro' : 'registros'}
-    ${ultimoCierre ? 'desde el último cierre' : ''}
-                    </div>
-                </div>
-                <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                    S/ ${totalGeneral.toFixed(2)}
-                </div>
-            </div>
-            ${usuarioActual.rol === 'admin' ? `
-                <button class="btn btn-blue" onclick="descargarConsumoDuenoPDF()" style="width: 100%; margin-top: 15px;">
-                    📄 Descargar Reporte PDF
-                </button>
-            ` : ''}
-        </div>
-        
-        ${htmlConsumos}
-    `;
-    
-    debugLog('sistema', '✅ Consumos del dueño actualizados correctamente');
-}
