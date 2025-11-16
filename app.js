@@ -1975,7 +1975,7 @@ function actualizarErrores() {
         debugLog('sistema', '✅ Mostrado estado sin errores');
         return;
     }
-    
+}
     const erroresOrdenados = [...erroresReportados].reverse();
     
     container.innerHTML = erroresOrdenados.map(e => `
