@@ -1648,34 +1648,6 @@ window.guardarConsumoDueno = async function() {
     
     debugLog('sistema', `⚠️ Actualizando errores... Total: ${erroresReportados.length}`);
     
-    // 🔍 DIAGNÓSTICO VISUAL
-    const diagnostico = {
-        containerExiste: !!container,
-        containerVisible: container.style.display !== 'none',
-        padreClasses: container.parentElement?.className,
-        innerHTML: container.innerHTML.length
-    };
-    debugLog('sistema', '🔍 Diagnóstico visual:', diagnostico);
-    
-    if (erroresReportados.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #333; background: #f0f0f0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px; border: 3px solid #28a745;">
-                <p style="font-size: 64px; margin: 0;">✅</p>
-                <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
-                    No hay errores reportados
-                </p>
-                <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                    El sistema está funcionando correctamente
-                </p>
-                <div style="margin-top: 20px; padding: 10px; background: yellow; color: black; font-weight: bold;">
-                    🔍 TEST: Si ves este mensaje, el contenedor SÍ está visible
-                </div>
-            </div>
-        `;
-        debugLog('sistema', '✅ Mostrado estado sin errores');
-        return;
-    }
-    
     const erroresOrdenados = [...erroresReportados].reverse();
     
     container.innerHTML = erroresOrdenados.map(e => `
