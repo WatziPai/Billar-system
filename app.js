@@ -1674,7 +1674,6 @@ window.guardarConsumoDueno = async function() {
     `).join('');
     
     debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
-}
     
     // 🔍 DIAGNÓSTICO VISUAL
     const diagnostico = {
