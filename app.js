@@ -1623,29 +1623,6 @@ window.guardarConsumoDueno = async function() {
     }
 };
 
-function actualizarErrores() {
-    let container = document.getElementById('erroresContainer');
-    
-    // 🔧 AUTO-REPARACIÓN: Si no existe el contenedor, crearlo
-    if (!container) {
-        debugLog('error', '❌ erroresContainer NO encontrado, creando automáticamente...');
-        
-        const tabErrores = document.getElementById('tabErrores');
-        if (!tabErrores) {
-            debugLog('error', '❌ CRÍTICO: tabErrores tampoco existe');
-            alert('ERROR CRÍTICO: El tab de errores no existe en el HTML. Contacta al desarrollador.');
-            return;
-        }
-        
-        // Crear el contenedor dinámicamente
-        container = document.createElement('div');
-        container.id = 'erroresContainer';
-        container.style.padding = '20px';
-        container.style.minHeight = '400px';
-        tabErrores.appendChild(container);
-        
-        debugLog('sistema', '✅ erroresContainer creado dinámicamente');
-    }
     
     // FORZAR VISIBILIDAD DEL CONTENEDOR Y TODA SU JERARQUÍA
     container.style.display = 'block';
@@ -2061,26 +2038,66 @@ window.eliminarError = async function(id) {
     await guardarErrores();
     actualizarErrores();
 };
-
 function actualizarErrores() {
-    const container = document.getElementById('erroresContainer');
+    let container = document.getElementById('erroresContainer');
+    
+    // 🔧 AUTO-REPARACIÓN: Si no existe el contenedor, crearlo
     if (!container) {
-        debugLog('error', '❌ Contenedor erroresContainer NO ENCONTRADO en el DOM');
-        alert('ERROR: No se encontró el contenedor de errores. Verifica el HTML.');
-        return;
+        debugLog('error', '❌ erroresContainer NO encontrado, creando automáticamente...');
+        
+        const tabErrores = document.getElementById('tabErrores');
+        if (!tabErrores) {
+            debugLog('error', '❌ CRÍTICO: tabErrores tampoco existe');
+            alert('ERROR CRÍTICO: El tab de errores no existe en el HTML. Contacta al desarrollador.');
+            return;
+        }
+        
+        // Crear el contenedor dinámicamente
+        container = document.createElement('div');
+        container.id = 'erroresContainer';
+        container.style.padding = '20px';
+        container.style.minHeight = '400px';
+        tabErrores.appendChild(container);
+        
+        debugLog('sistema', '✅ erroresContainer creado dinámicamente');
     }
     
-    // FORZAR VISIBILIDAD
+    // FORZAR VISIBILIDAD DEL CONTENEDOR Y TODA SU JERARQUÍA
     container.style.display = 'block';
     container.style.minHeight = '300px';
     container.style.visibility = 'visible';
     container.style.opacity = '1';
+    container.style.background = 'white';
+    container.style.padding = '20px';
+    
+    // Forzar visibilidad de TODOS los padres hasta llegar al body
+    let parent = container.parentElement;
+    let nivel = 0;
+    while (parent && parent !== document.body && nivel < 10) {
+        parent.style.display = 'block';
+        parent.style.visibility = 'visible';
+        parent.style.opacity = '1';
+        
+        debugLog('sistema', `✅ Nivel ${nivel} visible: ${parent.className || parent.id || parent.tagName}`);
+        
+        parent = parent.parentElement;
+        nivel++;
+    }
     
     debugLog('sistema', `⚠️ Actualizando errores... Total: ${erroresReportados.length}`);
     
+    // 🔍 DIAGNÓSTICO VISUAL
+    const diagnostico = {
+        containerExiste: !!container,
+        containerVisible: container.style.display !== 'none',
+        padreClasses: container.parentElement?.className,
+        innerHTML: container.innerHTML.length
+    };
+    debugLog('sistema', '🔍 Diagnóstico visual:', diagnostico);
+    
     if (erroresReportados.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #999; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px;">
+            <div style="text-align: center; padding: 50px; color: #333; background: #f0f0f0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 300px; border: 3px solid #28a745;">
                 <p style="font-size: 64px; margin: 0;">✅</p>
                 <p style="margin-top: 20px; font-size: 18px; font-weight: 600; color: #333;">
                     No hay errores reportados
@@ -2088,10 +2105,42 @@ function actualizarErrores() {
                 <p style="margin-top: 10px; font-size: 14px; color: #666;">
                     El sistema está funcionando correctamente
                 </p>
+                <div style="margin-top: 20px; padding: 10px; background: yellow; color: black; font-weight: bold;">
+                    🔍 TEST: Si ves este mensaje, el contenedor SÍ está visible
+                </div>
             </div>
         `;
         debugLog('sistema', '✅ Mostrado estado sin errores');
         return;
+    }
+    
+    const erroresOrdenados = [...erroresReportados].reverse();
+    
+    container.innerHTML = erroresOrdenados.map(e => `
+        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}" style="background: white; border: 3px solid #dc3545; border-radius: 8px; margin-bottom: 12px; padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); min-height: 80px;">
+            <div class="error-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}" style="padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; ${e.estado === 'pendiente' ? 'background: #ffc107; color: #000;' : 'background: #28a745; color: white;'}">
+                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
+                </span>
+                <span style="font-size: 13px; color: #666; font-weight: bold;">${e.fecha}</span>
+            </div>
+            <div class="error-body" style="margin: 12px 0; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+                <p style="margin: 8px 0;"><strong style="color: #dc3545;">📝 Descripción:</strong> <span style="color: #333;">${e.descripcion}</span></p>
+                <p style="margin: 8px 0; color: #666;"><strong>👤 Reportado por:</strong> ${e.usuario}</p>
+            </div>
+            <div class="error-actions" style="display: flex; gap: 8px; margin-top: 12px;">
+                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: bold;">
+                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
+                </button>
+                <button class="btn-small btn-red" onclick="eliminarError(${e.id})" style="padding: 8px 12px; font-size: 13px; font-weight: bold;">
+                    🗑️ Eliminar
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
+}
 
     const erroresOrdenados = [...erroresReportados].reverse();
     
