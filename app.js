@@ -2483,29 +2483,267 @@ window.descargarCierrePDF = function(cierreId) {
         return;
     }
     
-    descargarReporteCierre(cierre);
-};
-
-window.eliminarCierre = async function(cierreId) {
-    if (usuarioActual.rol !== 'admin') {
-        mostrarError('Solo los administradores pueden eliminar cierres');
-        return;
-    }
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
     
-    if (!confirm('¿Estás seguro de eliminar este cierre?')) return;
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Cierre de Caja #${cierre.id}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    padding: 30px;
+                    background: white;
+                    color: #333;
+                }
+                .header {
+                    text-align: center;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 20px;
+                    margin-bottom: 25px;
+                }
+                h1 {
+                    color: #2d7a4d;
+                    font-size: 28px;
+                    margin-bottom: 10px;
+                }
+                .resumen-box {
+                    background: #e8f5e9;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    border-left: 4px solid #2d7a4d;
+                }
+                .resumen-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                    margin-top: 15px;
+                }
+                .resumen-item {
+                    padding: 10px;
+                    background: white;
+                    border-radius: 5px;
+                }
+                .venta-item {
+                    background: #f9f9f9;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin-bottom: 12px;
+                    border-left: 4px solid #2d7a4d;
+                    page-break-inside: avoid;
+                }
+                .venta-header {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 10px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                .detalle-venta {
+                    background: #fff;
+                    padding: 10px;
+                    border-radius: 4px;
+                    margin-top: 8px;
+                    font-size: 12px;
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 11px;
+                    border-top: 1px solid #e0e0e0;
+                    padding-top: 15px;
+                }
+                @media print {
+                    body { padding: 15px; }
+                    .no-print { display: none; }
+                    @page { margin: 1cm; }
+                }
+                .btn-imprimir {
+                    background: #2d7a4d;
+                    color: white;
+                    border: none;
+                    padding: 12px 30px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    margin: 15px 0;
+                }
+                .btn-imprimir:hover {
+                    background: #1f5a37;
+                }
+                .consumo-dueno {
+                    background: #fff3cd;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                    border-left: 4px solid #ff9800;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="no-print">
+                <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            </div>
+            
+            <div class="header">
+                <h1>🔒 CIERRE DE CAJA #${cierre.id}</h1>
+                <p style="color: #666; margin-top: 5px;">Fecha: ${cierre.fecha}</p>
+                <p style="color: #666; margin-top: 5px;">Usuario: ${cierre.usuario}</p>
+            </div>
+            
+            <div class="resumen-box">
+                <h2 style="font-size: 18px; color: #2d7a4d; margin-bottom: 15px;">📊 Resumen del Cierre</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 15px; background: white; border-radius: 8px;">
+                    <div>
+                        <strong style="font-size: 16px; color: #2d7a4d;">Total General</strong>
+                        <div style="font-size: 13px; color: #666; margin-top: 5px;">
+                            ${cierre.cantidadVentas} ${cierre.cantidadVentas === 1 ? 'transacción' : 'transacciones'}
+                        </div>
+                    </div>
+                    <div style="font-size: 32px; font-weight: bold; color: #2d7a4d;">
+                        S/ ${cierre.total.toFixed(2)}
+                    </div>
+                </div>
+                
+                <div class="resumen-grid">
+                    <div class="resumen-item">
+                        <div style="font-size: 12px; color: #666;">Ventas Mesas de Billar</div>
+                        <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item">
+                        <div style="font-size: 12px; color: #666;">Ventas Productos/Consumo</div>
+                        <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <h2 style="font-size: 18px; color: #333; margin-bottom: 15px; margin-top: 30px;">📋 Detalle de Ventas</h2>
+            
+            ${cierre.ventas.map(v => {
+                let detalleHTML = '';
+                
+                if (v.detalle) {
+                    if (v.tipo === 'Mesa Billar') {
+                        detalleHTML = `
+                            <div class="detalle-venta">
+                                <strong>🎱 Mesa de Billar ${v.detalle.mesaId}</strong><br>
+                                <div style="margin-top: 8px;">
+                                    ⏰ Horario: ${v.detalle.horaInicio} - ${v.detalle.horaFin}<br>
+                                    ⏱️ Tiempo: ${v.detalle.tiempoMinutos} minutos (${v.detalle.tiempoHoras}h ${v.detalle.tiempoMinutosExtra}min)<br>
+                                    💵 Costo tiempo: S/ ${v.detalle.costoTiempo.toFixed(2)}
+                                </div>
+                                ${v.detalle.consumos.length > 0 ? `
+                                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                                        <strong>🛒 Consumos:</strong><br>
+                                        ${v.detalle.consumos.map(c => 
+                                            `<div style="margin: 3px 0;">• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}</div>`
+                                        ).join('')}
+                                        <div style="margin-top: 5px; font-weight: bold;">Total Consumos: S/ ${v.detalle.totalConsumos.toFixed(2)}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    } else if (v.tipo === 'Mesa Consumo') {
+                        detalleHTML = `
+                            <div class="detalle-venta">
+                                <strong>🍺 ${v.tipoDetalle}</strong><br>
+                                <div style="margin-top: 8px;">
+                                    <strong>🛒 Consumos:</strong><br>
+                                    ${v.detalle.consumos.map(c => 
+                                        `<div style="margin: 3px 0;">• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}</div>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                        `;
+                    } else if (v.tipo === 'Venta Directa') {
+                        detalleHTML = `
+                            <div class="detalle-venta">
+                                <strong>🛒 Venta Directa</strong><br>
+                                <div style="margin-top: 8px;">
+                                    ${v.detalle.consumos.map(c => 
+                                        `<div style="margin: 3px 0;">${c.producto}: ${c.cantidad} × S/ ${c.precioUnitario.toFixed(2)} = S/ ${c.subtotal.toFixed(2)}</div>`
+                                    ).join('')}
+                                </div>
+                            </div>
+                        `;
+                    } else if (v.tipo === 'Venta Manual') {
+                        detalleHTML = `<div class="detalle-venta">📝 ${v.tipoDetalle}</div>`;
+                    }
+                } else {
+                    detalleHTML = `<div class="detalle-venta">${v.tipoDetalle || v.tipo}</div>`;
+                }
+                
+                return `
+                    <div class="venta-item">
+                        <div class="venta-header">
+                            <div>
+                                <div style="font-weight: bold; color: #333;">${v.fecha}</div>
+                                <div style="font-size: 12px; color: #666; margin-top: 3px;">Usuario: ${v.usuario}</div>
+                            </div>
+                            <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</div>
+                        </div>
+                        ${detalleHTML}
+                    </div>
+                `;
+            }).join('')}
+            
+            ${cierre.consumosDueno && cierre.consumosDueno.length > 0 ? `
+                <div class="consumo-dueno">
+                    <h2 style="font-size: 18px; color: #856404; margin-bottom: 15px;">🍽️ Consumo del Dueño (No Cobrado)</h2>
+                    <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="font-size: 16px; color: #856404;">Total Consumido</strong>
+                                <div style="font-size: 13px; color: #856404; margin-top: 5px;">
+                                    ${cierre.consumosDueno.length} ${cierre.consumosDueno.length === 1 ? 'registro' : 'registros'}
+                                </div>
+                            </div>
+                            <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
+                                S/ ${cierre.totalConsumosDueno.toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${cierre.consumosDueno.map(c => `
+                        <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <strong>${c.fecha}</strong>
+                                <strong style="color: #ff9800;">S/ ${c.total.toFixed(2)}</strong>
+                            </div>
+                            <div style="font-size: 12px;">
+                                ${c.productos.map(p => 
+                                    `<div style="margin: 2px 0;">• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u) = S/ ${(p.precio * p.cantidad).toFixed(2)}</div>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    <div style="background: #fff; padding: 12px; border-radius: 6px; margin-top: 15px; border: 2px solid #ff9800;">
+                        <p style="font-size: 12px; color: #856404; text-align: center;">
+                            ⚠️ Estos consumos NO fueron cobrados pero se descontaron del stock
+                        </p>
+                    </div>
+                </div>
+            ` : ''}
+            
+            <div class="footer">
+                <p>Sistema de Gestión de Billar • Reporte generado automáticamente</p>
+                <p style="margin-top: 5px;">Documento válido sin firma</p>
+            </div>
+        </body>
+        </html>
+    `);
     
-    cierres = cierres.filter(c => c.id !== cierreId);
+    ventanaImpresion.document.close();
     
-    if (cierres.length > 0) {
-        ultimoCierre = cierres[cierres.length - 1].timestamp;
-    } else {
-        ultimoCierre = null;
-    }
+    setTimeout(() => {
+        ventanaImpresion.focus();
+    }, 250);
     
-    await guardarCierres();
-    
-    alert('✅ Cierre eliminado correctamente');
-    
-    actualizarHistorialCierres();
-    generarReporte();
+    debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
 };
