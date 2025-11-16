@@ -187,8 +187,21 @@ window.changeTab = function(tab, event) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     
-    const tabContent = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
-    if (tabContent) tabContent.classList.add('active');
+    // Manejar el ID especial para consumoDueno
+    let tabContentId;
+    if (tab === 'consumoDueno') {
+        tabContentId = 'consumoDuenoTab'; // ID real en el HTML
+    } else {
+        tabContentId = 'tab' + tab.charAt(0).toUpperCase() + tab.slice(1);
+    }
+    
+    const tabContent = document.getElementById(tabContentId);
+    if (tabContent) {
+        tabContent.classList.add('active');
+        debugLog('sistema', `✅ Tab activado: ${tabContentId}`);
+    } else {
+        debugLog('error', `❌ Tab no encontrado: ${tabContentId}`);
+    }
     
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
     
@@ -1617,9 +1630,11 @@ function actualizarConsumoDueno() {
     
     if (!container) {
         debugLog('error', '❌ consumoDuenoContainer no encontrado en el DOM');
+        alert('ERROR CRÍTICO: No se encontró el contenedor. Verifica el HTML.');
         return;
     }
     
+    // FORZAR VISIBILIDAD
     container.style.display = 'block';
     container.style.minHeight = '300px';
     container.style.visibility = 'visible';
@@ -1629,7 +1644,7 @@ function actualizarConsumoDueno() {
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
     
-    debugLog('sistema', `📊 Consumos después del último cierre: ${consumosActuales.length}`);
+    debugLog('sistema', `📊 Total consumos: ${consumosDueno.length}, Actuales: ${consumosActuales.length}`);
     
     if (consumosActuales.length === 0) {
         container.innerHTML = `
@@ -1646,14 +1661,15 @@ function actualizarConsumoDueno() {
                 </button>
             </div>
         `;
+        debugLog('sistema', '✅ Mostrado estado vacío');
         return;
     }
     
     const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
     
-    const htmlConsumos = consumosActuales.reverse().map(c => `
-        <div class="consumo-dueno-card">
-            <div class="consumo-dueno-header">
+    const htmlConsumos = consumosActuales.slice().reverse().map(c => `
+        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                 <div>
                     <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
                 </div>
@@ -2199,8 +2215,8 @@ function generarReporte() {
         detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
     } else {
         const ventasOrdenadas = [...ventasActuales].reverse();
-        const htmlDetalle = infoCierre + '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Fecha</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Descripción</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: left;">Usuario</th><th style="background: #2d7a4d; color: white; padding: 12px; text-align: right;">Monto</th></tr></thead><tbody>' + 
-            ventasOrdenadas.map(v => {
+        
+        let htmlFilas = ventasOrdenadas.map(v => {
             let detalleHTML = '';
             
             if (v.detalle) {
@@ -2254,9 +2270,18 @@ function generarReporte() {
                     <td style="padding: 10px; text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
                 </tr>
             `;
-        }).join('') + '</tbody></table>';
+        }).join('');
         
-        detalleTable.parentElement.innerHTML = htmlDetalle;
+        detalleTable.innerHTML = htmlFilas;
+        
+        // Insertar info de cierre ANTES de la tabla
+        const container = document.getElementById('reporteDetalleContainer');
+        if (container && infoCierre) {
+            const tabla = container.querySelector('table');
+            if (tabla) {
+                tabla.insertAdjacentHTML('beforebegin', infoCierre);
+            }
+        }
     }
     
     actualizarHistorialCierres();
