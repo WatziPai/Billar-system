@@ -2028,7 +2028,6 @@ function actualizarErrores() {
     `).join('');
     
     debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
-}
 
 // ========== USUARIOS ==========
 window.toggleUsuarios = function() {
