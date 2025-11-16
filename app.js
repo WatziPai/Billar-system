@@ -2001,34 +2001,6 @@ function actualizarErrores() {
     
     debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
 }
-    
-    const erroresOrdenados = [...erroresReportados].reverse();
-    
-    container.innerHTML = erroresOrdenados.map(e => `
-        <div class="error-card ${e.estado === 'resuelto' ? 'error-resuelto' : ''}" style="background: white; border: 3px solid #dc3545; border-radius: 8px; margin-bottom: 12px; padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); min-height: 80px;">
-            <div class="error-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <span class="badge ${e.estado === 'pendiente' ? 'badge-warning' : 'badge-success'}" style="padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; ${e.estado === 'pendiente' ? 'background: #ffc107; color: #000;' : 'background: #28a745; color: white;'}">
-                    ${e.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Resuelto'}
-                </span>
-                <span style="font-size: 13px; color: #666; font-weight: bold;">${e.fecha}</span>
-            </div>
-            <div class="error-body" style="margin: 12px 0; background: #f8f9fa; padding: 10px; border-radius: 5px;">
-                <p style="margin: 8px 0;"><strong style="color: #dc3545;">📝 Descripción:</strong> <span style="color: #333;">${e.descripcion}</span></p>
-                <p style="margin: 8px 0; color: #666;"><strong>👤 Reportado por:</strong> ${e.usuario}</p>
-            </div>
-            <div class="error-actions" style="display: flex; gap: 8px; margin-top: 12px;">
-                <button class="btn-small btn-blue" onclick="toggleEstadoError(${e.id})" style="flex: 1; padding: 8px 12px; font-size: 13px; font-weight: bold;">
-                    ${e.estado === 'pendiente' ? '✓ Marcar Resuelto' : '↻ Reabrir'}
-                </button>
-                <button class="btn-small btn-red" onclick="eliminarError(${e.id})" style="padding: 8px 12px; font-size: 13px; font-weight: bold;">
-                    🗑️ Eliminar
-                </button>
-            </div>
-        </div>
-    `).join('');
-    
-    debugLog('sistema', '✅ Errores actualizados correctamente', { total: erroresReportados.length });
-
 // ========== USUARIOS ==========
 window.toggleUsuarios = function() {
     const panel = document.getElementById('usuariosPanel');
