@@ -2479,6 +2479,10 @@ function actualizarHistorialCierres() {
         </div>
     `).join('');
 }
+// ... (código anterior permanece igual)
+
+// ========== REPORTES Y CIERRES ==========
+// ... (código anterior permanece igual)
 
 window.descargarCierrePDF = function(cierreId) {
     const cierre = cierres.find(c => c.id === cierreId);
@@ -2750,4 +2754,13 @@ window.descargarCierrePDF = function(cierreId) {
     }, 250);
     
     debugLog('sistema', '📄 PDF de cierre generado', { cierreId });
+};
+
+window.eliminarCierre = async function(id) {
+    if (!confirm('¿Estás seguro de eliminar este cierre?')) return;
+    
+    cierres = cierres.filter(c => c.id !== id);
+    await guardarCierres();
+    actualizarHistorialCierres();
+    generarReporte();
 };
