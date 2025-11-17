@@ -2299,25 +2299,25 @@ if (ultimoCierre) {
             `;
         }).join('');
         
-      // Busca estas líneas en generarReporte() (aproximadamente línea 1940):
 
-detalleTable.innerHTML = htmlFilas;
+ detalleTable.innerHTML = htmlFilas;
 
-const container = document.getElementById('reporteDetalleContainer');
-if (container && infoCierre) {
-    const infoAnterior = container.querySelector('.info-cierre-anterior');
-    if (infoAnterior) {
-        infoAnterior.remove();
+        const container = document.getElementById('reporteDetalleContainer');
+        if (container && infoCierre) {
+            const infoAnterior = container.querySelector('.info-cierre-anterior');
+            if (infoAnterior) {
+                infoAnterior.remove();
+            }
+            
+            const tabla = container.querySelector('table');
+            if (tabla) {
+                const div = document.createElement('div');
+                div.className = 'info-cierre-anterior';
+                div.innerHTML = infoCierre;
+                tabla.parentNode.insertBefore(div, tabla);
+            }
+        }
     }
-    
-    const tabla = container.querySelector('table');
-    if (tabla) {
-        const div = document.createElement('div');
-        div.className = 'info-cierre-anterior';
-        div.innerHTML = infoCierre;
-        tabla.parentNode.insertBefore(div, tabla);
-    }
-}
     
     actualizarHistorialCierres();
     
