@@ -2763,4 +2763,5 @@ window.eliminarCierre = async function(id) {
     await guardarCierres();
     actualizarHistorialCierres();
     generarReporte();
+}
 };
