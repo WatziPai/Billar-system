@@ -943,7 +943,14 @@ window.showModalProducto = function(producto = null) {
         mostrarError('Solo los administradores pueden gestionar productos');
         return;
     }
-
+window.editarProducto = function(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto) {
+        mostrarError('Producto no encontrado');
+        return;
+    }
+    window.showModalProducto(producto);
+};
     productoEditando = producto;
     const modal = document.getElementById('modalProducto');
     const title = document.getElementById('productoModalTitle');
@@ -1100,8 +1107,8 @@ function actualizarInventario() {
                                 🗑️
                             </button>
                         ` : `
-                            <button class="btn-small btn-green" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Agregar Stock">
-                                ➕ Stock
+                            <button class="btn-small btn-green" onclick="editarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
+                            ➕ Stock
                             </button>
                         `}
                     </div>
@@ -2222,14 +2229,14 @@ function generarReporte() {
     if (consumoDuenoEl) {
         consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
     }
-    
-    let infoCierre = '';
-    if (ultimoCierre) {
-        const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
-        infoCierre = `<div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
-            <strong>📊 Ventas desde último cierre:</strong> ${fechaCierre}
-        </div>`;
-    }
+
+let infoCierre = '';
+if (ultimoCierre) {
+    const fechaCierre = new Date(ultimoCierre).toLocaleString('es-PE');
+    infoCierre = `<div class="info-cierre-anterior" style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #2196f3;">
+        <strong>📊 Ventas desde último cierre:</strong> ${fechaCierre}
+    </div>`;
+}
     
     if (ventasActuales.length === 0) {
         detalleTable.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: #999;">No hay ventas para mostrar</td></tr>';
@@ -2292,16 +2299,25 @@ function generarReporte() {
             `;
         }).join('');
         
-        detalleTable.innerHTML = htmlFilas;
-        
-        const container = document.getElementById('reporteDetalleContainer');
-        if (container && infoCierre) {
-            const tabla = container.querySelector('table');
-            if (tabla) {
-                tabla.insertAdjacentHTML('beforebegin', infoCierre);
-            }
-        }
+      // Busca estas líneas en generarReporte() (aproximadamente línea 1940):
+
+detalleTable.innerHTML = htmlFilas;
+
+const container = document.getElementById('reporteDetalleContainer');
+if (container && infoCierre) {
+    const infoAnterior = container.querySelector('.info-cierre-anterior');
+    if (infoAnterior) {
+        infoAnterior.remove();
     }
+    
+    const tabla = container.querySelector('table');
+    if (tabla) {
+        const div = document.createElement('div');
+        div.className = 'info-cierre-anterior';
+        div.innerHTML = infoCierre;
+        tabla.parentNode.insertBefore(div, tabla);
+    }
+}
     
     actualizarHistorialCierres();
     
