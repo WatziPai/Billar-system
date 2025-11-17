@@ -943,14 +943,7 @@ window.showModalProducto = function(producto = null) {
         mostrarError('Solo los administradores pueden gestionar productos');
         return;
     }
-window.editarProducto = function(productoId) {
-    const producto = productos.find(p => p.id === productoId);
-    if (!producto) {
-        mostrarError('Producto no encontrado');
-        return;
-    }
-    window.showModalProducto(producto);
-};
+    
     productoEditando = producto;
     const modal = document.getElementById('modalProducto');
     const title = document.getElementById('productoModalTitle');
@@ -971,6 +964,15 @@ window.editarProducto = function(productoId) {
     
     document.getElementById('productoError').classList.add('hidden');
     modal.classList.add('show');
+};
+
+window.editarProducto = function(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto) {
+        mostrarError('Producto no encontrado');
+        return;
+    }
+    window.showModalProducto(producto);
 };
 
 window.closeModalProducto = function() {
@@ -2479,11 +2481,8 @@ function actualizarHistorialCierres() {
         </div>
     `).join('');
 }
-// ... (código anterior permanece igual)
 
 // ========== REPORTES Y CIERRES ==========
-// ... (código anterior permanece igual)
-
 window.descargarCierrePDF = function(cierreId) {
     const cierre = cierres.find(c => c.id === cierreId);
     if (!cierre) {
@@ -2746,7 +2745,7 @@ window.descargarCierrePDF = function(cierreId) {
         </body>
         </html>
     `);
-    
+
     ventanaImpresion.document.close();
     
     setTimeout(() => {
@@ -2763,5 +2762,4 @@ window.eliminarCierre = async function(id) {
     await guardarCierres();
     actualizarHistorialCierres();
     generarReporte();
-}
 };
