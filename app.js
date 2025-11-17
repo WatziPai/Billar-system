@@ -633,22 +633,26 @@ async function iniciarMesa(id) {
 
 function calcularCostoTiempo(segundos) {
     const tarifaHora = parseFloat(document.getElementById('tarifaHora').value) || 5.00;
-    const tarifaExtra = parseFloat(document.getElementById('tarifaExtra5Min').value) || 0.50;
+    const tarifaExtra = parseFloat(document.getElementById('tarifaExtra5Min').value) || 1.00;
     
     const minutosTotales = Math.floor(segundos / 60);
     const horasCompletas = Math.floor(minutosTotales / 60);
     const minutosRestantes = minutosTotales % 60;
-    const bloquesExtra = Math.ceil(minutosRestantes / 5);
     
     const costoHoras = horasCompletas * tarifaHora;
-    const costoExtra = bloquesExtra * tarifaExtra;
+    let costoExtra = 0;
+    if (minutosRestantes > 5) {
+        const minutosDesde6 = minutosRestantes - 5;
+        const bloques = Math.ceil(minutosDesde6 / 10);
+        costoExtra = bloques * tarifaExtra;
+    }
     
     return {
         costo: costoHoras + costoExtra,
         minutos: minutosTotales,
         horas: horasCompletas,
         minutosExtra: minutosRestantes,
-        bloques: bloquesExtra
+        bloques: minutosRestantes > 5 ? Math.ceil((minutosRestantes - 5) / 10) : 0
     };
 }
 
