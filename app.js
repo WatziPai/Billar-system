@@ -174,7 +174,13 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnUsuarios', true);
         toggleElement('btnAgregarMesa', true);
         toggleElement('btnAgregarMesaConsumo', true);
-        toggleElement('tabErrores', true);
+        toggleElement('btnUsuarios', true);
+        toggleElement('btnAgregarMesa', true);
+        toggleElement('btnAgregarMesaConsumo', true);
+        toggleElement('btnTabErrores', true);
+        toggleElement('btnReportarError', false);
+        toggleElement('btnAgregarProducto', true);
+        toggleElement('tabConsumoDueno', true);
         toggleElement('btnReportarError', false);
         toggleElement('btnAgregarProducto', true);
         toggleElement('tabConsumoDueno', true);
@@ -182,7 +188,13 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
         toggleElement('btnAgregarMesaConsumo', false);
-        toggleElement('tabErrores', false);
+        toggleElement('btnUsuarios', false);
+        toggleElement('btnAgregarMesa', false);
+        toggleElement('btnAgregarMesaConsumo', false);
+        toggleElement('btnTabErrores', false);
+        toggleElement('btnReportarError', true);
+        toggleElement('btnAgregarProducto', false);
+        toggleElement('tabConsumoDueno', false);
         toggleElement('btnReportarError', true);
         toggleElement('btnAgregarProducto', false);
         toggleElement('tabConsumoDueno', false);
@@ -1170,14 +1182,17 @@ function actualizarInventario() {
                             <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
                                 📊
                             </button>
-                            <button class="btn-small btn-green" onclick='showModalProducto(${productoJSON})' style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
+                            <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
+                                📊
+                            </button>
+                            <button class="btn-small btn-green" onclick="editarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
                                 ✏️
                             </button>
                             <button class="btn-small btn-red" onclick="eliminarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Eliminar Producto">
                                 🗑️
                             </button>
                         ` : `
-                            <button class="btn-small btn-green" onclick="editarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
+                            <button class="btn-small btn-green" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Agregar Stock">
                             ➕ Stock
                             </button>
                         `}
