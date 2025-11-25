@@ -1182,9 +1182,7 @@ function actualizarInventario() {
                             <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
                                 📊
                             </button>
-                            <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
-                                📊
-                            </button>
+
                             <button class="btn-small btn-green" onclick="editarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
                                 ✏️
                             </button>
