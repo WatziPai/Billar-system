@@ -1,9 +1,9 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-import { 
-    getAuth, 
-    signInWithEmailAndPassword, 
-    signOut, 
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
     onAuthStateChanged,
     // === NUEVAS IMPORTACIONES ===
     createUserWithEmailAndPassword, // Para crear nuevos empleados
@@ -36,12 +36,12 @@ setTimeout(() => {
 // ========== API DE FIRESTORE ==========
 window.firebaseDB = {
     isReady: () => isFirebaseReady,
-    
+
     get: async (collection, document) => {
         try {
             const docRef = doc(db, collection, document);
             const docSnap = await getDoc(docRef);
-            
+
             if (docSnap.exists()) {
                 return docSnap.data();
             } else {
@@ -53,15 +53,15 @@ window.firebaseDB = {
             throw error;
         }
     },
-    
+
     set: async (collection, document, data) => {
         try {
             const docRef = doc(db, collection, document);
             await setDoc(docRef, {
                 ...data,
                 ultimaActualizacion: serverTimestamp()
-            }, { merge: true });
-            
+            });
+
             console.log(`✅ ${collection}/${document} guardado correctamente`);
             return true;
         } catch (error) {
@@ -78,7 +78,7 @@ window.firebaseAuth = {
     signOut: () => signOut(auth),
     onAuthChange: (callback) => onAuthStateChanged(auth, callback),
     getCurrentUser: () => auth.currentUser,
-    
+
     // === NUEVAS FUNCIONES EXPUESTAS ===
     createUser: (email, password) => createUserWithEmailAndPassword(auth, email, password),
     // NOTA: updatePassword necesita el objeto User, lo pasamos a la función
@@ -88,3 +88,4 @@ window.firebaseAuth = {
 
 console.log('✅ API de Firebase lista para usar');
 console.log('🔐 Firebase Authentication configurado');
+
