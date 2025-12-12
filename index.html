@@ -345,9 +345,13 @@
                                 <strong style="font-size: 18px;">Total Consumo:</strong>
                                 <strong id="totalConsumo" style="font-size: 24px; color: #007bff;">S/ 0.00</strong>
                             </div>
+                            <button id="btnCobroParcial" class="btn btn-green" onclick="showModalCobroParcial()"
+                                style="width: 100%; padding: 12px; margin-bottom: 10px;">
+                                💵 Cobrar Parcial
+                            </button>
                             <button id="btnCerrarMesa" class="btn btn-blue" onclick="cerrarMesaCompleto()"
                                 style="width: 100%; padding: 12px;">
-                                💵 Cerrar Mesa y Cobrar (Total: S/ 0.00)
+                                💰 Cerrar Mesa y Cobrar Todo (Total: S/ 0.00)
                             </button>
                         </div>
                     </div>
@@ -481,6 +485,40 @@
                                 💾 Guardar Consumo
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Cobro Parcial -->
+        <div id="modalCobroParcial" class="modal">
+            <div class="modal-content" style="max-width: 700px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">💵 Cobro Parcial</h2>
+                    <button class="close-btn" onclick="closeModalCobroParcial()">×</button>
+                </div>
+
+                <p style="color: #666; margin-bottom: 20px;">
+                    Selecciona la cantidad de cada producto que deseas cobrar. Los productos restantes quedarán en la
+                    mesa.
+                </p>
+
+                <div id="itemsCobroParcialContainer" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    <!-- Items se renderizan aquí -->
+                </div>
+
+                <div style="border-top: 2px solid #ddd; padding-top: 15px; margin-top: 15px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <strong style="font-size: 18px;">Total a Cobrar:</strong>
+                        <strong id="totalCobroParcial" style="font-size: 28px; color: #10b981;">S/ 0.00</strong>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn btn-green btn-full" onclick="procesarCobroParcial()"
+                            id="btnConfirmarCobroParcial">
+                            ✅ Confirmar Cobro
+                        </button>
+                        <button class="btn btn-gray btn-full" onclick="closeModalCobroParcial()">Cancelar</button>
                     </div>
                 </div>
             </div>
