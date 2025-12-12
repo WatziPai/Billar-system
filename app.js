@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     // ========== KEYBOARD SHORTCUTS ==========
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         // Enter key for Login
         if (e.key === 'Enter') {
             const loginScreen = document.getElementById('loginScreen');
@@ -1578,6 +1578,177 @@ function actualizarListaConsumos() {
 
     totalEl.textContent = `S/ ${total.toFixed(2)}`;
 }
+
+// ========== COBRO PARCIAL ==========
+window.showModalCobroParcial = function () {
+    debugLog('sistema', '💵 Abriendo modal de cobro parcial');
+    document.getElementById('modalCobroParcial').classList.add('show');
+    renderItemsCobroParcial();
+    actualizarTotalCobroParcial();
+};
+
+window.closeModalCobroParcial = function () {
+    document.getElementById('modalCobroParcial').classList.remove('show');
+};
+
+function renderItemsCobroParcial() {
+    let mesa;
+    if (tipoMesaActual === 'billar') {
+        mesa = mesas.find(m => m.id === mesaConsumoActual);
+    } else {
+        mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
+    }
+
+    const container = document.getElementById('itemsCobroParcialContainer');
+    if (!container || !mesa || !mesa.consumos) return;
+
+    if (mesa.consumos.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #999;">No hay consumos para cobrar.</p>';
+        document.getElementById('btnConfirmarCobroParcial').disabled = true;
+        return;
+    }
+
+    document.getElementById('btnConfirmarCobroParcial').disabled = false;
+
+    container.innerHTML = mesa.consumos.map(c => `
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+            <div style="flex: 1;">
+                <div style="font-weight: 600;">${c.nombre}</div>
+                <div style="font-size: 14px; color: #666;">Precio: S/ ${c.precio.toFixed(2)}</div>
+                <div style="font-size: 13px; color: #2d7a4d;">En mesa: ${c.cantidad}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label style="font-size: 14px;">Cobrar:</label>
+                <input type="number" 
+                    id="parcial-qty-${c.id}" 
+                    class="input-parcial"
+                    value="0" 
+                    min="0" 
+                    max="${c.cantidad}"
+                    data-id="${c.id}"
+                    data-precio="${c.precio}"
+                    onchange="actualizarTotalCobroParcial()"
+                    onkeyup="actualizarTotalCobroParcial()"
+                    style="width: 70px; padding: 5px; border: 1px solid #ccc; border-radius: 5px; text-align: center;">
+            </div>
+        </div>
+    `).join('');
+}
+
+window.actualizarTotalCobroParcial = function () {
+    const inputs = document.querySelectorAll('.input-parcial');
+    let total = 0;
+
+    inputs.forEach(input => {
+        let qty = parseInt(input.value) || 0;
+        const max = parseInt(input.max);
+        const precio = parseFloat(input.dataset.precio);
+
+        if (qty < 0) qty = 0;
+        if (qty > max) {
+            qty = max;
+            input.value = max;
+        }
+
+        total += qty * precio;
+    });
+
+    document.getElementById('totalCobroParcial').textContent = `S/ ${total.toFixed(2)}`;
+};
+
+window.procesarCobroParcial = async function () {
+    const inputs = document.querySelectorAll('.input-parcial');
+    let itemsACobrar = [];
+    let totalCobrar = 0;
+
+    // Recopilar items seleccionados
+    inputs.forEach(input => {
+        const qty = parseInt(input.value) || 0;
+        if (qty > 0) {
+            itemsACobrar.push({
+                id: parseInt(input.dataset.id),
+                cantidad: qty,
+                precio: parseFloat(input.dataset.precio)
+            });
+            totalCobrar += qty * parseFloat(input.dataset.precio);
+        }
+    });
+
+    if (itemsACobrar.length === 0) {
+        mostrarError('Selecciona al menos un producto para cobrar.');
+        return;
+    }
+
+    if (!confirm(`¿Confirmas el cobro parcial de S/ ${totalCobrar.toFixed(2)}?`)) return;
+
+    // Procesar cobro: Generar venta y descontar de la mesa
+    let mesa;
+    if (tipoMesaActual === 'billar') {
+        mesa = mesas.find(m => m.id === mesaConsumoActual);
+    } else {
+        mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
+    }
+
+    if (!mesa) return;
+
+    // 1. Generar Venta
+    const venta = {
+        id: Date.now(),
+        tipo: 'Cobro Parcial',
+        tipoDetalle: `Parcial - ${tipoMesaActual === 'billar' ? 'Mesa Billar' : 'Mesa Consumo'} ${mesa.id}`,
+        monto: totalCobrar,
+        fecha: new Date().toLocaleString(),
+        usuario: usuarioActual.nombre,
+        detalle: {
+            mesaId: mesa.id,
+            tipoMesa: tipoMesaActual,
+            consumos: itemsACobrar.map(item => {
+                const producto = mesa.consumos.find(c => c.id === item.id);
+                return {
+                    producto: producto ? producto.nombre : 'Producto',
+                    cantidad: item.cantidad,
+                    precioUnitario: item.precio,
+                    subtotal: item.cantidad * item.precio
+                };
+            })
+        }
+    };
+
+    ventas.push(venta);
+    await guardarVentas();
+
+    // 2. Actualizar Mesa (Restar cantidades)
+    itemsACobrar.forEach(item => {
+        const consumoEnMesa = mesa.consumos.find(c => c.id === item.id);
+        if (consumoEnMesa) {
+            consumoEnMesa.cantidad -= item.cantidad;
+        }
+    });
+
+    // Limpiar items con cantidad 0
+    mesa.consumos = mesa.consumos.filter(c => c.cantidad > 0);
+
+    // Actualizar total mesa si es de consumo
+    if (tipoMesaActual === 'consumo') {
+        mesa.total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    }
+
+    // Guardar cambios en mesa
+    if (tipoMesaActual === 'billar') {
+        await guardarMesas();
+    } else {
+        await guardarMesasConsumo();
+        actualizarMesasConsumo();
+    }
+
+    // 3. Actualizar UI
+    alert(`✅ Cobro parcial realizado: S/ ${totalCobrar.toFixed(2)}`);
+    closeModalCobroParcial();
+    renderProductosConsumo(); // Refrescar stock (aunque no cambia stock total, refresca el modal)
+    actualizarListaConsumos(); // Refrescar lista de la mesa
+    actualizarTablaVentas();
+    calcularTotal();
+};
 
 // ========== CONSUMO DEL DUEÑO ==========
 window.showModalConsumoDueno = function () {
