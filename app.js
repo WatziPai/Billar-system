@@ -306,6 +306,43 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         hideLoading();
     });
+
+    // ========== KEYBOARD SHORTCUTS ==========
+    document.addEventListener('keydown', function(e) {
+        // Enter key for Login
+        if (e.key === 'Enter') {
+            const loginScreen = document.getElementById('loginScreen');
+            if (loginScreen && !loginScreen.classList.contains('hidden')) {
+                e.preventDefault();
+                handleLogin();
+                return;
+            }
+
+            // Enter key for Modal primary actions
+            const activeModal = document.querySelector('.modal.show');
+            if (activeModal) {
+                // Find the primary button (usually green/save button)
+                const primaryBtn = activeModal.querySelector('.btn-green, .btn-primary, .btn-blue');
+                if (primaryBtn && !primaryBtn.disabled) {
+                    e.preventDefault();
+                    primaryBtn.click();
+                }
+            }
+        }
+
+        // Esc key for closing modals
+        if (e.key === 'Escape') {
+            const activeModal = document.querySelector('.modal.show');
+            if (activeModal) {
+                e.preventDefault();
+                // Find the close button or cancel button
+                const closeBtn = activeModal.querySelector('.close-btn, .btn-gray');
+                if (closeBtn) {
+                    closeBtn.click();
+                }
+            }
+        }
+    });
 });
 
 function esperarFirebase() {
