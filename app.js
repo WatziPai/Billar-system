@@ -1379,12 +1379,15 @@ async function finalizarMesaConsumo(id) {
         await guardarVentas();
     }
 
+    // Guardar el total antes de resetear
+    const totalCobrado = mesa.total;
+
     mesa.ocupada = false;
     mesa.consumos = [];
     mesa.total = 0;
     await guardarMesasConsumo();
 
-    alert(`✅ Mesa ${id} finalizada.\nTotal: S/ ${mesa.total.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada.\nTotal cobrado: S/ ${totalCobrado.toFixed(2)}`);
 
     actualizarMesasConsumo();
     actualizarTablaVentas();
@@ -1536,6 +1539,77 @@ window.eliminarConsumo = async function (productoId) {
     actualizarInventario();
 };
 
+// Editar cantidad de consumo
+window.editarConsumo = async function (productoId) {
+    let mesa;
+    if (tipoMesaActual === 'billar') {
+        mesa = mesas.find(m => m.id === mesaConsumoActual);
+    } else {
+        mesa = mesasConsumo.find(m => m.id === mesaConsumoActual);
+    }
+
+    if (!mesa) return;
+
+    const consumo = mesa.consumos.find(c => c.id === productoId);
+    if (!consumo) return;
+
+    const producto = productos.find(p => p.id === productoId);
+
+    const nuevaCantidad = prompt(`Editar cantidad de ${consumo.nombre}\n\nCantidad actual: ${consumo.cantidad}\nIngresa la nueva cantidad:`, consumo.cantidad);
+
+    if (nuevaCantidad === null) return; // Usuario canceló
+
+    const qty = parseInt(nuevaCantidad);
+
+    if (isNaN(qty) || qty < 0) {
+        mostrarError('Por favor ingresa un número válido mayor o igual a 0');
+        return;
+    }
+
+    if (qty === 0) {
+        // Si la cantidad es 0, eliminar el consumo
+        if (confirm(`¿Eliminar ${consumo.nombre} de la mesa?`)) {
+            await eliminarConsumo(productoId);
+        }
+        return;
+    }
+
+    // Calcular diferencia de stock
+    const diferencia = qty - consumo.cantidad;
+
+    // Verificar que hay suficiente stock disponible
+    if (diferencia > 0 && producto && producto.stock < diferencia) {
+        mostrarError(`No hay suficiente stock. Disponible: ${producto.stock}`);
+        return;
+    }
+
+    // Actualizar stock del producto
+    if (producto) {
+        producto.stock -= diferencia; // Si diferencia es negativa, aumentará el stock
+    }
+
+    // Actualizar cantidad del consumo
+    consumo.cantidad = qty;
+
+    // Actualizar total si es mesa de consumo
+    if (tipoMesaActual === 'consumo') {
+        mesa.total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    }
+
+    // Guardar cambios
+    await guardarProductos();
+    if (tipoMesaActual === 'billar') {
+        await guardarMesas();
+    } else {
+        await guardarMesasConsumo();
+        actualizarMesasConsumo();
+    }
+
+    renderProductosConsumo();
+    actualizarListaConsumos();
+    actualizarInventario();
+};
+
 function actualizarListaConsumos() {
     let mesa;
     if (tipoMesaActual === 'billar') {
@@ -1571,6 +1645,7 @@ function actualizarListaConsumos() {
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <div style="font-weight: 600; color: #2d7a4d;">S/ ${(c.precio * c.cantidad).toFixed(2)}</div>
+                <button class="btn btn-blue btn-small" onclick="editarConsumo(${c.id})" title="Editar cantidad">✏️</button>
                 <button class="btn btn-red btn-small" onclick="eliminarConsumo(${c.id})">🗑️</button>
             </div>
         </div>
@@ -1691,11 +1766,18 @@ window.procesarCobroParcial = async function () {
 
     if (!mesa) return;
 
+    // Generar descripción de items
+    const descripcionItems = itemsACobrar.map(item => {
+        const producto = mesa.consumos.find(c => c.id === item.id);
+        const nombre = producto ? producto.nombre : 'Producto';
+        return `${item.cantidad} ${nombre}`;
+    }).join(', ');
+
     // 1. Generar Venta
     const venta = {
         id: Date.now(),
         tipo: 'Cobro Parcial',
-        tipoDetalle: `Parcial - ${tipoMesaActual === 'billar' ? 'Mesa Billar' : 'Mesa Consumo'} ${mesa.id}`,
+        tipoDetalle: `Parcial (${descripcionItems}) - ${tipoMesaActual === 'billar' ? 'Mesa Billar' : 'Mesa Consumo'} ${mesa.id}`,
         monto: totalCobrar,
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
@@ -1742,7 +1824,7 @@ window.procesarCobroParcial = async function () {
     }
 
     // 3. Actualizar UI
-    alert(`✅ Cobro parcial realizado: S/ ${totalCobrar.toFixed(2)}`);
+    alert(`✅ Cobro parcial realizado: S/ ${totalCobrar.toFixed(2)}\n\nItems cobrados: ${descripcionItems}`);
     closeModalCobroParcial();
     renderProductosConsumo(); // Refrescar stock (aunque no cambia stock total, refresca el modal)
     actualizarListaConsumos(); // Refrescar lista de la mesa
@@ -2669,64 +2751,254 @@ window.cerrarDia = async function () {
 };
 
 function descargarReporteCierre(cierre) {
-    const BOM = '\uFEFF';
-    let csv = BOM + `CIERRE DE CAJA - ${cierre.fecha}\n\n`;
-    csv += `Usuario que cierra,${cierre.usuario}\n`;
-    csv += `Fecha y hora,${cierre.fecha}\n\n`;
-    csv += 'Concepto,Monto\n';
-    csv += `"Total del Cierre","S/ ${cierre.total.toFixed(2)}"\n`;
-    csv += `"Ventas Mesas","S/ ${cierre.ventasMesas.toFixed(2)}"\n`;
-    csv += `"Ventas Productos/Consumo","S/ ${cierre.ventasProductos.toFixed(2)}"\n`;
-    csv += `"Total Transacciones","${cierre.cantidadVentas}"\n`;
-    csv += `"Consumo Dueño (No Cobrado)","S/ ${cierre.totalConsumosDueno.toFixed(2)}"\n\n`;
+    // Abrir ventana para generar PDF
+    const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
 
-    csv += 'DETALLE DE VENTAS\n';
-    csv += 'Fecha,Tipo,Descripción,Usuario,Monto\n';
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Cierre de Caja - ${cierre.fecha}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    padding: 30px;
+                    background: #f5f5f5;
+                }
+                .container {
+                    max-width: 900px;
+                    margin: 0 auto;
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                h1 {
+                    color: #2d7a4d;
+                    margin-bottom: 20px;
+                    text-align: center;
+                    font-size: 28px;
+                    border-bottom: 3px solid #2d7a4d;
+                    padding-bottom: 15px;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 15px;
+                    margin-bottom: 25px;
+                    padding: 15px;
+                    background: #f8f9fa;
+                    border-radius: 6px;
+                }
+                .info-item {
+                    display: flex;
+                    flex-direction: column;
+                }
+                .info-label {
+                    font-size: 12px;
+                    color: #666;
+                    margin-bottom: 4px;
+                }
+                .info-value {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #333;
+                }
+                .summary-box {
+                    background: linear-gradient(135deg, #2d7a4d 0%, #1e5a35 100%);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 25px;
+                }
+                .summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 15px;
+                }
+                .summary-item {
+                    text-align: center;
+                }
+                .summary-label {
+                    font-size: 13px;
+                    opacity: 0.9;
+                    margin-bottom: 5px;
+                }
+                .summary-value {
+                    font-size: 24px;
+                    font-weight: bold;
+                }
+                .section {
+                    margin-bottom: 25px;
+                }
+                .section-title {
+                    font-size: 18px;
+                    color: #2d7a4d;
+                    margin-bottom: 12px;
+                    padding-bottom: 8px;
+                    border-bottom: 2px solid #e0e0e0;
+                }
+                .ventas-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 13px;
+                }
+                .ventas-table th {
+                    background: #f8f9fa;
+                    padding: 10px;
+                    text-align: left;
+                    font-weight: 600;
+                    color: #495057;
+                    border-bottom: 2px solid #dee2e6;
+                }
+                .ventas-table td {
+                    padding: 10px;
+                    border-bottom: 1px solid #f0f0f0;
+                }
+                .ventas-table tr:hover {
+                    background: #f8f9fa;
+                }
+                .monto {
+                    color: #2d7a4d;
+                    font-weight: 600;
+                    text-align: right;
+                }
+                .consumo-dueno {
+                    background: #fff3cd;
+                    padding: 15px;
+                    border-radius: 6px;
+                    border-left: 4px solid #ff9800;
+                }
+                .consumo-item {
+                    padding: 8px 0;
+                    border-bottom: 1px solid #f0e5c9;
+                }
+                .consumo-item:last-child {
+                    border-bottom: none;
+                }
+                @media print {
+                    body { background: white; padding: 0; }
+                    .container { box-shadow: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📊 CIERRE DE CAJA</h1>
+                
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Fecha y Hora</div>
+                        <div class="info-value">${cierre.fecha}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Usuario</div>
+                        <div class="info-value">${cierre.usuario}</div>
+                    </div>
+                </div>
 
-    cierre.ventas.forEach(v => {
+                <div class="summary-box">
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Total Recaudado</div>
+                            <div class="summary-value">S/ ${cierre.total.toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Transacciones</div>
+                            <div class="summary-value">${cierre.cantidadVentas}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Ventas Mesas</div>
+                            <div class="summary-value">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Ventas Productos</div>
+                            <div class="summary-value">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">📋 Detalle de Ventas</div>
+                    <table class="ventas-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Descripción</th>
+                                <th>Usuario</th>
+                                <th style="text-align: right;">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cierre.ventas.map(v => {
         let descripcion = '';
-
         if (v.detalle) {
             if (v.tipo === 'Mesa Billar') {
-                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min) | Tiempo: S/${v.detalle.costoTiempo.toFixed(2)}`;
+                descripcion = `${v.tipoDetalle} | ${v.detalle.horaInicio}-${v.detalle.horaFin} (${v.detalle.tiempoMinutos}min)`;
                 if (v.detalle.consumos.length > 0) {
-                    descripcion += ` | Consumos: `;
-                    descripcion += v.detalle.consumos.map(c => `${c.producto} x${c.cantidad}`).join(', ');
-                    descripcion += ` = S/${v.detalle.totalConsumos.toFixed(2)}`;
+                    descripcion += ` + Consumos`;
                 }
             } else if (v.detalle.consumos) {
                 descripcion = v.detalle.consumos.map(c =>
-                    `${c.producto} x${c.cantidad} @ S/${c.precioUnitario.toFixed(2)}`
-                ).join(' | ');
+                    `${c.producto} x${c.cantidad}`
+                ).join(', ');
             }
         } else {
             descripcion = v.tipoDetalle || v.tipo;
         }
 
-        csv += `"${v.fecha}","${v.tipo}","${descripcion}","${v.usuario}","S/ ${v.monto.toFixed(2)}"\n`;
-    });
+        return `
+                                    <tr>
+                                        <td>${v.fecha}</td>
+                                        <td>${v.tipo}</td>
+                                        <td>${descripcion}</td>
+                                        <td>${v.usuario}</td>
+                                        <td class="monto">S/ ${v.monto.toFixed(2)}</td>
+                                    </tr>
+                                `;
+    }).join('')}
+                        </tbody>
+                    </table>
+                </div>
 
-    if (cierre.consumosDueno && cierre.consumosDueno.length > 0) {
-        csv += '\nCONSUMO DEL DUEÑO (NO COBRADO)\n';
-        csv += 'Fecha,Productos,Total\n';
+                ${cierre.consumosDueno && cierre.consumosDueno.length > 0 ? `
+                    <div class="section">
+                        <div class="section-title">🍺 Consumo del Dueño (No Cobrado)</div>
+                        <div class="consumo-dueno">
+                            <div style="font-weight: 600; margin-bottom: 10px; color: #856404;">
+                                Total: S/ ${cierre.totalConsumosDueno.toFixed(2)}
+                            </div>
+                            ${cierre.consumosDueno.map(c => `
+                                <div class="consumo-item">
+                                    <div style="font-weight: 500;">${c.fecha}</div>
+                                    <div style="font-size: 12px; color: #666; margin-top: 3px;">
+                                        ${c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ')}
+                                    </div>
+                                    <div style="font-weight: 600; color: #ff9800; margin-top: 3px;">
+                                        S/ ${c.total.toFixed(2)}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
 
-        cierre.consumosDueno.forEach(c => {
-            const productosDesc = c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ');
-            csv += `"${c.fecha}","${productosDesc}","S/ ${c.total.toFixed(2)}"\n`;
-        });
-    }
+            <script>
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                    }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `);
 
-    const blob = new Blob([csv], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const fechaArchivo = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const horaArchivo = new Date().toTimeString().slice(0, 5).replace(/:/g, '');
-    a.href = url;
-    a.download = `Cierre_${fechaArchivo}_${horaArchivo}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    ventanaImpresion.document.close();
 }
 
 function actualizarHistorialCierres() {
