@@ -2657,6 +2657,16 @@ function generarReporte() {
                     `;
                 } else if (v.tipo === 'Venta Manual') {
                     detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">📝 ${v.tipoDetalle}</div>`;
+                } else if (v.tipo === 'Cobro Parcial') {
+                    detalleHTML = `
+                        <div style="margin-top: 5px; padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 12px; border-left: 3px solid #ff9800;">
+                            <strong>💰 ${v.tipoDetalle}</strong><br>
+                            <strong style="margin-top: 5px; display: block;">🛒 Items cobrados:</strong>
+                            ${v.detalle.consumos.map(c =>
+                        `• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}`
+                    ).join('<br>')}
+                        </div>
+                    `;
                 }
             } else {
                 detalleHTML = `<div style="color: #666; font-size: 12px; margin-top: 3px;">${v.tipo}</div>`;
@@ -2830,7 +2840,8 @@ function descargarReporteCierre(cierre) {
                     font-size: 24px;
                     font-weight: bold;
                 }
-                .section {
+                .section { 
+                
                     margin-bottom: 25px;
                 }
                 .section-title {
@@ -2941,6 +2952,10 @@ function descargarReporteCierre(cierre) {
                 if (v.detalle.consumos.length > 0) {
                     descripcion += ` + Consumos`;
                 }
+            } else if (v.tipo === 'Cobro Parcial') {
+                descripcion = v.detalle.consumos.map(c =>
+                    `${c.producto} x${c.cantidad}`
+                ).join(', ');
             } else if (v.detalle.consumos) {
                 descripcion = v.detalle.consumos.map(c =>
                     `${c.producto} x${c.cantidad}`
@@ -3241,6 +3256,18 @@ window.descargarCierrePDF = function (cierreId) {
                         `;
             } else if (v.tipo === 'Venta Manual') {
                 detalleHTML = `<div class="detalle-venta">📝 ${v.tipoDetalle}</div>`;
+            } else if (v.tipo === 'Cobro Parcial') {
+                detalleHTML = `
+                            <div class="detalle-venta" style="background: #fff3cd; border-left: 4px solid #ff9800;">
+                                <strong>💰 Cobro Parcial</strong><br>
+                                <div style="margin-top: 8px;">
+                                    <strong>🛒 Items cobrados:</strong><br>
+                                    ${v.detalle.consumos.map(c =>
+                    `<div style="margin: 3px 0;">• ${c.producto} x${c.cantidad} (S/ ${c.precioUnitario.toFixed(2)} c/u) = S/ ${c.subtotal.toFixed(2)}</div>`
+                ).join('')}
+                                </div>
+                            </div>
+                        `;
             }
         } else {
             detalleHTML = `<div class="detalle-venta">${v.tipoDetalle || v.tipo}</div>`;
