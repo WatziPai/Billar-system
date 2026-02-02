@@ -63,7 +63,7 @@ let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
 let lotesAgotados = []; // Historial de lotes de productos agotados
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
-const TIEMPO_EXPIRACION = 30 * 60 * 1000;
+const TIEMPO_EXPIRACION = 50 * 60 * 1000;
 let timerInactividad = null;
 
 function iniciarMonitoreoInactividad() {
