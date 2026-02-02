@@ -344,9 +344,13 @@
                     <button class="btn-small btn-blue" onclick="showModalTransferencia()" style="background: #2563eb;">
                         🔄 Transferencia
                     </button>
-                    <button class="btn-small btn-gray" onclick="showModalAjusteCajaChica()"
-                        title="Ajustar saldo inicial de Caja Chica">
-                        ⚙️ Ajuste
+                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('chica')"
+                        title="Ajustar Saldo Caja Chica">
+                        ⚙️ Ajuste Chica
+                    </button>
+                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('local')"
+                        title="Ajustar Saldo Caja Local" style="background: #4b5563; color: white;">
+                        ⚙️ Ajuste Local
                     </button>
                 </div>
 
@@ -629,12 +633,12 @@
             </div>
         </div>
 
-        <!-- ✅ NUEVO: Modal Ajuste Caja Chica -->
-        <div id="modalAjusteCajaChica" class="modal">
+        <!-- ✅ NUEVO: Modal Ajuste Caja (GENÉRICO) -->
+        <div id="modalAjusteCaja" class="modal">
             <div class="modal-content" style="max-width: 400px;">
-                <div class="modal-header">⚙️ Ajustar Saldo Caja Chica</div>
+                <div class="modal-header" id="ajusteTitulo">⚙️ Ajustar Saldo Caja</div>
                 <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Utiliza esto para establecer el saldo
-                    inicial o corregir el monto físico en Caja Chica.</p>
+                    inicial o corregir el monto físico en la Caja.</p>
 
                 <div class="info-grid"
                     style="grid-template-columns: 1fr; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
@@ -652,10 +656,10 @@
                 </div>
 
                 <div class="modal-buttons">
-                    <button class="btn btn-blue btn-full" onclick="guardarAjusteCajaChica()">
+                    <button class="btn btn-blue btn-full" onclick="guardarAjusteCaja()">
                         Guardar Ajuste
                     </button>
-                    <button class="btn btn-gray btn-full" onclick="closeModalAjusteCajaChica()">Cancelar</button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalAjusteCaja()">Cancelar</button>
                 </div>
             </div>
         </div>
