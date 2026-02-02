@@ -63,7 +63,7 @@ let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
 let lotesAgotados = []; // Historial de lotes de productos agotados
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
-const TIEMPO_EXPIRACION = 30 * 60 * 1000;
+const TIEMPO_EXPIRACION = 50 * 60 * 1000;
 let timerInactividad = null;
 
 function iniciarMonitoreoInactividad() {
@@ -1681,7 +1681,7 @@ function actualizarInventario() {
                         <h4 style="margin: 0;">${emoji} ${p.nombre}</h4>
                         <small style="color: #666;">${p.categoria || 'Sin categoría'}</small>
                     </div>
-                    ${usuarioActual.rol === 'admin' ? `
+                    ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
                         <div style="display: flex; gap: 5px;">
                             <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
                                 📊
@@ -1702,7 +1702,7 @@ function actualizarInventario() {
                 
                 <!-- Precios -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    ${usuarioActual.rol === 'admin' && precioCosto > 0 ? `
+                    ${(usuarioActual.rol || '').toLowerCase() === 'admin' && precioCosto > 0 ? `
                         <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
                             <small style="color: #666; display: block;">💰 Costo</small>
                             <strong>S/ ${precioCosto.toFixed(2)}</strong>
@@ -1719,7 +1719,7 @@ function actualizarInventario() {
                     `}
                 </div>
                 
-                ${usuarioActual.rol === 'admin' && precioCosto > 0 && margenPorcentaje > 0 ? `
+                ${(usuarioActual.rol || '').toLowerCase() === 'admin' && precioCosto > 0 && margenPorcentaje > 0 ? `
                     <!-- Margen -->
                     <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px; border-radius: 6px; margin-bottom: 12px; text-align: center;">
                         <small style="opacity: 0.9; display: block;">📊 Margen</small>
@@ -4395,20 +4395,34 @@ window.guardarTransferencia = async function () {
     alert(`✅ Transferencia de S/ ${monto.toFixed(2)} realizada con éxito.`);
 };
 
-// --- AJUSTE DE SALDO CAJA CHICA ---
-window.showModalAjusteCajaChica = function () {
-    document.getElementById('modalAjusteCajaChica').classList.add('show');
+// --- AJUSTE DE SALDO (GENÉRICO) ---
+let cajaAjusteActual = 'chica';
+
+window.showModalAjusteCaja = function (caja) {
+    cajaAjusteActual = caja;
+    const modal = document.getElementById('modalAjusteCaja');
+    modal.classList.add('show');
+
+    // Texto dinámico
+    document.getElementById('ajusteTitulo').textContent = `Ajustar Saldo Caja ${caja === 'local' ? 'Local' : 'Chica'}`;
+
     const balances = calcularBalances();
-    document.getElementById('ajusteMontoActual').textContent = `S/ ${balances.balChica.toFixed(2)}`;
+    const saldoActual = caja === 'local' ? balances.balLocal : balances.balChica;
+
+    document.getElementById('ajusteMontoActual').textContent = `S/ ${saldoActual.toFixed(2)}`;
     document.getElementById('ajusteMontoNuevo').value = '';
     document.getElementById('ajusteError').classList.add('hidden');
 };
 
-window.closeModalAjusteCajaChica = function () {
-    document.getElementById('modalAjusteCajaChica').classList.remove('show');
+window.closeModalAjusteCaja = function () {
+    const modal = document.getElementById('modalAjusteCaja'); // o modalAjusteCajaChica si no lo renombramos en HTML
+    if (modal) modal.classList.remove('show');
+    // Soporte para ID antiguo si no se renombra en todas partes
+    const modalOld = document.getElementById('modalAjusteCajaChica');
+    if (modalOld) modalOld.classList.remove('show');
 };
 
-window.guardarAjusteCajaChica = async function () {
+window.guardarAjusteCaja = async function () {
     const nuevoMonto = parseFloat(document.getElementById('ajusteMontoNuevo').value);
     const errorDiv = document.getElementById('ajusteError');
 
@@ -4419,10 +4433,11 @@ window.guardarAjusteCajaChica = async function () {
     }
 
     const balances = calcularBalances();
-    const diferencia = nuevoMonto - balances.balChica;
+    const saldoActual = cajaAjusteActual === 'local' ? balances.balLocal : balances.balChica;
+    const diferencia = nuevoMonto - saldoActual;
 
     if (Math.abs(diferencia) < 0.01) {
-        closeModalAjusteCajaChica();
+        closeModalAjusteCaja();
         return;
     }
 
@@ -4430,18 +4445,18 @@ window.guardarAjusteCajaChica = async function () {
     const nuevoMovimiento = {
         id: Date.now(),
         fecha: new Date().toLocaleString(),
-        descripcion: 'Ajuste de Saldo inicial/manual',
+        descripcion: `Ajuste manual de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'}`,
         monto: Math.abs(diferencia),
         tipo: diferencia > 0 ? 'ingreso' : 'egreso',
-        caja: 'chica',
+        caja: cajaAjusteActual,
         usuario: usuarioActual.nombre
     };
 
     movimientos.unshift(nuevoMovimiento);
     await guardarMovimientos();
     actualizarTablaMovimientos();
-    closeModalAjusteCajaChica();
-    alert(`✅ Saldo de Caja Chica ajustado a S/ ${nuevoMonto.toFixed(2)}`);
+    closeModalAjusteCaja();
+    alert(`✅ Saldo de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} ajustado a S/ ${nuevoMonto.toFixed(2)}`);
 };
 
 window.calcularBalances = function () {
