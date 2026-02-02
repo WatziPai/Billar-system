@@ -115,7 +115,14 @@
             <button id="btnTabErrores" class="tab hidden" onclick="changeTab('errores', event)" data-tab="errores">
                 ⚠️ Errores
             </button>
-            <button id="tabConsumoDueno" class="tab hidden" onclick="changeTab('consumoDueno', event)"
+            <button id="btnTabDashboard" class="tab hidden" onclick="changeTab('dashboard', event)"
+                data-tab="dashboard">
+                📈 Dashboard
+            </button>
+            <button id="btnTabCaja" class="tab hidden" onclick="changeTab('caja', event)" data-tab="caja">
+                💸 Caja/Gastos
+            </button>
+            <button id="btnTabConsumoDueno" class="tab hidden" onclick="changeTab('consumoDueno', event)"
                 data-tab="consumoDueno">
                 🍽️ Consumo Dueño
             </button>
@@ -172,6 +179,7 @@
                                 <th>Descripción</th>
                                 <th>Usuario</th>
                                 <th style="text-align: right;">Monto</th>
+                                <th style="text-align: center;">Pago</th>
                                 <th style="text-align: center;">Acción</th>
                             </tr>
                         </thead>
@@ -190,6 +198,18 @@
                     </button>
                 </div>
                 <div id="inventarioGrid" class="inventario-grid"></div>
+            </div>
+
+            <div id="sectionLotesAgotados" class="section-box"
+                style="margin-top: 30px; background: #fdf2f2; border: 1px solid #fecaca;">
+                <div class="section-header">
+                    <h2 style="color: #991b1b;">📉 Historial de Lotes Agotados</h2>
+                    <small style="color: #666;">Reportes de ganancia total por cada producto que llegó a cero</small>
+                </div>
+                <div id="lotesAgotadosContainer" class="table-responsive">
+                    <p style="text-align: center; color: #991b1b; padding: 20px;">No hay reportes de lotes agotados aún
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -240,6 +260,7 @@
                                     <th>Descripción</th>
                                     <th>Usuario</th>
                                     <th style="text-align: right;">Monto</th>
+                                    <th style="text-align: center;">Pago</th>
                                 </tr>
                             </thead>
                             <tbody id="reporteDetalleTable"></tbody>
@@ -250,6 +271,140 @@
                 <div style="margin-top: 30px;">
                     <h3 style="color: #2d7a4d; margin-bottom: 15px;">📁 Historial de Cierres</h3>
                     <div id="historialCierresContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabDashboard" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>📈 Análisis Financiero Real (Admin)</h2>
+                    <small style="color: #666;">Cifras acumuladas históricas basadas en stock y ventas</small>
+                </div>
+
+                <div class="financial-summary-grid">
+                    <div class="financial-card" style="border-top: 5px solid #10b981;">
+                        <small>Ganancia Cobrada (Ventas)</small>
+                        <div class="valor" id="dashGananciaBruta">S/ 0.00</div>
+                        <span class="detalle">Utilidad real ya percibida</span>
+                    </div>
+                    <div class="financial-card" style="border-top: 5px solid #065f46;">
+                        <small>Ganancia por Cobrar (Stock)</small>
+                        <div class="valor" id="dashGananciaPotencial">S/ 0.00</div>
+                        <span class="detalle">Margen total en estante</span>
+                    </div>
+                    <div class="financial-card" style="border-top: 5px solid #3b82f6;">
+                        <small>Utilidad Neta Estimada</small>
+                        <div class="valor" id="dashUtilidadNeta">S/ 0.00</div>
+                        <span class="detalle">Cobrada + Extras - Gastos</span>
+                    </div>
+                    <div class="financial-card" style="border-top: 5px solid #f59e0b;">
+                        <small>Inversión en Stock</small>
+                        <div class="valor" id="dashInversionStock">S/ 0.00</div>
+                        <span class="detalle">Valor costo del inventario</span>
+                    </div>
+                    <div class="financial-card" style="border-top: 5px solid #8b5cf6;">
+                        <small>Margen Promedio</small>
+                        <div class="valor" id="dashMargenPromedio">0%</div>
+                        <span class="detalle">Rendimiento por venta</span>
+                    </div>
+                </div>
+
+                <div id="dashAlertasContainer" style="margin-top: 20px;"></div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div class="section-box" style="background: white; padding: 15px;">
+                        <h3>📊 Rentabilidad por Categoría</h3>
+                        <div id="dashCategoriasContainer"></div>
+                    </div>
+                    <div class="section-box" style="background: white; padding: 15px;">
+                        <h3>🏆 Top Productos Rentables</h3>
+                        <div id="dashTopProductos"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabCaja" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>💸 Movimientos de Caja y Gastos</h2>
+                    <button class="btn-small btn-red" onclick="showModalMovimiento('egreso')">
+                        ➖ Registrar Gasto
+                    </button>
+                    <button class="btn-small btn-orange" onclick="showModalMovimiento('retiro')">
+                        💸 Retiro de Caja
+                    </button>
+                    <button class="btn-small btn-purple" onclick="showModalMovimiento('reposicion')">
+                        📦 Reposición Stock
+                    </button>
+                    <button class="btn-small btn-green" onclick="showModalMovimiento('ingreso')">
+                        ➕ Ingreso Extra
+                    </button>
+                    <button class="btn-small btn-blue" onclick="showModalTransferencia()" style="background: #2563eb;">
+                        🔄 Transferencia
+                    </button>
+                    <button class="btn-small btn-gray" onclick="showModalAjusteCajaChica()"
+                        title="Ajustar saldo inicial de Caja Chica">
+                        ⚙️ Ajuste
+                    </button>
+                </div>
+
+                <div class="caja-balance-strip" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="balance-item">
+                        <span>🏠 Caja Local:</span>
+                        <strong id="balanceCajaLocal" style="color: #10b981;">S/ 0.00</strong>
+                    </div>
+                    <div class="balance-item">
+                        <span>👛 Caja Chica:</span>
+                        <strong id="balanceCajaChica" style="color: #3b82f6;">S/ 0.00</strong>
+                    </div>
+                    <div class="balance-item">
+                        <span>📉 Gastos Totales:</span>
+                        <strong id="cajaEgresos" style="color: #ef4444;">S/ 0.00</strong>
+                    </div>
+                    <div class="balance-item">
+                        <span>💰 Total Gral:</span>
+                        <strong id="cajaBalance" style="color: #6366f1;">S/ 0.00</strong>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <label style="font-size: 14px; color: #666;">Filtrar por Tipo:</label>
+                    <select id="filtroMovimientos"
+                        onchange="actualizarTablaMovimientos(this.value, document.getElementById('filtroFecha').value)"
+                        style="width: auto; padding: 5px 15px;">
+                        <option value="todos">Todos los movimientos</option>
+                        <option value="egreso">Gastos Operativos</option>
+                        <option value="retiro">Retiros de Caja</option>
+                        <option value="reposicion">Reposición Stock</option>
+                        <option value="ingreso">Ingresos Extra</option>
+                    </select>
+
+                    <label style="font-size: 14px; color: #666; margin-left: 10px;">Periodo:</label>
+                    <select id="filtroFecha"
+                        onchange="actualizarTablaMovimientos(document.getElementById('filtroMovimientos').value, this.value)"
+                        style="width: auto; padding: 5px 15px;">
+                        <option value="todo">Todo el historial</option>
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Última Semana</option>
+                    </select>
+                </div>
+
+                <div class="table-responsive" style="margin-top: 20px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Caja</th>
+                                <th>Tipo</th>
+                                <th>Descripción</th>
+                                <th>Monto</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaMovimientos"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -372,6 +527,13 @@
                     <label>Monto (S/)</label>
                     <input type="number" id="ventaMontoManual" step="0.01" min="0" placeholder="0.00">
                 </div>
+                <div class="input-group">
+                    <label>Método de Pago</label>
+                    <select id="metodoPagoManual">
+                        <option value="Efectivo">💵 Efectivo</option>
+                        <option value="Yape">📱 Yape/Plin</option>
+                    </select>
+                </div>
                 <div class="modal-buttons">
                     <button class="btn btn-green btn-full" onclick="agregarVentaManual()" id="btnGuardarVentaManual">
                         Guardar
@@ -385,8 +547,115 @@
             <div class="modal-content" style="max-width: 900px;">
                 <div class="modal-header">Vender Productos</div>
                 <div id="productosVentaContainer" class="productos-venta-grid"></div>
-                <div class="modal-buttons">
+
+                <div
+                    style="margin-top: 15px; padding: 12px; background: #f3f4f6; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e7eb;">
+                    <span style="font-weight: 600; font-size: 14px;">Método de Pago (Venta Rápida):</span>
+                    <select id="metodoPagoDirecto"
+                        style="padding: 5px 10px; border-radius: 6px; border: 1px solid #ccc;">
+                        <option value="Efectivo">💵 Efectivo</option>
+                        <option value="Yape">📱 Yape/Plin</option>
+                    </select>
+                </div>
+
+                <div class="modal-buttons" style="margin-top: 20px;">
                     <button class="btn btn-gray btn-full" onclick="closeModalVentaProductos()">Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalMovimiento" class="modal">
+            <div class="modal-content">
+                <div class="modal-header" id="movimientoModalTitle">Registrar Gasto</div>
+                <div id="movimientoError" class="error-msg hidden"></div>
+
+                <div class="input-group">
+                    <label>Tipo de Movimiento</label>
+                    <select id="movimientoTipo">
+                        <option value="egreso">Gasto Operativo (Egreso)</option>
+                        <option value="retiro">Retiro de Efectivo</option>
+                        <option value="reposicion">Reposición de Stock</option>
+                        <option value="ingreso">Ingreso Extra</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Descripción / Concepto</label>
+                    <input type="text" id="movimientoDescripcion" placeholder="Ej: Pago de luz / Compra snacks">
+                </div>
+
+                <div class="input-group">
+                    <label>Monto (S/)</label>
+                    <input type="number" id="movimientoMonto" step="0.01" min="0" placeholder="0.00">
+                </div>
+
+                <div class="input-group">
+                    <label>¿En qué caja impacta?</label>
+                    <select id="movimientoCaja">
+                        <option value="local">🏠 Caja Local</option>
+                        <option value="chica">👛 Caja Chica</option>
+                    </select>
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn btn-red btn-full" id="btnGuardarMovimiento" onclick="guardarMovimiento()">
+                        Confirmar
+                    </button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalMovimiento()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ NUEVO: Modal Transferencia -->
+        <div id="modalTransferencia" class="modal">
+            <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-header">🔄 Transferir Fondos</div>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Mueve dinero de la Caja Local a la Caja
+                    Chica.</p>
+
+                <div id="transferenciaError" class="error-msg hidden"></div>
+
+                <div class="input-group">
+                    <label>Monto a transferir (S/)</label>
+                    <input type="number" id="transferenciaMonto" step="0.01" min="0" placeholder="0.00">
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn btn-blue btn-full" onclick="guardarTransferencia()">
+                        Confirmar Transferencia
+                    </button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalTransferencia()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ NUEVO: Modal Ajuste Caja Chica -->
+        <div id="modalAjusteCajaChica" class="modal">
+            <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-header">⚙️ Ajustar Saldo Caja Chica</div>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Utiliza esto para establecer el saldo
+                    inicial o corregir el monto físico en Caja Chica.</p>
+
+                <div class="info-grid"
+                    style="grid-template-columns: 1fr; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <div class="info-item">
+                        <span class="info-label">Saldo Actual en Sistema:</span>
+                        <strong id="ajusteMontoActual" style="font-size: 18px; color: #3b82f6;">S/ 0.00</strong>
+                    </div>
+                </div>
+
+                <div id="ajusteError" class="error-msg hidden"></div>
+
+                <div class="input-group">
+                    <label>Saldo Real / Nuevo Saldo (S/)</label>
+                    <input type="number" id="ajusteMontoNuevo" step="0.01" min="0" placeholder="Ej: 500.00">
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn btn-blue btn-full" onclick="guardarAjusteCajaChica()">
+                        Guardar Ajuste
+                    </button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalAjusteCajaChica()">Cancelar</button>
                 </div>
             </div>
         </div>
@@ -399,18 +668,66 @@
                     <label>Nombre</label>
                     <input type="text" id="productoNombre" placeholder="Ej: Cerveza Pilsen">
                 </div>
+
+                <!-- Nueva sección: Categoría -->
                 <div class="input-group">
-                    <label>Precio (S/)</label>
-                    <input type="number" id="productoPrecio" step="0.01" min="0" placeholder="0.00">
+                    <label>Categoría</label>
+                    <select id="productoCategoria">
+                        <option value="Golosinas">🍬 Golosinas</option>
+                        <option value="Gaseosas">🥤 Gaseosas</option>
+                        <option value="Licores">🍺 Licores</option>
+                        <option value="Otros">📦 Otros</option>
+                    </select>
                 </div>
-                <div class="input-group">
-                    <label>Stock Inicial</label>
-                    <input type="number" id="productoStock" min="0" placeholder="0">
+
+                <!-- Precios: Costo y Venta -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label>💰 Precio de Costo (S/)</label>
+                        <input type="number" id="productoPrecioCosto" step="0.01" min="0" placeholder="0.00"
+                            oninput="calcularMargenProducto()">
+                    </div>
+                    <div class="input-group">
+                        <label>💵 Precio de Venta (S/)</label>
+                        <input type="number" id="productoPrecio" step="0.01" min="0" placeholder="0.00"
+                            oninput="calcularMargenProducto()">
+                    </div>
                 </div>
-                <div class="input-group">
-                    <label>Stock Mínimo (Alerta)</label>
-                    <input type="number" id="productoStockMin" min="0" value="5" placeholder="5">
+
+                <!-- Indicador de Margen de Ganancia -->
+                <div id="margenIndicador" class="hidden"
+                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 3px;">📊 Margen de Ganancia</div>
+                    <div style="font-size: 20px; font-weight: bold;">
+                        <span id="margenPorcentaje">0%</span>
+                        <span style="font-size: 14px; margin-left: 10px;">
+                            (S/ <span id="margenMonto">0.00</span> por unidad)
+                        </span>
+                    </div>
                 </div>
+
+                <!-- Stock -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label>📦 Stock Inicial</label>
+                        <input type="number" id="productoStock" min="0" placeholder="0">
+                    </div>
+                    <div class="input-group">
+                        <label>⚠️ Stock Mínimo (Alerta)</label>
+                        <input type="number" id="productoStockMin" min="0" value="5" placeholder="5">
+                    </div>
+                </div>
+
+                <!-- Ganancia Total Esperada -->
+                <div id="gananciaTotalIndicador" class="hidden"
+                    style="background: #f0f9ff; border: 2px dashed #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #1e40af; font-weight: 500;">🎯 Ganancia Total Esperada del Lote:</span>
+                        <span style="color: #1e40af; font-size: 18px; font-weight: bold;">S/ <span
+                                id="gananciaTotalEsperada">0.00</span></span>
+                    </div>
+                </div>
+
                 <div class="modal-buttons">
                     <button class="btn btn-green btn-full" onclick="guardarProducto()">Guardar</button>
                     <button class="btn btn-gray btn-full" onclick="closeModalProducto()">Cancelar</button>
@@ -513,6 +830,17 @@
                         <strong style="font-size: 18px;">Total a Cobrar:</strong>
                         <strong id="totalCobroParcial" style="font-size: 28px; color: #10b981;">S/ 0.00</strong>
                     </div>
+
+                    <div
+                        style="margin-bottom: 20px; padding: 12px; background: #f3f4f6; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e7eb;">
+                        <span style="font-weight: 600; font-size: 14px;">Método de Pago:</span>
+                        <select id="metodoPagoParcial"
+                            style="padding: 5px 10px; border-radius: 6px; border: 1px solid #ccc;">
+                            <option value="Efectivo">💵 Efectivo</option>
+                            <option value="Yape">📱 Yape/Plin</option>
+                        </select>
+                    </div>
+
                     <div class="modal-buttons">
                         <button class="btn btn-green btn-full" onclick="procesarCobroParcial()"
                             id="btnConfirmarCobroParcial">
@@ -523,6 +851,44 @@
                 </div>
             </div>
         </div>
+        <!-- ✅ MODAL CONFIRMACIÓN DE PAGO UNIVERSAL -->
+        <div id="modalConfirmacionPago" class="modal">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <div class="modal-header">
+                    <h2 id="pagoTitulo" style="margin: 0; font-size: 20px;">Confirmar Pago</h2>
+                </div>
+                <div style="padding: 20px;">
+                    <div style="font-size: 14px; color: #666; margin-bottom: 5px;" id="pagoDetalle">Resumen de cobro
+                    </div>
+                    <div style="font-size: 32px; font-weight: bold; color: #10b981; margin-bottom: 25px;"
+                        id="pagoMonto">S/ 0.00</div>
+
+                    <label
+                        style="display: block; text-align: left; margin-bottom: 12px; font-weight: 600; font-size: 14px; color: #374151;">Selecciona
+                        Método de Pago:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                        <label class="metodo-pago-opt">
+                            <input type="radio" name="metodoPagoConf" value="Efectivo" checked>
+                            <div class="opt-box">💵 Efectivo</div>
+                        </label>
+                        <label class="metodo-pago-opt">
+                            <input type="radio" name="metodoPagoConf" value="Yape">
+                            <div class="opt-box">📱 Yape/Plin</div>
+                        </label>
+                    </div>
+
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-gray" onclick="closeModalConfirmacionPago()"
+                            style="flex: 1;">Atrás</button>
+                        <button id="btnConfirmarPagoFinal" class="btn btn-green"
+                            style="flex: 2; font-size: 16px; font-weight: bold;">
+                            ✅ Confirmar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <script type="module" src="firebase-config.js"></script>
         <script src="app.js"></script>
 </body>
