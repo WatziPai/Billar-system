@@ -63,7 +63,7 @@ let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
 let lotesAgotados = []; // Historial de lotes de productos agotados
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
-const TIEMPO_EXPIRACION = 50 * 60 * 1000;
+const TIEMPO_EXPIRACION = 30 * 60 * 1000;
 let timerInactividad = null;
 
 function iniciarMonitoreoInactividad() {
@@ -4554,4 +4554,83 @@ window.eliminarMovimiento = async function (id) {
     movimientos = movimientos.filter(m => m.id !== id);
     await guardarMovimientos();
     actualizarTablaMovimientos();
+};
+
+// ===========================================
+// ========== GESTIÓN DE VENTAS (ELIMINAR) ===
+// ===========================================
+
+window.eliminarVentasMensuales = async function () {
+    if (!confirm('🛑 ¿Estás seguro de eliminar TODAS las ventas de ESTE MES?\n\nEsta acción no se puede deshacer.')) return;
+
+    if (!confirm('⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del mes actual.')) return;
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const ventasAnteriores = ventas.length;
+
+    // Filtrar para MANTENER ventas que NO son de este mes/año
+    ventas = ventas.filter(v => {
+        const d = new Date(v.id);
+        return d.getMonth() !== currentMonth || d.getFullYear() !== currentYear;
+    });
+
+    if (ventas.length === ventasAnteriores) {
+        alert('ℹ️ No se encontraron ventas de este mes para eliminar.');
+        return;
+    }
+
+    await guardarVentas();
+    if (typeof actualizarTablaVentas === 'function') {
+        actualizarTablaVentas();
+    } else {
+        debugLog('error', '⚠️ Func. actualizarTablaVentas no encontrada, recargando...');
+        location.reload();
+    }
+
+    // También actualizamos dashboard si es admin
+    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+
+    alert('✅ Ventas del mes eliminadas correctamente.');
+};
+
+window.eliminarVentasSemanales = async function () {
+    if (!confirm('🛑 ¿Estás seguro de eliminar TODAS las ventas de ESTA SEMANA?\n\nEsta acción no se puede deshacer.')) return;
+
+    const now = new Date(); // Hoy
+    const currentDay = now.getDay(); // 0 (Domingo) - 6 (Sábado)
+
+    // Calcular Lunes de esta semana
+    // Si hoy es Domingo (0), el lunes fue hace 6 días.
+    // Si hoy es Lunes (1), el lunes es hoy (0 días atrás).
+    const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const ventasAnteriores = ventas.length;
+
+    ventas = ventas.filter(v => {
+        const d = new Date(v.id);
+        return d < startOfWeek; // Mantenemos las que son MENORES al inicio de semana
+    });
+
+    if (ventas.length === ventasAnteriores) {
+        alert('ℹ️ No se encontraron ventas de esta semana para eliminar.');
+        return;
+    }
+
+    await guardarVentas();
+    if (typeof actualizarTablaVentas === 'function') {
+        actualizarTablaVentas();
+    } else {
+        location.reload();
+    }
+
+    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+
+    alert('✅ Ventas de la semana eliminadas correctamente.');
 };
