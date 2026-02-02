@@ -1,5 +1,6 @@
 // ========== CONFIGURACIÓN DE DEBUGGING ==========
 const DEBUG_MODE = true;
+const USE_LOCAL_STORAGE = true; // 🧪 Cambia a true para probar sin tocar Firebase (usa localStorage)
 
 function debugLog(categoria, mensaje, datos = null) {
     if (!DEBUG_MODE) return;
@@ -26,7 +27,9 @@ const COLLECTIONS = {
     ERRORES: 'errores',
     CIERRES: 'cierres',
     CONSUMOS: 'consumos',
-    CONFIGURACION: 'configuracion'
+    CONFIGURACION: 'configuracion',
+    CAJA: 'caja',
+    LOTES: 'lotes_agotados'
 };
 
 const DOC_IDS = {
@@ -56,6 +59,8 @@ let tabActual = 'mesas';
 let cierres = [];
 let ultimoCierre = null;
 let consumosDueno = [];
+let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
+let lotesAgotados = []; // Historial de lotes de productos agotados
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
 const TIEMPO_EXPIRACION = 30 * 60 * 1000;
@@ -170,7 +175,7 @@ function mostrarPantallaPrincipal() {
         }
     };
 
-    if (usuarioActual.rol === 'admin') {
+    if ((usuarioActual.rol || '').toLowerCase() === 'admin') {
         toggleElement('btnUsuarios', true);
         toggleElement('btnAgregarMesa', true);
         toggleElement('btnAgregarMesaConsumo', true);
@@ -180,10 +185,10 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabErrores', true);
         toggleElement('btnReportarError', false);
         toggleElement('btnAgregarProducto', true);
-        toggleElement('tabConsumoDueno', true);
-        toggleElement('btnReportarError', false);
-        toggleElement('btnAgregarProducto', true);
-        toggleElement('tabConsumoDueno', true);
+        toggleElement('btnTabConsumoDueno', true);
+        toggleElement('btnTabDashboard', true);
+        toggleElement('btnTabCaja', true);
+        toggleElement('sectionLotesAgotados', true);
     } else {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
@@ -194,10 +199,10 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabErrores', false);
         toggleElement('btnReportarError', true);
         toggleElement('btnAgregarProducto', false);
-        toggleElement('tabConsumoDueno', false);
-        toggleElement('btnReportarError', true);
-        toggleElement('btnAgregarProducto', false);
-        toggleElement('tabConsumoDueno', false);
+        toggleElement('btnTabConsumoDueno', false);
+        toggleElement('btnTabDashboard', false);
+        toggleElement('btnTabCaja', false);
+        toggleElement('sectionLotesAgotados', false);
     }
 
     try {
@@ -245,8 +250,13 @@ window.changeTab = function (tab, event) {
         actualizarErrores();
     } else if (tab === 'inventario') {
         actualizarInventario();
+        actualizarTablaLotes();
     } else if (tab === 'consumoDueno') {
         actualizarConsumoDueno();
+    } else if (tab === 'dashboard') {
+        actualizarDashboardFinanciero();
+    } else if (tab === 'caja') {
+        actualizarTablaMovimientos();
     }
 };
 
@@ -258,6 +268,19 @@ document.addEventListener('DOMContentLoaded', async function () {
     await esperarFirebase();
 
     window.firebaseAuth.onAuthChange(async (user) => {
+        if (USE_LOCAL_STORAGE) {
+            // En modo local, si ya hay una sesión de prueba en sessionStorage, la usamos
+            const sessionLocal = sessionStorage.getItem('billar_active_session');
+            if (sessionLocal) {
+                const testUser = JSON.parse(sessionLocal);
+                await cargarDatos();
+                usuarioActual = testUser;
+                mostrarPantallaPrincipal();
+                hideLoading();
+                return;
+            }
+        }
+
         if (user) {
             debugLog('sistema', '✅ Usuario autenticado detectado', { uid: user.uid });
 
@@ -367,10 +390,19 @@ function esperarFirebase() {
 }
 
 async function cargarDatos() {
-    debugLog('firebase', '📂 Cargando datos desde Firebase...');
+    debugLog('firebase', USE_LOCAL_STORAGE ? '📂 Cargando datos desde LOCAL STORAGE...' : '📂 Cargando datos desde Firebase...');
+
+    // Helper para cargar dependiendo del modo
+    const getData = async (col, doc) => {
+        if (USE_LOCAL_STORAGE) {
+            const data = localStorage.getItem(`billar_${col}_${doc}`);
+            return data ? JSON.parse(data) : null;
+        }
+        return await window.firebaseDB.get(col, doc);
+    };
 
     try {
-        const usuariosData = await window.firebaseDB.get(COLLECTIONS.USUARIOS, DOC_IDS.TODOS);
+        const usuariosData = await getData(COLLECTIONS.USUARIOS, DOC_IDS.TODOS);
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
         } else {
@@ -378,32 +410,38 @@ async function cargarDatos() {
             await guardarDatosGenerico(COLLECTIONS.USUARIOS, DOC_IDS.TODOS, { lista: usuarios });
         }
 
-        const config = await window.firebaseDB.get(COLLECTIONS.CONFIGURACION, DOC_IDS.GENERAL);
+        const config = await getData(COLLECTIONS.CONFIGURACION, DOC_IDS.GENERAL);
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
 
-        const ventasData = await window.firebaseDB.get(COLLECTIONS.VENTAS, DOC_IDS.TODAS);
+        const ventasData = await getData(COLLECTIONS.VENTAS, DOC_IDS.TODAS);
         ventas = ventasData?.lista || [];
 
-        const productosData = await window.firebaseDB.get(COLLECTIONS.PRODUCTOS, DOC_IDS.TODOS);
+        const productosData = await getData(COLLECTIONS.PRODUCTOS, DOC_IDS.TODOS);
         productos = productosData?.lista || [];
 
-        const erroresData = await window.firebaseDB.get(COLLECTIONS.ERRORES, DOC_IDS.TODOS);
+        const erroresData = await getData(COLLECTIONS.ERRORES, DOC_IDS.TODOS);
         erroresReportados = erroresData?.lista || [];
 
-        const cierresData = await window.firebaseDB.get(COLLECTIONS.CIERRES, DOC_IDS.HISTORIAL);
+        const cierresData = await getData(COLLECTIONS.CIERRES, DOC_IDS.HISTORIAL);
         cierres = cierresData?.lista || [];
 
         if (cierres.length > 0) {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
 
-        const consumosDuenoData = await window.firebaseDB.get(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO);
+        const consumosDuenoData = await getData(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO);
         consumosDueno = consumosDuenoData?.lista || [];
 
-        const mesasData = await window.firebaseDB.get(COLLECTIONS.MESAS, DOC_IDS.BILLAR);
+        const lotesData = await getData(COLLECTIONS.LOTES, DOC_IDS.TODOS);
+        lotesAgotados = lotesData?.lista || [];
+
+        const cajaData = await getData(COLLECTIONS.CAJA, DOC_IDS.TODOS);
+        movimientos = cajaData?.lista || [];
+
+        const mesasData = await getData(COLLECTIONS.MESAS, DOC_IDS.BILLAR);
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
         } else {
@@ -416,11 +454,14 @@ async function cargarDatos() {
             await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.BILLAR, { lista: mesas });
         }
 
-        const mesasConsumoData = await window.firebaseDB.get(COLLECTIONS.MESAS, DOC_IDS.CONSUMO);
+        const mesasConsumoData = await getData(COLLECTIONS.MESAS, DOC_IDS.CONSUMO);
         mesasConsumo = mesasConsumoData?.lista || [
             { id: 1, ocupada: false, consumos: [], total: 0 },
             { id: 2, ocupada: false, consumos: [], total: 0 }
         ];
+
+        const movimientosData = await getData(COLLECTIONS.CAJA, DOC_IDS.HISTORIAL);
+        movimientos = movimientosData?.lista || [];
 
         debugLog('firebase', '✅ Todos los datos cargados correctamente');
 
@@ -433,6 +474,11 @@ async function cargarDatos() {
 // ========== FUNCIONES DE GUARDADO GENÉRICO ==========
 async function guardarDatosGenerico(coleccion, docId, data) {
     try {
+        if (USE_LOCAL_STORAGE) {
+            localStorage.setItem(`billar_${coleccion}_${docId}`, JSON.stringify(data));
+            debugLog('firebase', `💾 Datos guardados LOCALMENTE en ${coleccion}/${docId}`);
+            return;
+        }
         await window.firebaseDB.set(coleccion, docId, data);
         debugLog('firebase', `💾 Datos guardados en ${coleccion}/${docId}`);
     } catch (error) {
@@ -459,6 +505,10 @@ async function guardarMesas() {
 
 async function guardarMesasConsumo() {
     await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.CONSUMO, { lista: mesasConsumo });
+}
+
+async function guardarMovimientos() {
+    await guardarDatosGenerico(COLLECTIONS.CAJA, DOC_IDS.HISTORIAL, { lista: movimientos });
 }
 
 async function guardarErrores() {
@@ -504,6 +554,31 @@ window.handleLogin = async function () {
 
     btnLogin.disabled = true;
     btnLogin.textContent = 'Iniciando...';
+
+    if (USE_LOCAL_STORAGE) {
+        // MODO PRUEBA LOCAL: admin / admin123
+        if ((username === 'admin' && password === 'admin123') || (username === 'test' && password === 'test')) {
+            await cargarDatos();
+            usuarioActual = {
+                id: Date.now(),
+                nombre: username === 'admin' ? 'Administrador Pruebas' : 'Usuario Pruebas',
+                username: username,
+                rol: username === 'admin' ? 'admin' : 'empleado'
+            };
+            sessionStorage.setItem('billar_active_session', JSON.stringify(usuarioActual));
+            mostrarPantallaPrincipal();
+            hideLoading();
+            btnLogin.disabled = false;
+            btnLogin.textContent = 'Iniciar Sesión';
+            return;
+        } else {
+            errorDiv.textContent = 'Modo Local: Usa admin/admin123 o test/test';
+            errorDiv.classList.remove('hidden');
+            btnLogin.disabled = false;
+            btnLogin.textContent = 'Iniciar Sesión';
+            return;
+        }
+    }
 
     try {
         let email = username;
@@ -551,13 +626,16 @@ window.handleLogout = async function () {
     debugLog('sistema', '👋 Cerrando sesión...', { usuario: usuarioActual ? usuarioActual.nombre : null });
 
     try {
-        await window.firebaseAuth.signOut();
-        debugLog('sistema', '✅ Sesión cerrada en Firebase Auth');
+        if (!USE_LOCAL_STORAGE) {
+            await window.firebaseAuth.signOut();
+            debugLog('sistema', '✅ Sesión cerrada en Firebase Auth');
+        }
     } catch (error) {
         console.error('❌ Error al cerrar sesión:', error);
     }
 
     usuarioActual = null;
+    sessionStorage.removeItem('billar_active_session');
     localStorage.removeItem('ultimaActividad');
     detenerMonitoreoInactividad();
 
@@ -720,12 +798,18 @@ window.toggleMesa = function (id) {
         mensaje += `⏱️ Tiempo: ${resultado.minutos} minutos (${resultado.horas}h ${resultado.minutosExtra}min)\n`;
         mensaje += `💵 Costo tiempo: S/ ${resultado.costo.toFixed(2)}\n`;
 
-        if (mesa.consumos && mesa.consumos.length > 0) {
-            const totalConsumos = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+        const totalConsumos = mesa.consumos ? mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0) : 0;
+        const totalFinal = resultado.costo + totalConsumos;
+
+        if (totalConsumos > 0) {
             mensaje += `🛒 Consumos: S/ ${totalConsumos.toFixed(2)}\n`;
-            mensaje += `💰 TOTAL: S/ ${(resultado.costo + totalConsumos).toFixed(2)}`;
-        } else {
-            mensaje += `💰 TOTAL: S/ ${resultado.costo.toFixed(2)}`;
+        }
+
+        mensaje += `💰 TOTAL: S/ ${totalFinal.toFixed(2)}\n\n`;
+
+        if (totalFinal <= 0) {
+            mensaje += `⚠️ No hay consumos ni tiempo significativo acumulado.\n`;
+            mensaje += `La mesa se cerrará sin generar venta.`;
         }
 
         if (!confirm(mensaje)) return;
@@ -791,6 +875,7 @@ async function finalizarMesa(id) {
 
     let totalConsumos = 0;
     let detalleConsumos = [];
+    let totalCostoProductos = 0;
     if (mesa.consumos && mesa.consumos.length > 0) {
         mesa.consumos.forEach(c => {
             const subtotal = c.precio * c.cantidad;
@@ -801,16 +886,48 @@ async function finalizarMesa(id) {
                 precioUnitario: c.precio,
                 subtotal: subtotal
             });
+            const prod = productos.find(p => p.id === c.id);
+            totalCostoProductos += (prod ? (prod.precioCosto || 0) : 0) * c.cantidad;
         });
     }
 
     const totalFinal = costoTiempo + totalConsumos;
+
+    if (totalFinal <= 0) {
+        // Si no hay cobro (tiempo insignificante y sin consumos), cerramos la mesa sin generar venta
+        clearInterval(timers[id]);
+        delete timers[id];
+
+        mesa.ocupada = false;
+        mesa.inicio = null;
+        mesa.tiempoTranscurrido = 0;
+        mesa.consumos = [];
+        await guardarMesas();
+
+        debugLog('timer', '⏹️ Mesa de billar cerrada (sin cobro)', { id });
+        actualizarMesas();
+        return;
+    }
+
+    // ⭐ NUEVO: Confirmación con Modal de Pago
+    const metodoPago = await showModalConfirmacionPago(totalFinal, `Cierre de Mesa Billar ${id}`);
+    if (!metodoPago) return;
+
+    // Calcular ganancia neta de la mesa
+    let gananciaMesa = costoTiempo; // El tiempo es 100% ganancia
+    mesa.consumos.forEach(c => {
+        const prod = productos.find(p => p.id === c.id);
+        const costo = prod ? (prod.precioCosto || 0) : 0;
+        gananciaMesa += (c.precio - costo) * c.cantidad;
+    });
 
     const venta = {
         id: Date.now(),
         tipo: 'Mesa Billar',
         tipoDetalle: `Mesa ${mesa.id}`,
         monto: totalFinal,
+        ganancia: gananciaMesa, // ⭐ REGISTRAR GANANCIA
+        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -838,11 +955,12 @@ async function finalizarMesa(id) {
     mesa.consumos = [];
     await guardarMesas();
 
-    alert(`✅ Mesa ${id} finalizada.\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada (${metodoPago}).\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
 
     actualizarMesas();
     actualizarTablaVentas();
     calcularTotal();
+    actualizarDashboardFinanciero(); // 🚀 Reflejar ganancia de tiempo y productos en el dashboard
 }
 
 function actualizarTimer(id) {
@@ -880,6 +998,7 @@ window.agregarVentaManual = async function () {
     const btn = document.getElementById('btnGuardarVentaManual');
     const descripcion = document.getElementById('ventaDescripcionManual').value.trim();
     const monto = parseFloat(document.getElementById('ventaMontoManual').value);
+    const metodoPago = document.getElementById('metodoPagoManual').value;
 
     if (!descripcion || isNaN(monto) || monto <= 0) {
         mostrarError('Por favor completa todos los campos correctamente');
@@ -894,6 +1013,8 @@ window.agregarVentaManual = async function () {
         tipo: 'Venta Manual',
         tipoDetalle: descripcion,
         monto: monto,
+        ganancia: monto, // ⭐ Las ventas manuales se consideran 100% utilidad (servicios/varios)
+        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre
     };
@@ -902,6 +1023,7 @@ window.agregarVentaManual = async function () {
     await guardarVentas();
     actualizarTablaVentas();
     calcularTotal();
+    actualizarDashboardFinanciero(); // Actualizar dashboard
     window.closeModalVentaManual();
 
     btn.disabled = false;
@@ -970,12 +1092,14 @@ window.agregarVentaProducto = async function (productoId) {
     }
 
     const montoTotal = producto.precio * cantidad;
+    const metodoPago = document.getElementById('metodoPagoDirecto').value;
 
     const venta = {
         id: Date.now(),
         tipo: 'Venta Directa',
         tipoDetalle: `${producto.nombre} x${cantidad}`,
         monto: montoTotal,
+        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -992,15 +1116,19 @@ window.agregarVentaProducto = async function (productoId) {
     ventas.push(venta);
     producto.stock -= cantidad;
 
+    // ⭐ NUEVO: Actualizar ganancia acumulada y registrar en la venta
+    const gananciaVenta = await actualizarGananciaProducto(productoId, cantidad);
+    venta.ganancia = gananciaVenta;
+
     await guardarVentas();
-    await guardarProductos();
 
     actualizarTablaVentas();
     calcularTotal();
     renderProductosVenta();
     actualizarInventario();
+    actualizarDashboardFinanciero();
 
-    alert(`Venta de ${cantidad}x ${producto.nombre} por S/ ${montoTotal.toFixed(2)} registrada.`);
+    alert(`Venta de ${cantidad}x ${producto.nombre} por S/ ${montoTotal.toFixed(2)} registrada (${metodoPago}).`);
 
     btn.disabled = false;
     btn.textContent = 'Vender';
@@ -1025,23 +1153,31 @@ function actualizarTablaVentas() {
     if (!tbody) return;
 
     if (ventas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 30px; color: #999;">No hay ventas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 30px; color: #999;">No hay ventas registradas</td></tr>';
         return;
     }
 
     const ventasOrdenadas = [...ventas].reverse();
 
-    tbody.innerHTML = ventasOrdenadas.map(v => `
-        <tr>
-            <td style="font-size: 13px;">${v.fecha}</td>
-            <td>${v.tipoDetalle || v.tipo}</td>
-            <td style="font-size: 13px; color: #666;">${v.usuario}</td>
-            <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
-            <td style="text-align: center;">
-                ${usuarioActual.rol === 'admin' ? `<button class="delete-btn" onclick="eliminarVenta(${v.id})">🗑️</button>` : '-'}
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = ventasOrdenadas.map(v => {
+        const metodo = v.metodoPago || 'Efectivo';
+        const metodoColor = metodo === 'Yape' ? '#742284' : '#10b981';
+
+        return `
+            <tr>
+                <td style="font-size: 13px;">${v.fecha}</td>
+                <td>${v.tipoDetalle || v.tipo}</td>
+                <td style="font-size: 13px; color: #666;">${v.usuario}</td>
+                <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
+                <td style="text-align: center;">
+                    <span style="background: ${metodoColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${metodo}</span>
+                </td>
+                <td style="text-align: center;">
+                    ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `<button class="delete-btn" onclick="eliminarVenta(${v.id})">🗑️</button>` : '-'}
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function calcularTotal() {
@@ -1069,14 +1205,25 @@ window.showModalProducto = function (producto = null) {
         title.textContent = 'Editar Producto';
         document.getElementById('productoNombre').value = producto.nombre;
         document.getElementById('productoPrecio').value = producto.precio;
+        document.getElementById('productoPrecioCosto').value = producto.precioCosto || '';
+        document.getElementById('productoCategoria').value = producto.categoria || 'Otros';
         document.getElementById('productoStock').value = producto.stock;
         document.getElementById('productoStockMin').value = producto.stockMin;
+
+        // Calcular y mostrar margen si existe precio de costo
+        setTimeout(() => calcularMargenProducto(), 100);
     } else {
         title.textContent = 'Agregar Producto';
         document.getElementById('productoNombre').value = '';
         document.getElementById('productoPrecio').value = '';
+        document.getElementById('productoPrecioCosto').value = '';
+        document.getElementById('productoCategoria').value = 'Otros';
         document.getElementById('productoStock').value = '';
         document.getElementById('productoStockMin').value = '5';
+
+        // Ocultar indicadores
+        document.getElementById('margenIndicador').classList.add('hidden');
+        document.getElementById('gananciaTotalIndicador').classList.add('hidden');
     }
 
     document.getElementById('productoError').classList.add('hidden');
@@ -1102,35 +1249,221 @@ window.guardarProducto = async function () {
 
     const nombre = document.getElementById('productoNombre').value.trim();
     const precio = parseFloat(document.getElementById('productoPrecio').value);
+    const precioCosto = parseFloat(document.getElementById('productoPrecioCosto').value);
+    const categoria = document.getElementById('productoCategoria').value;
     const stock = parseInt(document.getElementById('productoStock').value);
     const stockMin = parseInt(document.getElementById('productoStockMin').value);
     const errorDiv = document.getElementById('productoError');
 
+    // Validaciones
     if (!nombre || isNaN(precio) || precio < 0 || isNaN(stock) || stock < 0 || isNaN(stockMin) || stockMin < 0) {
         errorDiv.textContent = 'Por favor completa todos los campos correctamente';
         errorDiv.classList.remove('hidden');
         return;
     }
 
+    // Validación: precio de costo debe ser menor que precio de venta
+    if (!isNaN(precioCosto) && precioCosto > 0 && precioCosto >= precio) {
+        errorDiv.textContent = '⚠️ El precio de costo debe ser menor que el precio de venta';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
     if (productoEditando) {
+        // Al editar, mantener ganancia acumulada existente
         productoEditando.nombre = nombre;
         productoEditando.precio = precio;
+        productoEditando.precioCosto = precioCosto || 0;
+        productoEditando.categoria = categoria;
         productoEditando.stock = stock;
         productoEditando.stockMin = stockMin;
+
+        // Si no existía stockInicial, establecerlo ahora
+        if (!productoEditando.stockInicial) {
+            productoEditando.stockInicial = stock;
+            productoEditando.unidadesVendidas = 0;
+            productoEditando.gananciaAcumulada = 0;
+            productoEditando.fechaUltimaReposicion = Date.now();
+        }
     } else {
+        // Crear nuevo producto
         productos.push({
             id: Date.now(),
             nombre,
             precio,
+            precioCosto: precioCosto || 0,
+            categoria,
             stock,
-            stockMin
+            stockInicial: stock,
+            stockMin,
+            unidadesVendidas: 0,
+            gananciaAcumulada: 0,
+            fechaUltimaReposicion: Date.now()
         });
     }
 
     await guardarProductos();
     actualizarInventario();
     window.closeModalProducto();
+
+    debugLog('stock', '✅ Producto guardado', { nombre, precio, precioCosto, categoria });
 };
+
+// ========== FUNCIÓN PARA CALCULAR MARGEN EN TIEMPO REAL ==========
+window.calcularMargenProducto = function () {
+    const precioVenta = parseFloat(document.getElementById('productoPrecio').value) || 0;
+    const precioCosto = parseFloat(document.getElementById('productoPrecioCosto').value) || 0;
+    const stock = parseInt(document.getElementById('productoStock').value) || 0;
+
+    const margenIndicador = document.getElementById('margenIndicador');
+    const gananciaTotalIndicador = document.getElementById('gananciaTotalIndicador');
+
+    if (precioVenta > 0 && precioCosto > 0 && precioCosto < precioVenta) {
+        // Calcular margen
+        const margenPorUnidad = precioVenta - precioCosto;
+        const margenPorcentaje = (margenPorUnidad / precioVenta) * 100;
+
+        // Mostrar margen
+        document.getElementById('margenPorcentaje').textContent = margenPorcentaje.toFixed(1) + '%';
+        document.getElementById('margenMonto').textContent = margenPorUnidad.toFixed(2);
+        margenIndicador.classList.remove('hidden');
+
+        // Calcular ganancia total esperada
+        if (stock > 0) {
+            const gananciaTotalEsperada = margenPorUnidad * stock;
+            document.getElementById('gananciaTotalEsperada').textContent = gananciaTotalEsperada.toFixed(2);
+            gananciaTotalIndicador.classList.remove('hidden');
+        } else {
+            gananciaTotalIndicador.classList.add('hidden');
+        }
+    } else {
+        margenIndicador.classList.add('hidden');
+        gananciaTotalIndicador.classList.add('hidden');
+    }
+};
+
+// ========== FUNCIÓN PARA ACTUALIZAR GANANCIA AL VENDER ==========
+async function actualizarGananciaProducto(productoId, cantidadVendida, esGratis = false) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto) {
+        debugLog('error', '❌ Producto no encontrado para actualizar ganancia', { productoId });
+        return;
+    }
+
+    // ⭐ Inicialización Robusta (Evita crashes con .toFixed)
+    if (producto.stockInicial === undefined) producto.stockInicial = producto.stock + (esGratis ? 0 : cantidadVendida);
+    if (producto.unidadesVendidas === undefined) producto.unidadesVendidas = 0;
+    if (producto.unidadesConsumidasDueno === undefined) producto.unidadesConsumidasDueno = 0;
+    if (producto.gananciaAcumulada === undefined) producto.gananciaAcumulada = 0;
+    if (producto.fechaUltimaReposicion === undefined) producto.fechaUltimaReposicion = Date.now();
+
+    // Calcular ganancia de esta venta
+    const precioCosto = producto.precioCosto || 0;
+    const precioVenta = producto.precio || 0;
+    const margenPorUnidad = precioVenta - precioCosto;
+    const gananciaDeEstaVenta = margenPorUnidad * cantidadVendida;
+
+    // Actualizar contadores
+    if (!esGratis) {
+        producto.unidadesVendidas += cantidadVendida;
+        producto.gananciaAcumulada += gananciaDeEstaVenta;
+    } else {
+        producto.unidadesConsumidasDueno += cantidadVendida;
+    }
+
+    debugLog('stock', '💰 Ganancia actualizada', {
+        producto: producto.nombre,
+        cantidadVendida,
+        gananciaAcumulada: (producto.gananciaAcumulada || 0).toFixed(2),
+        stockRestante: producto.stock
+    });
+
+    // Detectar si el producto se agotó
+    if (producto.stock === 0) {
+        mostrarNotificacionAgotamiento(producto);
+        await generarReporteAgotamiento(producto);
+    }
+
+    await guardarProductos();
+    return gananciaDeEstaVenta;
+}
+
+// ========== FUNCIÓN PARA ARCHIVAR LOTE AGOTADO ==========
+async function generarReporteAgotamiento(producto) {
+    // Si no tiene ventas ni consumo, no archivamos nada
+    if ((producto.unidadesVendidas || 0) === 0 && (producto.unidadesConsumidasDueno || 0) === 0) return;
+
+    const reporte = {
+        id: Date.now(),
+        productoId: producto.id,
+        nombre: producto.nombre,
+        categoria: producto.categoria || 'Otros',
+        stockInicial: producto.stockInicial || 0,
+        unidadesVendidas: producto.unidadesVendidas || 0,
+        unidadesConsumidasDueno: producto.unidadesConsumidasDueno || 0,
+        precioCosto: producto.precioCosto || 0,
+        precioVendido: producto.precio || 0,
+        gananciaGenerada: producto.gananciaAcumulada || 0,
+        fechaInicio: producto.fechaUltimaReposicion || Date.now(),
+        fechaFin: Date.now()
+    };
+
+    lotesAgotados.unshift(reporte);
+    await guardarLotesAgotados();
+    actualizarTablaLotes();
+
+    debugLog('stock', '📊 Reporte de lote agotado generado', reporte);
+}
+
+window.guardarLotesAgotados = async function () {
+    await guardarDatosGenerico(COLLECTIONS.LOTES, DOC_IDS.TODOS, { lista: lotesAgotados });
+};
+
+// ========== NOTIFICACIÓN CUANDO UN PRODUCTO SE AGOTA ==========
+function mostrarNotificacionAgotamiento(producto) {
+    const stockInicial = producto.stockInicial || 0;
+    const gananciaTotal = producto.gananciaAcumulada || 0;
+    const fechaReposicion = producto.fechaUltimaReposicion || Date.now();
+    const diasVenta = Math.ceil((Date.now() - fechaReposicion) / (1000 * 60 * 60 * 24));
+
+    let mensaje = `🎉 ¡PRODUCTO AGOTADO!\n\n`;
+    mensaje += `${producto.categoria ? getCategoriaEmoji(producto.categoria) : '📦'} ${producto.nombre}\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `📦 Unidades vendidas: ${producto.unidadesVendidas || stockInicial}\n`;
+
+    if (gananciaTotal > 0) {
+        mensaje += `💰 Ganancia Total del Lote: S/ ${gananciaTotal.toFixed(2)}\n`;
+    }
+
+    if (diasVenta > 0) {
+        mensaje += `📅 Tiempo de venta: ${diasVenta} día${diasVenta !== 1 ? 's' : ''}\n`;
+    }
+
+    mensaje += `━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `\n¿Deseas reponer el stock ahora?`;
+
+    if (confirm(mensaje)) {
+        // Abrir modal de reposición (usamos el modal de stock existente)
+        window.showModalStock(producto.id);
+    }
+
+    debugLog('stock', '🎉 Producto agotado', {
+        producto: producto.nombre,
+        gananciaTotal,
+        diasVenta
+    });
+}
+
+// ========== HELPER: EMOJI DE CATEGORÍA ==========
+function getCategoriaEmoji(categoria) {
+    const emojis = {
+        'Golosinas': '🍬',
+        'Gaseosas': '🥤',
+        'Licores': '🍺',
+        'Otros': '📦'
+    };
+    return emojis[categoria] || '📦';
+}
 
 window.eliminarProducto = async function (id) {
     if (usuarioActual.rol !== 'admin') return;
@@ -1151,7 +1484,7 @@ window.showModalStock = function (productoId) {
     document.getElementById('stockAjuste').value = '';
 
     const inputAjuste = document.getElementById('stockAjuste');
-    if (usuarioActual.rol === 'admin') {
+    if ((usuarioActual.rol || '').toLowerCase() === 'admin') {
         inputAjuste.placeholder = 'Ej: +10 o -5';
         inputAjuste.setAttribute('min', '');
     } else {
@@ -1160,6 +1493,33 @@ window.showModalStock = function (productoId) {
     }
 
     document.getElementById('modalStock').classList.add('show');
+};
+
+// --- MODAL DE PAGO UNIVERSAL ---
+let resolvePagoActual = null;
+
+window.showModalConfirmacionPago = function (monto, detalle) {
+    return new Promise((resolve) => {
+        resolvePagoActual = resolve;
+        document.getElementById('pagoMonto').textContent = `S/ ${parseFloat(monto).toFixed(2)}`;
+        document.getElementById('pagoDetalle').textContent = detalle;
+        document.getElementById('modalConfirmacionPago').classList.add('show');
+
+        // Reset default option
+        const radios = document.getElementsByName('metodoPagoConf');
+        radios[0].checked = true;
+
+        document.getElementById('btnConfirmarPagoFinal').onclick = () => {
+            const metodo = document.querySelector('input[name="metodoPagoConf"]:checked').value;
+            window.closeModalConfirmacionPago();
+            resolve(metodo);
+        };
+    });
+};
+
+window.closeModalConfirmacionPago = function () {
+    document.getElementById('modalConfirmacionPago').classList.remove('show');
+    resolvePagoActual = null;
 };
 
 window.closeModalStock = function () {
@@ -1187,10 +1547,93 @@ window.ajustarStock = async function () {
         return;
     }
 
+    // ⭐ Lógica de Reposición (Admin)
+    // Si el stock estaba bajo o en 0, y agregamos stock, tratamos como nuevo lote
+    if (usuarioActual.rol === 'admin' && ajuste > 0) {
+        const confirmarReposicion = confirm(`¿Deseas tratar este ingreso como una REPOSICIÓN DE STOCK?\n\nEsto archivará las estadísticas actuales (unidades vendidas: ${productoEditando.unidadesVendidas || 0}) y reiniciará el contador de ganancia para este nuevo lote.`);
+
+        if (confirmarReposicion) {
+            await generarReporteAgotamiento(productoEditando);
+            // Reset de lote
+            productoEditando.stockInicial = nuevoStock;
+            productoEditando.unidadesVendidas = 0;
+            productoEditando.unidadesConsumidasDueno = 0;
+            productoEditando.gananciaAcumulada = 0;
+            productoEditando.fechaUltimaReposicion = Date.now();
+        }
+    }
+
     productoEditando.stock = nuevoStock;
     await guardarProductos();
     actualizarInventario();
     window.closeModalStock();
+};
+
+window.actualizarTablaLotes = function () {
+    const container = document.getElementById('lotesAgotadosContainer');
+    if (!container) return;
+
+    if (lotesAgotados.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #991b1b; padding: 20px;">No hay reportes de lotes agotados aún</p>';
+        return;
+    }
+
+    let totalCostoHistorico = 0;
+    let totalVentaHistorica = 0;
+    let totalGananciaHistorica = 0;
+
+    container.innerHTML = `
+        <table class="ventas-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="background: #fee2e2; color: #991b1b;">
+                    <th style="padding: 10px; text-align: left;">Producto</th>
+                    <th style="padding: 10px; text-align: center;">Vendido</th>
+                    <th style="padding: 10px; text-align: center;">Consumo</th>
+                    <th style="padding: 10px; text-align: right;">Costo Total</th>
+                    <th style="padding: 10px; text-align: right;">VENTA TOTAL</th>
+                    <th style="padding: 10px; text-align: right;">GANANCIA</th>
+                    <th style="padding: 10px; text-align: center;">Fecha</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${lotesAgotados.map(l => {
+        const costoLote = (l.unidadesVendidas || 0) * (l.precioCosto || 0);
+        const gananciaLote = l.gananciaGenerada || 0;
+        const ventaLote = costoLote + gananciaLote;
+
+        totalCostoHistorico += costoLote;
+        totalVentaHistorica += ventaLote;
+        totalGananciaHistorica += gananciaLote;
+
+        return `
+                    <tr style="border-bottom: 1px solid #fecaca;">
+                        <td style="padding: 10px;">
+                            <strong>${l.nombre}</strong><br>
+                            <small style="color: #666;">${l.categoria}</small>
+                        </td>
+                        <td style="padding: 10px; text-align: center;">${l.unidadesVendidas} / ${l.stockInicial}</td>
+                        <td style="padding: 10px; text-align: center; color: #856404;">${l.unidadesConsumidasDueno || 0}</td>
+                        <td style="padding: 10px; text-align: right;">S/ ${costoLote.toFixed(2)}</td>
+                        <td style="padding: 10px; text-align: right; font-weight: 600; color: #1e40af;">S/ ${ventaLote.toFixed(2)}</td>
+                        <td style="padding: 10px; text-align: right; color: #10b981; font-weight: bold;">+ S/ ${gananciaLote.toFixed(2)}</td>
+                        <td style="padding: 10px; text-align: center; font-size: 11px; color: #666;">
+                            ${new Date(l.fechaInicio).toLocaleDateString()}<br>--<br>${new Date(l.fechaFin).toLocaleDateString()}
+                        </td>
+                    </tr>
+                `;
+    }).join('')}
+            </tbody>
+            <tfoot style="background: #fef2f2; font-weight: bold; color: #991b1b; border-top: 2px solid #fecaca;">
+                <tr>
+                    <td colspan="3" style="padding: 15px; text-align: right; font-size: 14px;">TOTAL HISTÓRICO LOTES:</td>
+                    <td style="padding: 15px; text-align: right; font-size: 14px;">S/ ${totalCostoHistorico.toFixed(2)}</td>
+                    <td style="padding: 15px; text-align: right; font-size: 14px; color: #1e40af;">S/ ${totalVentaHistorica.toFixed(2)}</td>
+                    <td style="padding: 15px; text-align: right; font-size: 14px; color: #10b981;">S/ ${totalGananciaHistorica.toFixed(2)}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    `;
 };
 
 function actualizarInventario() {
@@ -1205,38 +1648,134 @@ function actualizarInventario() {
     grid.innerHTML = productos.map(p => {
         const stockBajo = p.stock <= p.stockMin;
         const productoJSON = JSON.stringify(p).replace(/"/g, '&quot;');
+
+        // Cálculos financieros
+        const precioCosto = p.precioCosto || 0;
+        const precioVenta = p.precio || 0;
+        const margenPorUnidad = precioVenta - precioCosto;
+        const margenPorcentaje = precioCosto > 0 ? (margenPorUnidad / precioVenta) * 100 : 0;
+
+        // Tracking de ventas
+        const stockInicial = p.stockInicial || p.stock;
+        const unidadesVendidas = p.unidadesVendidas || 0;
+        const gananciaAcumulada = p.gananciaAcumulada || 0;
+        const gananciaPotencial = margenPorUnidad * p.stock;
+        const gananciaTotal = gananciaAcumulada + gananciaPotencial;
+
+        // Barra de progreso
+        const porcentajeVendido = stockInicial > 0 ? (unidadesVendidas / stockInicial) * 100 : 0;
+
+        // Emoji de categoría
+        const categoriaEmoji = {
+            'Golosinas': '🍬',
+            'Gaseosas': '🥤',
+            'Licores': '🍺',
+            'Otros': '📦'
+        };
+        const emoji = categoriaEmoji[p.categoria] || '📦';
+
         return `
-            <div class="producto-card">
-                <h4>${p.nombre}</h4>
-                <div class="producto-precio">S/ ${p.precio.toFixed(2)}</div>
-                <div class="producto-info">
+            <div class="producto-card" style="border-left: 4px solid ${stockBajo ? '#dc3545' : '#10b981'};">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                     <div>
-                        <small style="display: block; color: #666;">Stock:</small>
-                        <div class="producto-stock ${stockBajo ? 'stock-bajo' : ''}">${p.stock}</div>
+                        <h4 style="margin: 0;">${emoji} ${p.nombre}</h4>
+                        <small style="color: #666;">${p.categoria || 'Sin categoría'}</small>
                     </div>
-                    <div style="display: flex; gap: 5px;">
-                        ${usuarioActual.rol === 'admin' ? `
+                    ${usuarioActual.rol === 'admin' ? `
+                        <div style="display: flex; gap: 5px;">
                             <button class="btn-small btn-blue" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Ajustar Stock">
                                 📊
                             </button>
-
                             <button class="btn-small btn-green" onclick="editarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Editar Producto">
                                 ✏️
                             </button>
                             <button class="btn-small btn-red" onclick="eliminarProducto(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Eliminar Producto">
                                 🗑️
                             </button>
-                        ` : `
-                            <button class="btn-small btn-green" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Agregar Stock">
+                        </div>
+                    ` : `
+                        <button class="btn-small btn-green" onclick="showModalStock(${p.id})" style="padding: 5px 10px; font-size: 12px;" title="Agregar Stock">
                             ➕ Stock
-                            </button>
-                        `}
-                    </div>
+                        </button>
+                    `}
                 </div>
-                ${stockBajo ? '<div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;">⚠️ Stock bajo</div>' : ''}
+                
+                <!-- Precios -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    ${usuarioActual.rol === 'admin' && precioCosto > 0 ? `
+                        <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+                            <small style="color: #666; display: block;">💰 Costo</small>
+                            <strong>S/ ${precioCosto.toFixed(2)}</strong>
+                        </div>
+                        <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+                            <small style="color: #666; display: block;">💵 Venta</small>
+                            <strong>S/ ${precioVenta.toFixed(2)}</strong>
+                        </div>
+                    ` : `
+                        <div style="background: #f3f4f6; padding: 8px; border-radius: 6px; grid-column: 1/-1;">
+                            <small style="color: #666; display: block;">💵 Precio de Venta</small>
+                            <strong>S/ ${precioVenta.toFixed(2)}</strong>
+                        </div>
+                    `}
+                </div>
+                
+                ${usuarioActual.rol === 'admin' && precioCosto > 0 && margenPorcentaje > 0 ? `
+                    <!-- Margen -->
+                    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px; border-radius: 6px; margin-bottom: 12px; text-align: center;">
+                        <small style="opacity: 0.9; display: block;">📊 Margen</small>
+                        <strong style="font-size: 16px;">${margenPorcentaje.toFixed(1)}%</strong>
+                        <span style="font-size: 12px;">(S/ ${margenPorUnidad.toFixed(2)}/u)</span>
+                    </div>
+                ` : ''}
+                
+                <!-- Stock -->
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #666; font-size: 13px;">📦 Stock: <strong class="${stockBajo ? 'stock-bajo' : ''}">${p.stock}</strong> / ${stockInicial}</span>
+                        ${unidadesVendidas > 0 ? `<span style="color: #10b981; font-size: 13px;">✅ ${unidadesVendidas} vendidas</span>` : ''}
+                    </div>
+                    ${stockInicial > 0 ? `
+                        <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: linear-gradient(90deg, #10b981 0%, #059669 100%); height: 100%; width: ${porcentajeVendido}%; transition: width 0.3s;"></div>
+                        </div>
+                        <small style="color: #666; font-size: 11px;">${porcentajeVendido.toFixed(0)}% vendido</small>
+                    ` : ''}
+                </div>
+                
+                ${(usuarioActual.rol || '').toLowerCase() === 'admin' && precioCosto > 0 && (gananciaAcumulada > 0 || gananciaPotencial > 0) ? `
+                    <!-- Ganancias -->
+                    <div style="background: #f0f9ff; border: 2px solid #3b82f6; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+                        ${gananciaAcumulada > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="color: #1e40af; font-size: 13px;">💚 Ganancia Acumulada:</span>
+                                <strong style="color: #10b981; font-size: 15px;">S/ ${gananciaAcumulada.toFixed(2)}</strong>
+                            </div>
+                        ` : ''}
+                        ${gananciaPotencial > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="color: #1e40af; font-size: 13px;">💛 Ganancia Potencial:</span>
+                                <strong style="color: #f59e0b; font-size: 15px;">S/ ${gananciaPotencial.toFixed(2)}</strong>
+                            </div>
+                        ` : ''}
+                        <div style="border-top: 1px dashed #3b82f6; margin: 8px 0 5px 0; padding-top: 5px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #1e40af; font-weight: 600;">🎯 Total Lote:</span>
+                                <strong style="color: #1e40af; font-size: 16px;">S/ ${gananciaTotal.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                ${stockBajo ? '<div style="padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;">⚠️ Stock bajo</div>' : ''}
             </div>
         `;
     }).join('');
+
+    // Si estamos en el dashboard, actualizarlo también
+    if (typeof actualizarDashboardFinanciero === 'function' && usuarioActual.rol === 'admin') {
+        const dashContainer = document.getElementById('dashGananciaBruta');
+        if (dashContainer) actualizarDashboardFinanciero();
+    }
 }
 
 // ========== MESAS DE CONSUMO ==========
@@ -1348,36 +1887,63 @@ async function finalizarMesaConsumo(id) {
     const mesa = mesasConsumo.find(m => m.id === id);
     if (!mesa || !mesa.ocupada) return;
 
-    if (mesa.total > 0) {
-        let detalleConsumos = [];
-        if (mesa.consumos && mesa.consumos.length > 0) {
-            mesa.consumos.forEach(c => {
-                const subtotal = c.precio * c.cantidad;
-                detalleConsumos.push({
-                    producto: c.nombre,
-                    cantidad: c.cantidad,
-                    precioUnitario: c.precio,
-                    subtotal: subtotal
-                });
-            });
-        }
-
-        const venta = {
-            id: Date.now(),
-            tipo: 'Mesa Consumo',
-            tipoDetalle: `Mesa Consumo ${mesa.id}`,
-            monto: mesa.total,
-            fecha: new Date().toLocaleString(),
-            usuario: usuarioActual.nombre,
-            detalle: {
-                consumos: detalleConsumos,
-                totalConsumos: mesa.total
-            }
-        };
-
-        ventas.push(venta);
-        await guardarVentas();
+    if (mesa.total <= 0) {
+        // Si no hay consumo, simplemente cerramos la mesa sin generar venta ni pedir pago
+        mesa.ocupada = false;
+        mesa.consumos = [];
+        mesa.total = 0;
+        await guardarMesasConsumo();
+        actualizarMesasConsumo();
+        debugLog('sistema', '⏹️ Mesa de consumo cerrada (sin consumos)', { id });
+        return;
     }
+
+    // ⭐ NUEVO: Confirmación con Modal de Pago
+    const metodoPago = await showModalConfirmacionPago(mesa.total, `Cierre de Mesa Consumo ${id}`);
+    if (!metodoPago) return;
+
+    let detalleConsumos = [];
+    let totalCostoProductos = 0;
+    if (mesa.consumos && mesa.consumos.length > 0) {
+        mesa.consumos.forEach(c => {
+            const subtotal = c.precio * c.cantidad;
+            detalleConsumos.push({
+                producto: c.nombre,
+                cantidad: c.cantidad,
+                precioUnitario: c.precio,
+                subtotal: subtotal
+            });
+            const prod = productos.find(p => p.id === c.id);
+            totalCostoProductos += (prod ? (prod.precioCosto || 0) : 0) * c.cantidad;
+        });
+    }
+
+    // Calcular ganancia neta de la mesa de consumo
+    let gananciaMesaConsumo = 0;
+    mesa.consumos.forEach(c => {
+        const prod = productos.find(p => p.id === c.id);
+        const costo = prod ? (prod.precioCosto || 0) : 0;
+        gananciaMesaConsumo += (c.precio - costo) * c.cantidad;
+    });
+
+    const venta = {
+        id: Date.now(),
+        tipo: 'Mesa Consumo',
+        tipoDetalle: `Mesa Consumo ${mesa.id}`,
+        monto: mesa.total,
+        ganancia: gananciaMesaConsumo, // ⭐ REGISTRAR GANANCIA
+        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
+        fecha: new Date().toLocaleString(),
+        usuario: usuarioActual.nombre,
+        detalle: {
+            mesaId: mesa.id,
+            consumos: detalleConsumos,
+            totalConsumos: mesa.total
+        }
+    };
+
+    ventas.push(venta);
+    await guardarVentas();
 
     // Guardar el total antes de resetear
     const totalCobrado = mesa.total;
@@ -1387,11 +1953,12 @@ async function finalizarMesaConsumo(id) {
     mesa.total = 0;
     await guardarMesasConsumo();
 
-    alert(`✅ Mesa ${id} finalizada.\nTotal cobrado: S/ ${totalCobrado.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada (${metodoPago}).\\nTotal cobrado: S/ ${totalCobrado.toFixed(2)}`);
 
     actualizarMesasConsumo();
     actualizarTablaVentas();
     calcularTotal();
+    actualizarDashboardFinanciero(); // 🚀 Reflejar ganancia en el dashboard
 }
 
 // ========== CONSUMOS ==========
@@ -1485,11 +2052,14 @@ window.agregarConsumo = async function (productoId) {
 
     producto.stock--;
 
+    // ⭐ NUEVO: Actualizar ganancia acumulada
+    await actualizarGananciaProducto(productoId, 1);
+
     if (tipoMesaActual === 'consumo') {
         mesa.total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
     }
 
-    await guardarProductos();
+    // await guardarProductos(); // Ya se guarda en actualizarGananciaProducto
     if (tipoMesaActual === 'billar') {
         await guardarMesas();
     } else {
@@ -1635,7 +2205,14 @@ function actualizarListaConsumos() {
         return;
     }
 
-    const total = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    const totalConsumos = mesa.consumos.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+    let totalMesa = totalConsumos;
+
+    // Si es una mesa de billar, sumamos lo que va de tiempo
+    if (tipoMesaActual === 'billar') {
+        const costoTiempoMesa = calcularCostoTiempo(mesa.tiempoTranscurrido).costo;
+        totalMesa += costoTiempoMesa;
+    }
 
     container.innerHTML = mesa.consumos.map(c => `
         <div class="consumo-item">
@@ -1651,7 +2228,13 @@ function actualizarListaConsumos() {
         </div>
     `).join('');
 
-    totalEl.textContent = `S/ ${total.toFixed(2)}`;
+    totalEl.textContent = `S/ ${totalConsumos.toFixed(2)}`;
+
+    // ✅ Actualizar el botón de "Cerrar y Cobrar Todo" con el total real
+    const btnCerrar = document.getElementById('btnCerrarMesa');
+    if (btnCerrar) {
+        btnCerrar.innerHTML = `💰 Cerrar Mesa y Cobrar Todo (Total: S/ ${totalMesa.toFixed(2)})`;
+    }
 }
 
 // ========== COBRO PARCIAL ==========
@@ -1766,6 +2349,8 @@ window.procesarCobroParcial = async function () {
 
     if (!mesa) return;
 
+    const metodoPago = document.getElementById('metodoPagoParcial').value;
+
     // Generar descripción de items
     const descripcionItems = itemsACobrar.map(item => {
         const producto = mesa.consumos.find(c => c.id === item.id);
@@ -1773,12 +2358,22 @@ window.procesarCobroParcial = async function () {
         return `${item.cantidad} ${nombre}`;
     }).join(', ');
 
+    // Calcular ganancia del cobro parcial
+    let gananciaParcial = 0;
+    itemsACobrar.forEach(item => {
+        const prod = productos.find(p => p.id === item.id);
+        const costo = prod ? (prod.precioCosto || 0) : 0;
+        gananciaParcial += (item.precio - costo) * item.cantidad;
+    });
+
     // 1. Generar Venta
     const venta = {
         id: Date.now(),
         tipo: 'Cobro Parcial',
         tipoDetalle: `Parcial (${descripcionItems}) - ${tipoMesaActual === 'billar' ? 'Mesa Billar' : 'Mesa Consumo'} ${mesa.id}`,
         monto: totalCobrar,
+        ganancia: gananciaParcial,
+        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -1824,12 +2419,13 @@ window.procesarCobroParcial = async function () {
     }
 
     // 3. Actualizar UI
-    alert(`✅ Cobro parcial realizado: S/ ${totalCobrar.toFixed(2)}\n\nItems cobrados: ${descripcionItems}`);
+    alert(`✅ Cobro parcial realizado (${metodoPago}): S/ ${totalCobrar.toFixed(2)}\n\nItems cobrados: ${descripcionItems}`);
     closeModalCobroParcial();
-    renderProductosConsumo(); // Refrescar stock (aunque no cambia stock total, refresca el modal)
-    actualizarListaConsumos(); // Refrescar lista de la mesa
+    renderProductosConsumo();
+    actualizarListaConsumos();
     actualizarTablaVentas();
     calcularTotal();
+    actualizarDashboardFinanciero();
 };
 
 // ========== CONSUMO DEL DUEÑO ==========
@@ -1953,46 +2549,62 @@ window.guardarConsumoDueno = async function () {
     }
 
     const btnGuardar = document.getElementById('btnGuardarConsumoDueno');
-    if (btnGuardar) {
-        btnGuardar.disabled = true;
-        btnGuardar.textContent = 'Guardando...';
-    }
-
-    const total = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
-
-    const consumo = {
-        id: Date.now(),
-        fecha: new Date().toLocaleString('es-PE'),
-        productos: carritoConsumoDueno.map(c => ({
-            nombre: c.nombre,
-            precio: c.precio,
-            cantidad: c.cantidad
-        })),
-        total: total
-    };
-
-    carritoConsumoDueno.forEach(c => {
-        const producto = productos.find(p => p.id === c.id);
-        if (producto) {
-            producto.stock -= c.cantidad;
+    try {
+        if (btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.textContent = 'Guardando...';
         }
-    });
 
-    consumosDueno.push(consumo);
+        const totalVenta = carritoConsumoDueno.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
+        let totalCosto = 0;
 
-    await guardarConsumosDueno();
-    await guardarProductos();
+        const consumo = {
+            id: Date.now(),
+            fecha: new Date().toLocaleString('es-PE'),
+            tipo: 'Consumo Dueño',
+            productos: carritoConsumoDueno.map(c => {
+                const p = productos.find(prod => prod.id === c.id);
+                const costo = p ? (p.precioCosto || 0) : 0;
+                totalCosto += costo * c.cantidad;
+                return {
+                    nombre: c.nombre,
+                    precio: c.precio,
+                    precioCosto: costo,
+                    cantidad: c.cantidad
+                };
+            }),
+            totalVenta: totalVenta,
+            totalCosto: totalCosto
+        };
 
-    alert(`✅ Consumo registrado por S/ ${total.toFixed(2)}\n\nNota: Este consumo NO se cobra pero se descuenta del stock.`);
+        // Actualizar stock y ganancia de cada producto
+        for (const c of carritoConsumoDueno) {
+            const producto = productos.find(p => p.id === c.id);
+            if (producto) {
+                producto.stock -= c.cantidad;
+                await actualizarGananciaProducto(c.id, c.cantidad, true);
+            }
+        }
 
-    carritoConsumoDueno = [];
-    window.closeModalConsumoDueno();
-    actualizarInventario();
-    actualizarConsumoDueno();
+        consumosDueno.push(consumo);
+        await guardarConsumosDueno();
 
-    if (btnGuardar) {
-        btnGuardar.disabled = false;
-        btnGuardar.textContent = 'Guardar Consumo';
+        alert(`✅ Consumo registrado.\n\nValor Venta: S/ ${totalVenta.toFixed(2)}\nValor Costo: S/ ${totalCosto.toFixed(2)}\n\nNota: El costo se restará de la utilidad final.`);
+
+        carritoConsumoDueno = [];
+        window.closeModalConsumoDueno();
+        actualizarInventario();
+        actualizarConsumoDueno();
+        actualizarDashboardFinanciero(); // 🚀 Asegurar actualización del dashboard
+
+    } catch (error) {
+        debugLog('error', '❌ Error al guardar consumo dueño', error);
+        mostrarError('No se pudo guardar el consumo. Intenta de nuevo.');
+    } finally {
+        if (btnGuardar) {
+            btnGuardar.disabled = false;
+            btnGuardar.textContent = 'Guardar Consumo';
+        }
     }
 };
 
@@ -2554,10 +3166,20 @@ function actualizarUsuarios() {
 }
 
 // ========== FUNCIÓN QUE PREVIENE DOBLE COBRO ==========
+// --- Función para cerrar la mesa directamente desde el modal de consumo ---
 window.cerrarMesaCompleto = function () {
-    debugLog('sistema', '❌ cerrarMesaCompleto bloqueado - usar botón Finalizar de la mesa');
-    alert('⚠️ Para finalizar y cobrar, cierra este modal y usa el botón "⏹️ Finalizar" de la mesa.');
+    if (!mesaConsumoActual) return;
+
+    debugLog('sistema', '🚀 Cerrando mesa completa desde modal', { id: mesaConsumoActual, tipo: tipoMesaActual });
+
+    // Cerramos el modal primero para no tener conflictos visuales
     window.closeModalConsumo();
+
+    if (tipoMesaActual === 'billar') {
+        finalizarMesa(mesaConsumoActual);
+    } else {
+        finalizarMesaConsumo(mesaConsumoActual);
+    }
 };
 
 // ========== REPORTES Y CIERRES ==========
@@ -2717,19 +3339,61 @@ window.cerrarDia = async function () {
         return;
     }
 
-    const totalCierre = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
+    const totalCierre = ventasActuales.reduce((sum, v) => sum + (v.monto || 0), 0);
+
+    // ⭐ NUEVO: Desglose de pago para el periodo actual
+    const totalEfectivoPeriodo = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + (v.monto || 0), 0);
+    const totalYapePeriodo = ventasActuales.filter(v => v.metodoPago === 'Yape').reduce((sum, v) => sum + (v.monto || 0), 0);
 
     const consumosDuenoActuales = ultimoCierre
         ? consumosDueno.filter(c => c.id > ultimoCierre)
         : consumosDueno;
 
-    const totalConsumosDueno = consumosDuenoActuales.reduce((sum, c) => sum + c.total, 0);
+    const totalConsumosDuenoVenta = consumosDuenoActuales.reduce((sum, c) => sum + (c.totalVenta || c.total || 0), 0);
+    const totalConsumosDuenoCosto = consumosDuenoActuales.reduce((sum, c) => sum + (c.totalCosto || 0), 0);
+
+    const movimientosActuales = ultimoCierre
+        ? movimientos.filter(m => m.id > ultimoCierre)
+        : movimientos;
+
+    const totalIngresosExtra = movimientosActuales.filter(m => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
+    const totalEgresos = movimientosActuales.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((sum, m) => sum + m.monto, 0);
+
+    // Ganancia de ventas para este periodo
+    const gananciaVentasPeriodo = ventasActuales.reduce((sum, v) => sum + (v.ganancia || 0), 0);
+
+    // UTILIDAD NETA = Ganancia Bruta (Ventas) + Ingresos Extra - Gastos - Costo Consumo Dueño
+    const utilidadNetaPeriodo = gananciaVentasPeriodo + totalIngresosExtra - totalEgresos - totalConsumosDuenoCosto;
+
+    // --- DESGLOSE POR CAJAS PARA EL RESUMEN ---
+    const ventasEfectivoActual = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + (v.monto || 0), 0);
+    const ingresosLocalActual = movimientosActuales.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
+    const egresosLocalActual = movimientosActuales.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((sum, m) => sum + m.monto, 0);
+    const transfLocalActual = movimientosActuales.filter(m => m.tipo === 'transferencia').reduce((sum, m) => sum + m.monto, 0);
+
+    const ingresosChicaActual = movimientosActuales.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
+    const egresosChicaActual = movimientosActuales.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((sum, m) => sum + m.monto, 0);
+    const transfChicaActual = transfLocalActual;
+
+    const balanceLocalActual = ventasEfectivoActual + ingresosLocalActual - egresosLocalActual - transfLocalActual;
+    const balanceChicaActual = ingresosChicaActual + transfChicaActual - egresosChicaActual;
 
     const confirmar = confirm(
-        `¿Cerrar turno/día?\n\n` +
-        `📊 Ventas: ${ventasActuales.length}\n` +
-        `💰 Total: S/ ${totalCierre.toFixed(2)}\n\n` +
-        `Se generará un reporte y las ventas quedarán archivadas.`
+        `📊 RESUMEN DE CIERRE\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `🛒 Ventas Totales: S/ ${totalCierre.toFixed(2)}\n` +
+        `   💵 Efectivo : S/ ${totalEfectivoPeriodo.toFixed(2)}\n` +
+        `   📱 Yape/Plin: S/ ${totalYapePeriodo.toFixed(2)}\n\n` +
+        `🏠 SALDO CAJA LOCAL: S/ ${balanceLocalActual.toFixed(2)}\n` +
+        `👛 SALDO CAJA CHICA: S/ ${balanceChicaActual.toFixed(2)}\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `💰 Margen Ventas:  S/ ${gananciaVentasPeriodo.toFixed(2)}\n` +
+        `➕ Ingresos Extra: S/ ${totalIngresosExtra.toFixed(2)}\n` +
+        `➖ Gastos/Retiros: S/ ${totalEgresos.toFixed(2)}\n` +
+        `➖ Consumo Dueño:  S/ ${totalConsumosDuenoCosto.toFixed(2)}\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `🚀 UTILIDAD NETA: S/ ${utilidadNetaPeriodo.toFixed(2)}\n\n` +
+        `¿Deseas confirmar el cierre y generar el reporte?`
     );
 
     if (!confirmar) return;
@@ -2741,11 +3405,21 @@ window.cerrarDia = async function () {
         usuario: usuarioActual.nombre,
         cantidadVentas: ventasActuales.length,
         total: totalCierre,
+        totalEfectivo: totalEfectivoPeriodo, // ⭐ Guardar desglose
+        totalYape: totalYapePeriodo,         // ⭐ Guardar desglose
+        balanceLocal: balanceLocalActual,    // ⭐ Nuevo: Saldo Local
+        balanceChica: balanceChicaActual,    // ⭐ Nuevo: Saldo Chica
+        gananciaVentas: gananciaVentasPeriodo,
+        totalEgresos: totalEgresos,
+        totalIngresosExtra: totalIngresosExtra,
+        utilidadNeta: utilidadNetaPeriodo,
         ventas: ventasActuales.map(v => ({ ...v })),
+        movimientos: movimientosActuales.map(m => ({ ...m })),
         ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
         ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
         consumosDueno: consumosDuenoActuales.map(c => ({ ...c })),
-        totalConsumosDueno: totalConsumosDueno
+        totalConsumosDuenoVenta: totalConsumosDuenoVenta,
+        totalConsumosDuenoCosto: totalConsumosDuenoCosto
     };
 
     cierres.push(cierre);
@@ -2913,6 +3587,14 @@ function descargarReporteCierre(cierre) {
                 <div class="summary-box">
                     <div class="summary-grid">
                         <div class="summary-item">
+                            <div class="summary-label">🏠 Saldo Caja Local</div>
+                            <div class="summary-value">S/ ${(cierre.balanceLocal || 0).toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">👛 Saldo Caja Chica</div>
+                            <div class="summary-value">S/ ${(cierre.balanceChica || 0).toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
                             <div class="summary-label">Total Recaudado</div>
                             <div class="summary-value">S/ ${cierre.total.toFixed(2)}</div>
                         </div>
@@ -2921,12 +3603,16 @@ function descargarReporteCierre(cierre) {
                             <div class="summary-value">${cierre.cantidadVentas}</div>
                         </div>
                         <div class="summary-item">
-                            <div class="summary-label">Ventas Mesas</div>
-                            <div class="summary-value">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                            <div class="summary-label">💵 Efectivo (Local)</div>
+                            <div class="summary-value">S/ ${(cierre.totalEfectivo || 0).toFixed(2)}</div>
                         </div>
                         <div class="summary-item">
-                            <div class="summary-label">Ventas Productos</div>
-                            <div class="summary-value">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                            <div class="summary-label">📱 Yape/Plin</div>
+                            <div class="summary-value">S/ ${(cierre.totalYape || 0).toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">🚀 Utilidad Neta</div>
+                            <div class="summary-value">S/ ${cierre.utilidadNeta.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
@@ -2940,6 +3626,7 @@ function descargarReporteCierre(cierre) {
                                 <th>Tipo</th>
                                 <th>Descripción</th>
                                 <th>Usuario</th>
+                                <th style="text-align: center;">Pago</th>
                                 <th style="text-align: right;">Monto</th>
                             </tr>
                         </thead>
@@ -2965,12 +3652,15 @@ function descargarReporteCierre(cierre) {
             descripcion = v.tipoDetalle || v.tipo;
         }
 
+        const metodo = v.metodoPago || 'Efectivo';
+
         return `
                                     <tr>
                                         <td>${v.fecha}</td>
                                         <td>${v.tipo}</td>
                                         <td>${descripcion}</td>
                                         <td>${v.usuario}</td>
+                                        <td style="text-align: center;">${metodo}</td>
                                         <td class="monto">S/ ${v.monto.toFixed(2)}</td>
                                     </tr>
                                 `;
@@ -3044,7 +3734,7 @@ function actualizarHistorialCierres() {
                     <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ventas</div>
                 </div>
             </div>
-            ${usuarioActual.rol === 'admin' ? `
+            ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
                 <div style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-blue btn-small" onclick="descargarCierrePDF(${c.id})" style="flex: 1;">
                         📄 PDF
@@ -3195,15 +3885,57 @@ window.descargarCierrePDF = function (cierreId) {
                 
                 <div class="resumen-grid">
                     <div class="resumen-item">
-                        <div style="font-size: 12px; color: #666;">Ventas Mesas de Billar</div>
-                        <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: #666;">Ventas Mesas Billar</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasMesas.toFixed(2)}</div>
                     </div>
                     <div class="resumen-item">
-                        <div style="font-size: 12px; color: #666;">Ventas Productos/Consumo</div>
-                        <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: #666;">Ventas Productos</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item" style="border-top: 2px solid #2d7a4d; margin-top: 5px;">
+                        <div style="font-size: 11px; color: #666;">Margen Ventas</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #10b981;">+ S/ ${(cierre.gananciaVentas || 0).toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item" style="border-top: 2px solid #ef4444; margin-top: 5px;">
+                        <div style="font-size: 11px; color: #666;">Total Gastos/Egresos</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #ef4444;">- S/ ${(cierre.totalEgresos || 0).toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item" style="border-top: 2px solid #f59e0b; margin-top: 5px;">
+                        <div style="font-size: 11px; color: #666;">Costo Consumo Dueño</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #f59e0b;">- S/ ${(cierre.totalConsumosDuenoCosto || 0).toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item" style="border-top: 2px solid #3b82f6; margin-top: 5px; grid-column: 1 / -1; background: #f0f9ff; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 14px; font-weight: bold; color: #1e40af;">🚀 UTILIDAD NETA DEL TURNO</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #1e40af;">S/ ${(cierre.utilidadNeta || 0).toFixed(2)}</div>
                     </div>
                 </div>
             </div>
+
+            ${cierre.movimientos && cierre.movimientos.length > 0 ? `
+                <h2 style="font-size: 18px; color: #333; margin-bottom: 10px; margin-top: 30px;">💸 Movimientos de Caja</h2>
+                <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #eee;">
+                                <th style="text-align: left; padding: 8px;">Tipo</th>
+                                <th style="text-align: left; padding: 8px;">Descripción</th>
+                                <th style="text-align: right; padding: 8px;">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${cierre.movimientos.map(m => `
+                                <tr style="border-bottom: 1px solid #f5f5f5;">
+                                    <td style="padding: 8px;"><span style="color: ${m.tipo === 'ingreso' ? '#10b981' : '#ef4444'}; font-weight: bold;">${m.tipo.toUpperCase()}</span></td>
+                                    <td style="padding: 8px;">${m.descripcion}</td>
+                                    <td style="padding: 8px; text-align: right; font-weight: bold; color: ${m.tipo === 'ingreso' ? '#10b981' : '#ef4444'}">
+                                        ${m.tipo === 'ingreso' ? '+' : '-'} S/ ${m.monto.toFixed(2)}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : ''}
             
             <h2 style="font-size: 18px; color: #333; margin-bottom: 15px; margin-top: 30px;">📋 Detalle de Ventas</h2>
             
@@ -3293,13 +4025,13 @@ window.descargarCierrePDF = function (cierreId) {
                     <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong style="font-size: 16px; color: #856404;">Total Consumido</strong>
+                                <strong style="font-size: 16px; color: #856404;">Costo Total Perdido</strong>
                                 <div style="font-size: 13px; color: #856404; margin-top: 5px;">
                                     ${cierre.consumosDueno.length} ${cierre.consumosDueno.length === 1 ? 'registro' : 'registros'}
                                 </div>
                             </div>
                             <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                                S/ ${cierre.totalConsumosDueno.toFixed(2)}
+                                S/ ${(cierre.totalConsumosDuenoCosto || 0).toFixed(2)}
                             </div>
                         </div>
                     </div>
@@ -3308,11 +4040,11 @@ window.descargarCierrePDF = function (cierreId) {
                         <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                                 <strong>${c.fecha}</strong>
-                                <strong style="color: #ff9800;">S/ ${c.total.toFixed(2)}</strong>
+                                <strong style="color: #ff9800;">Costo: S/ ${(c.totalCosto || 0).toFixed(2)}</strong>
                             </div>
                             <div style="font-size: 12px;">
                                 ${c.productos.map(p =>
-        `<div style="margin: 2px 0;">• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u) = S/ ${(p.precio * p.cantidad).toFixed(2)}</div>`
+        `<div style="margin: 2px 0;">• ${p.nombre} x${p.cantidad} (Costo: S/ ${(p.precioCosto || 0).toFixed(2)} c/u)</div>`
     ).join('')}
                             </div>
                         </div>
@@ -3320,7 +4052,7 @@ window.descargarCierrePDF = function (cierreId) {
                     
                     <div style="background: #fff; padding: 12px; border-radius: 6px; margin-top: 15px; border: 2px solid #ff9800;">
                         <p style="font-size: 12px; color: #856404; text-align: center;">
-                            ⚠️ Estos consumos NO fueron cobrados pero se descontaron del stock
+                            ⚠️ Estos consumos se restan de la utilidad neta a precio de costo.
                         </p>
                     </div>
                 </div>
@@ -3350,4 +4082,461 @@ window.eliminarCierre = async function (id) {
     await guardarCierres();
     actualizarHistorialCierres();
     generarReporte();
+};
+
+// ===========================================
+// ========== ANÁLISIS FINANCIERO ============
+// ===========================================
+
+window.actualizarDashboardFinanciero = function () {
+    if ((usuarioActual.rol || '').toLowerCase() !== 'admin') return;
+
+    debugLog('sistema', '📊 Generando Dashboard Financiero...');
+
+    // 1. Ganancia Bruta (Utilidad Bruta de Ventas: incluye productos y servicios/tiempo)
+    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
+    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
+    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
+
+    // --- DESGLOSE POR MÉTODO DE PAGO ---
+    const ventasEfectivoActual = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const ventasYapeActual = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
+
+    // Histórico por método (si existe en los cierres, si no default a efectivo para datos viejos)
+    const ventasEfectivoHistorica = cierres.reduce((acc, c) => acc + (c.totalEfectivo || c.totalVentas || 0), 0);
+    const ventasYapeHistorica = cierres.reduce((acc, c) => acc + (c.totalYape || 0), 0);
+
+    const totalEfectivo = ventasEfectivoActual + ventasEfectivoHistorica;
+    const totalYape = ventasYapeActual + ventasYapeHistorica;
+
+    let inversionStockActual = 0;
+    let totalVentaProductosActual = 0;
+    let gananciaPotencialTotal = 0; // ⭐ NUEVO: Ganancia en estante
+
+    productos.forEach(p => {
+        const costo = p.precioCosto || 0;
+        const margenPorUnidad = (p.precio || 0) - costo;
+
+        inversionStockActual += (p.stock || 0) * costo;
+        totalVentaProductosActual += (p.unidadesVendidas || 0) * p.precio;
+        gananciaPotencialTotal += (p.stock || 0) * margenPorUnidad;
+    });
+
+    // 2. Gastos y Movimientos
+    const totalIngresosExtraActual = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + curr.monto, 0);
+    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
+    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+
+    const totalEgresosActual = movimientos.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((acc, curr) => acc + curr.monto, 0);
+    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
+    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
+
+    const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
+    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
+    const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
+
+    // 3. Utilidad Neta Total
+    const utilidadNeta = gananciaBrutaTotal + totalIngresosExtra - totalEgresos - totalConsumoDuenoCosto;
+
+    // 4. Margen Promedio
+    const margenProm = totalVentaProductosActual > 0 ? (gananciaVentasActual / totalVentaProductosActual) * 100 : 0;
+
+    // Actualizar UI - Cards
+    document.getElementById('dashGananciaBruta').textContent = `S/ ${gananciaBrutaTotal.toFixed(2)}`;
+    document.getElementById('dashGananciaPotencial').textContent = `S/ ${gananciaPotencialTotal.toFixed(2)}`;
+    document.getElementById('dashUtilidadNeta').textContent = `S/ ${utilidadNeta.toFixed(2)}`;
+    document.getElementById('dashInversionStock').textContent = `S/ ${inversionStockActual.toFixed(2)}`;
+    document.getElementById('dashMargenPromedio').textContent = `${margenProm.toFixed(1)}%`;
+
+    // --- NUEVO: Mostrar Desglose de Pago y Cajas en Dashboard ---
+    const containerBreakdown = document.getElementById('dashBreakdownContainer') || crearBreakdownContainer();
+
+    // Recalcular balances actuales (evitar error de scope)
+    const vf = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const il = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+    const el = movimientos.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+    const to = movimientos.filter(m => m.tipo === 'transferencia').reduce((acc, m) => acc + m.monto, 0);
+
+    const ic = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+    const ec = movimientos.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+
+    const bl = vf + il - el - to;
+    const bc = ic + to - ec;
+
+    containerBreakdown.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">
+            <div style="background: #f0fdf4; border: 1px solid #10b981; padding: 15px; border-radius: 10px; text-align: center;">
+                <small style="color: #047857; font-weight: 600;">💵 Ventas Efectivo (Ene-Hoy)</small>
+                <div style="font-size: 20px; font-weight: bold; color: #064e3b;">S/ ${totalEfectivo.toFixed(2)}</div>
+            </div>
+            <div style="background: #f5f0f7; border: 1px solid #742284; padding: 15px; border-radius: 10px; text-align: center;">
+                <small style="color: #742284; font-weight: 600;">📱 Digital Total (Yape/Plin)</small>
+                <div style="font-size: 20px; font-weight: bold; color: #4c1d95;">S/ ${totalYape.toFixed(2)}</div>
+            </div>
+            <div style="background: #eff6ff; border: 1px solid #3b82f6; padding: 15px; border-radius: 10px; text-align: center;">
+                <small style="color: #1d4ed8; font-weight: 600;">🏠 Saldo en Caja Local</small>
+                <div style="font-size: 20px; font-weight: bold; color: #1e3a8a;">S/ ${bl.toFixed(2)}</div>
+            </div>
+            <div style="background: #fff7ed; border: 1px solid #f97316; padding: 15px; border-radius: 10px; text-align: center;">
+                <small style="color: #c2410c; font-weight: 600;">👛 Saldo en Caja Chica</small>
+                <div style="font-size: 20px; font-weight: bold; color: #7c2d12;">S/ ${bc.toFixed(2)}</div>
+            </div>
+        </div>
+    `;
+
+    // Actualizar Categorías
+    const categorias = ['Gaseosas', 'Golosinas', 'Licores', 'Otros'];
+    const containerCats = document.getElementById('dashCategoriasContainer');
+
+    containerCats.innerHTML = categorias.map(cat => {
+        const prodsCat = productos.filter(p => (p.categoria || 'Otros') === cat);
+        const gananciaCat = prodsCat.reduce((acc, p) => acc + ((p.unidadesVendidas || 0) * (p.precio - (p.precioCosto || 0))), 0);
+
+        // Calcular porcentaje relativo al total de ganancia para la barra
+        const maxGanancia = Math.max(...categorias.map(c =>
+            productos.filter(p => (p.categoria || 'Otros') === c).reduce((acc, p) => acc + ((p.unidadesVendidas || 0) * (p.precio - (p.precioCosto || 0))), 0)
+        ), 1);
+
+        const porcentajeBarra = (gananciaCat / maxGanancia) * 100;
+
+        return `
+            <div class="categoria-bar-container">
+                <div class="categoria-info">
+                    <span>${cat}</span>
+                    <strong>S/ ${gananciaCat.toFixed(2)}</strong>
+                </div>
+                <div class="bar-outer">
+                    <div class="bar-inner" style="width: ${porcentajeBarra}%; background: ${cat === 'Licores' ? '#ef4444' : (cat === 'Gaseosas' ? '#3b82f6' : '#10b981')}"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Top Productos
+    const topProds = [...productos]
+        .sort((a, b) => {
+            const ganA = (a.unidadesVendidas || 0) * (a.precio - (a.precioCosto || 0));
+            const ganB = (b.unidadesVendidas || 0) * (b.precio - (b.precioCosto || 0));
+            return ganB - ganA;
+        })
+        .slice(0, 5);
+
+    document.getElementById('dashTopProductos').innerHTML = topProds.map(p => `
+        <div class="top-producto-item">
+            <span>${p.nombre}</span>
+            <strong style="color: #10b981;">+ S/ ${((p.unidadesVendidas || 0) * (p.precio - (p.precioCosto || 0))).toFixed(2)}</strong>
+        </div>
+    `).join('') || '<p style="text-align:center; color: #666; margin-top:20px;">Sin ventas aún</p>';
+
+    // Alertas
+    actualizarAlertasDashboard();
+};
+
+function crearBreakdownContainer() {
+    const context = document.querySelector('.financial-summary-grid');
+    const div = document.createElement('div');
+    div.id = 'dashBreakdownContainer';
+    div.style.gridColumn = '1 / -1';
+    context.after(div);
+    return div;
+}
+
+function actualizarAlertasDashboard() {
+    const dashAlertas = document.getElementById('dashAlertasContainer');
+    if (!dashAlertas) return;
+
+    let alertHTML = '';
+    const prodsBajoMargen = productos.filter(p => {
+        const costo = p.precioCosto || 0;
+        if (costo === 0) return false;
+        const margen = ((p.precio - costo) / p.precio) * 100;
+        return margen < 20;
+    });
+
+    if (prodsBajoMargen.length > 0) {
+        alertHTML += `
+            <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
+                <strong style="color: #92400e; font-size: 14px;">⚠️ Margen Bajo (< 20%)</strong>
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #b45309;">
+                    ${prodsBajoMargen.map(p => p.nombre).join(', ')}
+                </p>
+            </div>
+        `;
+    }
+
+    const prodsSinCosto = productos.filter(p => !p.precioCosto || p.precioCosto <= 0);
+    if (prodsSinCosto.length > 0) {
+        alertHTML += `
+            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
+                <strong style="color: #991b1b; font-size: 14px;">🚫 Sin Precio de Costo</strong>
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #b91c1c;">
+                    ${prodsSinCosto.map(p => p.nombre).join(', ')}
+                </p>
+            </div>
+        `;
+    }
+
+    dashAlertas.innerHTML = alertHTML;
+}
+
+// ===========================================
+// ========== GESTIÓN DE CAJA ================
+// ===========================================
+
+let tipoMovimientoActual = 'egreso';
+
+window.showModalMovimiento = function (tipo) {
+    const modal = document.getElementById('modalMovimiento');
+    const title = document.getElementById('movimientoModalTitle');
+    const btn = document.getElementById('btnGuardarMovimiento');
+    const selectTipo = document.getElementById('movimientoTipo');
+
+    selectTipo.value = tipo;
+
+    // Configurar color y título dinámicamente
+    if (tipo === 'ingreso') {
+        title.textContent = '➕ Registrar Ingreso Extra';
+        btn.className = 'btn btn-green btn-full';
+    } else if (tipo === 'egreso') {
+        title.textContent = '➖ Registrar Gasto / Egreso';
+        btn.className = 'btn btn-red btn-full';
+    } else if (tipo === 'retiro') {
+        title.textContent = '💸 Registrar Retiro de Caja';
+        btn.className = 'btn btn-orange btn-full';
+    } else {
+        title.textContent = '📦 Registrar Reposición Stock';
+        btn.className = 'btn btn-purple btn-full';
+    }
+
+    document.getElementById('movimientoDescripcion').value = '';
+    document.getElementById('movimientoMonto').value = '';
+    document.getElementById('movimientoError').classList.add('hidden');
+
+    modal.classList.add('show');
+};
+
+window.closeModalMovimiento = function () {
+    document.getElementById('modalMovimiento').classList.remove('show');
+};
+
+window.guardarMovimiento = async function () {
+    const tipo = document.getElementById('movimientoTipo').value;
+    const desc = document.getElementById('movimientoDescripcion').value.trim();
+    const monto = parseFloat(document.getElementById('movimientoMonto').value);
+    const caja = document.getElementById('movimientoCaja').value;
+    const errorDiv = document.getElementById('movimientoError');
+
+    if (!desc || isNaN(monto) || monto <= 0) {
+        errorDiv.textContent = 'Por favor completa todos los campos con valores válidos';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    const nuevoMovimiento = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString(),
+        descripcion: desc,
+        monto: monto,
+        tipo: tipo,
+        caja: caja,
+        usuario: usuarioActual.nombre
+    };
+
+    movimientos.unshift(nuevoMovimiento);
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    closeModalMovimiento();
+};
+
+// --- GESTIÓN DE TRANSFERENCIAS ---
+window.showModalTransferencia = function () {
+    document.getElementById('modalTransferencia').classList.add('show');
+    document.getElementById('transferenciaMonto').value = '';
+    document.getElementById('transferenciaError').classList.add('hidden');
+};
+
+window.closeModalTransferencia = function () {
+    document.getElementById('modalTransferencia').classList.remove('show');
+};
+
+window.guardarTransferencia = async function () {
+    const monto = parseFloat(document.getElementById('transferenciaMonto').value);
+    const errorDiv = document.getElementById('transferenciaError');
+
+    if (isNaN(monto) || monto <= 0) {
+        errorDiv.textContent = 'Ingresa un monto válido';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    // 🛡️ VALIDACIÓN: No transferir más de lo que hay en Caja Local
+    const balances = calcularBalances();
+    if (monto > balances.balLocal) {
+        errorDiv.textContent = `⚠️ No puedes transferir S/ ${monto.toFixed(2)} porque solo tienes S/ ${balances.balLocal.toFixed(2)} en Caja Local.`;
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    // Registrar como un movimiento especial
+    const nuevaTransferencia = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString(),
+        descripcion: 'Transferencia a Caja Chica',
+        monto: monto,
+        tipo: 'transferencia',
+        caja: 'local', // Origen Local, destino implícito Chica
+        usuario: usuarioActual.nombre
+    };
+
+    movimientos.unshift(nuevaTransferencia);
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    closeModalTransferencia();
+    alert(`✅ Transferencia de S/ ${monto.toFixed(2)} realizada con éxito.`);
+};
+
+// --- AJUSTE DE SALDO CAJA CHICA ---
+window.showModalAjusteCajaChica = function () {
+    document.getElementById('modalAjusteCajaChica').classList.add('show');
+    const balances = calcularBalances();
+    document.getElementById('ajusteMontoActual').textContent = `S/ ${balances.balChica.toFixed(2)}`;
+    document.getElementById('ajusteMontoNuevo').value = '';
+    document.getElementById('ajusteError').classList.add('hidden');
+};
+
+window.closeModalAjusteCajaChica = function () {
+    document.getElementById('modalAjusteCajaChica').classList.remove('show');
+};
+
+window.guardarAjusteCajaChica = async function () {
+    const nuevoMonto = parseFloat(document.getElementById('ajusteMontoNuevo').value);
+    const errorDiv = document.getElementById('ajusteError');
+
+    if (isNaN(nuevoMonto) || nuevoMonto < 0) {
+        errorDiv.textContent = 'Ingresa un monto válido (puede ser 0)';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    const balances = calcularBalances();
+    const diferencia = nuevoMonto - balances.balChica;
+
+    if (Math.abs(diferencia) < 0.01) {
+        closeModalAjusteCajaChica();
+        return;
+    }
+
+    // Registramos la diferencia como un movimiento de tipo "ingreso" o "egreso" especial
+    const nuevoMovimiento = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString(),
+        descripcion: 'Ajuste de Saldo inicial/manual',
+        monto: Math.abs(diferencia),
+        tipo: diferencia > 0 ? 'ingreso' : 'egreso',
+        caja: 'chica',
+        usuario: usuarioActual.nombre
+    };
+
+    movimientos.unshift(nuevoMovimiento);
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    closeModalAjusteCajaChica();
+    alert(`✅ Saldo de Caja Chica ajustado a S/ ${nuevoMonto.toFixed(2)}`);
+};
+
+window.calcularBalances = function () {
+    // 1. Ventas en Efectivo (siempre van a Local)
+    const ventasEfectivo = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
+
+    // 2. Movimientos manuales
+    const ingresosLocal = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+    const egresosLocal = movimientos.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+    const transferenciasSalientes = movimientos.filter(m => m.tipo === 'transferencia').reduce((acc, m) => acc + m.monto, 0);
+
+    const ingresosChica = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
+    const egresosChica = movimientos.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+    const transferenciasEntrantes = transferenciasSalientes;
+
+    const balLocal = ventasEfectivo + ingresosLocal - egresosLocal - transferenciasSalientes;
+    const balChica = ingresosChica + transferenciasEntrantes - egresosChica;
+    const totalEgresosTotal = egresosLocal + egresosChica;
+
+    return { balLocal, balChica, totalEgresosTotal };
+};
+
+window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 'todo') {
+    const tbody = document.getElementById('tablaMovimientos');
+    if (!tbody) return;
+
+    let movsFiltrados = movimientos;
+
+    // Filtro por tipo
+    if (filtro !== 'todos') {
+        movsFiltrados = movsFiltrados.filter(m => m.tipo === filtro);
+    }
+
+    // Filtro por fecha
+    if (filtroFecha !== 'todo') {
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        movsFiltrados = movsFiltrados.filter(m => {
+            const fechaMov = new Date(m.fecha);
+            fechaMov.setHours(0, 0, 0, 0);
+
+            if (filtroFecha === 'hoy') {
+                return fechaMov.getTime() === hoy.getTime();
+            } else if (filtroFecha === 'semana') {
+                const haceUnaSemana = new Date(hoy);
+                haceUnaSemana.setDate(hoy.getDate() - 7);
+                return fechaMov >= haceUnaSemana;
+            }
+            return true;
+        });
+    }
+
+    const { balLocal, balChica, totalEgresosTotal } = calcularBalances();
+
+    // Actualizar UI de balances
+    document.getElementById('balanceCajaLocal').textContent = `S/ ${balLocal.toFixed(2)}`;
+    document.getElementById('balanceCajaChica').textContent = `S/ ${balChica.toFixed(2)}`;
+    document.getElementById('cajaEgresos').textContent = `S/ ${totalEgresosTotal.toFixed(2)}`;
+    document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica).toFixed(2)}`;
+
+    // Renderizar tabla
+    tbody.innerHTML = movsFiltrados.map(m => {
+        let colorBadge = '#eee';
+        if (m.tipo === 'ingreso') colorBadge = '#d1fae5';
+        else if (m.tipo === 'egreso') colorBadge = '#fee2e2';
+        else if (m.tipo === 'retiro') colorBadge = '#ffedd5';
+        else if (m.tipo === 'reposicion') colorBadge = '#f3e8ff';
+        else if (m.tipo === 'transferencia') colorBadge = '#dbeafe';
+
+        const esPositivo = m.tipo === 'ingreso' || (m.tipo === 'transferencia' && m.caja === 'chica'); // Visualmente en la tabla depende de la caja?
+        // Para simplificar, en la tabla mostramos el signo del movimiento base
+        let signo = (m.tipo === 'ingreso' || m.tipo === 'transferencia') ? '+' : '-';
+        if (m.tipo === 'transferencia') signo = '🔄';
+
+        return `
+        <tr>
+            <td><small>${m.fecha}</small></td>
+            <td style="text-transform: capitalize;">${m.caja || 'local'}</td>
+            <td><span class="user-badge" style="background: ${colorBadge}; color: #333">${m.tipo.toUpperCase()}</span></td>
+            <td>${m.descripcion}</td>
+            <td style="font-weight: bold; color: ${m.tipo === 'ingreso' ? '#10b981' : (m.tipo === 'transferencia' ? '#3b82f6' : '#ef4444')}">
+                ${m.tipo === 'transferencia' ? '' : signo} S/ ${m.monto.toFixed(2)}
+            </td>
+            <td style="text-align: center;">
+                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})">🗑️</button>
+            </td>
+        </tr>
+    `;
+    }).join('') || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
+};
+
+window.eliminarMovimiento = async function (id) {
+    if (!confirm('¿Deseas eliminar este registro de caja?')) return;
+    movimientos = movimientos.filter(m => m.id !== id);
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
 };
