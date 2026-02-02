@@ -189,6 +189,8 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabDashboard', true);
         toggleElement('btnTabCaja', true);
         toggleElement('sectionLotesAgotados', true);
+        toggleElement('btnEliminarSemanal', true);
+        toggleElement('btnEliminarMensual', true);
     } else {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
@@ -203,6 +205,8 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabDashboard', false);
         toggleElement('btnTabCaja', false);
         toggleElement('sectionLotesAgotados', false);
+        toggleElement('btnEliminarSemanal', false);
+        toggleElement('btnEliminarMensual', false);
     }
 
     try {
