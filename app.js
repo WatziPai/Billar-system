@@ -189,8 +189,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabDashboard', true);
         toggleElement('btnTabCaja', true);
         toggleElement('sectionLotesAgotados', true);
-        toggleElement('btnEliminarSemanal', true);
-        toggleElement('btnEliminarMensual', true);
+        toggleElement('btnEliminarVentas', true);
     } else {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
@@ -205,8 +204,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabDashboard', false);
         toggleElement('btnTabCaja', false);
         toggleElement('sectionLotesAgotados', false);
-        toggleElement('btnEliminarSemanal', false);
-        toggleElement('btnEliminarMensual', false);
+        toggleElement('btnEliminarVentas', false);
     }
 
     try {
@@ -4564,77 +4562,118 @@ window.eliminarMovimiento = async function (id) {
 // ========== GESTIÓN DE VENTAS (ELIMINAR) ===
 // ===========================================
 
-window.eliminarVentasMensuales = async function () {
-    if (!confirm('🛑 ¿Estás seguro de eliminar TODAS las ventas de ESTE MES?\n\nEsta acción no se puede deshacer.')) return;
+// ===========================================
+// ========== GESTIÓN DE VENTAS (ELIMINAR) ===
+// ===========================================
 
-    if (!confirm('⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del mes actual.')) return;
+window.showModalEliminarVentas = function () {
+    if ((usuarioActual.rol || '').toLowerCase() !== 'admin') {
+        mostrarError('Solo los administradores pueden eliminar ventas');
+        return;
+    }
+    document.getElementById('modalEliminarVentas').classList.add('show');
+    document.getElementById('fechaInicioEliminar').value = '';
+    document.getElementById('fechaFinEliminar').value = '';
+    document.getElementById('eliminarVentasError').classList.add('hidden');
+};
 
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+window.closeModalEliminarVentas = function () {
+    document.getElementById('modalEliminarVentas').classList.remove('show');
+};
+
+window.eliminarVentasPorRango = async function () {
+    const fechaInicioVal = document.getElementById('fechaInicioEliminar').value;
+    const fechaFinVal = document.getElementById('fechaFinEliminar').value;
+    const errorDiv = document.getElementById('eliminarVentasError');
+
+    if (!fechaInicioVal || !fechaFinVal) {
+        errorDiv.textContent = 'Por favor selecciona ambas fechas';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    const fechaInicio = new Date(fechaInicioVal);
+    fechaInicio.setHours(0, 0, 0, 0);
+
+    const fechaFin = new Date(fechaFinVal);
+    fechaFin.setHours(23, 59, 59, 999);
+
+    if (fechaInicio > fechaFin) {
+        errorDiv.textContent = 'La fecha de inicio debe ser anterior o igual a la fecha fin';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    if (!confirm(`🛑 ¿Estás seguro de eliminar las ventas desde ${fechaInicio.toLocaleDateString()} hasta ${fechaFin.toLocaleDateString()}?\n\nEsta acción NO se puede deshacer.`)) return;
+
+    if (!confirm('⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del rango seleccionado.')) return;
 
     const ventasAnteriores = ventas.length;
 
-    // Filtrar para MANTENER ventas que NO son de este mes/año
+    // Filtrar para MANTENER ventas que NO están en el rango
     ventas = ventas.filter(v => {
-        const d = new Date(v.id);
-        return d.getMonth() !== currentMonth || d.getFullYear() !== currentYear;
+        // v.id es el timestamp de creación
+        const fechaVenta = new Date(v.id);
+        return fechaVenta < fechaInicio || fechaVenta > fechaFin;
     });
 
-    if (ventas.length === ventasAnteriores) {
-        alert('ℹ️ No se encontraron ventas de este mes para eliminar.');
+    const ventasEliminadas = ventasAnteriores - ventas.length;
+
+    if (ventasEliminadas === 0) {
+        errorDiv.textContent = 'No se encontraron ventas en el rango seleccionado.';
+        errorDiv.classList.remove('hidden');
         return;
     }
 
     await guardarVentas();
-    if (typeof actualizarTablaVentas === 'function') {
-        actualizarTablaVentas();
-    } else {
-        debugLog('error', '⚠️ Func. actualizarTablaVentas no encontrada, recargando...');
-        location.reload();
-    }
+    actualizarTablaVentas();
+    actualizarDashboardFinanciero();
+    closeModalEliminarVentas();
 
-    // También actualizamos dashboard si es admin
-    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
-
-    alert('✅ Ventas del mes eliminadas correctamente.');
+    alert(`✅ Se eliminaron ${ventasEliminadas} ventas correctamente.`);
 };
 
-window.eliminarVentasSemanales = async function () {
-    if (!confirm('🛑 ¿Estás seguro de eliminar TODAS las ventas de ESTA SEMANA?\n\nEsta acción no se puede deshacer.')) return;
+// ===========================================
+// ========== TRANSFERENCIA YAPE =============
+// ===========================================
 
-    const now = new Date(); // Hoy
-    const currentDay = now.getDay(); // 0 (Domingo) - 6 (Sábado)
+window.showModalTransferenciaYape = function () {
+    document.getElementById('modalTransferenciaYape').classList.add('show');
+    document.getElementById('transferenciaYapeMonto').value = '';
+    document.getElementById('transferenciaYapeDestino').value = 'local'; // Default
+    document.getElementById('transferenciaYapeError').classList.add('hidden');
+};
 
-    // Calcular Lunes de esta semana
-    // Si hoy es Domingo (0), el lunes fue hace 6 días.
-    // Si hoy es Lunes (1), el lunes es hoy (0 días atrás).
-    const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+window.closeModalTransferenciaYape = function () {
+    document.getElementById('modalTransferenciaYape').classList.remove('show');
+};
 
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - diffToMonday);
-    startOfWeek.setHours(0, 0, 0, 0);
+window.guardarTransferenciaYape = async function () {
+    const monto = parseFloat(document.getElementById('transferenciaYapeMonto').value);
+    const destino = document.getElementById('transferenciaYapeDestino').value;
+    const errorDiv = document.getElementById('transferenciaYapeError');
 
-    const ventasAnteriores = ventas.length;
-
-    ventas = ventas.filter(v => {
-        const d = new Date(v.id);
-        return d < startOfWeek; // Mantenemos las que son MENORES al inicio de semana
-    });
-
-    if (ventas.length === ventasAnteriores) {
-        alert('ℹ️ No se encontraron ventas de esta semana para eliminar.');
+    if (isNaN(monto) || monto <= 0) {
+        errorDiv.textContent = 'Ingresa un monto válido mayor a 0';
+        errorDiv.classList.remove('hidden');
         return;
     }
 
-    await guardarVentas();
-    if (typeof actualizarTablaVentas === 'function') {
-        actualizarTablaVentas();
-    } else {
-        location.reload();
-    }
+    // Registramos el ingreso en la caja seleccionada
+    const nuevoMovimiento = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString(),
+        descripcion: 'Transferencia desde Yape',
+        monto: monto,
+        tipo: 'ingreso', // Es un ingreso para la caja física
+        caja: destino,
+        usuario: usuarioActual.nombre
+    };
 
-    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
-
-    alert('✅ Ventas de la semana eliminadas correctamente.');
+    movimientos.unshift(nuevoMovimiento);
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    closeModalTransferenciaYape();
+    alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
 };
+
