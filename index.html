@@ -166,13 +166,9 @@
                         <button class="btn-small btn-green" onclick="showModalVentaProductos()">
                             🛒 Vender Productos
                         </button>
-                        <button id="btnEliminarSemanal" class="btn-small btn-red hidden"
-                            onclick="eliminarVentasSemanales()">
-                            🗑️ Semanal
-                        </button>
-                        <button id="btnEliminarMensual" class="btn-small btn-red hidden"
-                            onclick="eliminarVentasMensuales()">
-                            🗑️ Mensual
+                        <button id="btnEliminarVentas" class="btn-small btn-red hidden"
+                            onclick="showModalEliminarVentas()">
+                            🗑️ Eliminar Ventas
                         </button>
                         <button id="btnReportarError" class="btn-small btn-orange hidden" onclick="showModalError()">
                             ⚠️ Reportar Error
@@ -351,6 +347,10 @@
                     </button>
                     <button class="btn-small btn-blue" onclick="showModalTransferencia()" style="background: #2563eb;">
                         🔄 Transferencia
+                    </button>
+                    <button class="btn-small btn-purple" onclick="showModalTransferenciaYape()"
+                        style="background: #742284; color: white;">
+                        📱 Transferencia Yape
                     </button>
                     <button class="btn-small btn-gray" onclick="showModalAjusteCaja('chica')"
                         title="Ajustar Saldo Caja Chica">
@@ -621,7 +621,7 @@
         <!-- ✅ NUEVO: Modal Transferencia -->
         <div id="modalTransferencia" class="modal">
             <div class="modal-content" style="max-width: 400px;">
-                <div class="modal-header">🔄 Transferir Fondos</div>
+                <div class="modal-header">🔄 Transferir Fondos (Caja -> Caja Chica)</div>
                 <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Mueve dinero de la Caja Local a la Caja
                     Chica.</p>
 
@@ -637,6 +637,69 @@
                         Confirmar Transferencia
                     </button>
                     <button class="btn btn-gray btn-full" onclick="closeModalTransferencia()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ NUEVO: Modal Transferencia Yape -->
+        <div id="modalTransferenciaYape" class="modal">
+            <div class="modal-content" style="max-width: 400px;">
+                <div class="modal-header" style="color: #742284;">📱 Transferir Yape a Caja</div>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+                    Registra el ingreso de dinero desde Yape hacia una de las cajas físicas.
+                </p>
+
+                <div id="transferenciaYapeError" class="error-msg hidden"></div>
+
+                <div class="input-group">
+                    <label>Monto a transferir (S/)</label>
+                    <input type="number" id="transferenciaYapeMonto" step="0.01" min="0" placeholder="0.00">
+                </div>
+
+                <div class="input-group">
+                    <label>Destino</label>
+                    <select id="transferenciaYapeDestino">
+                        <option value="local">🏠 Caja Local</option>
+                        <option value="chica">👛 Caja Chica</option>
+                    </select>
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn btn-purple btn-full" onclick="guardarTransferenciaYape()"
+                        style="background: #742284;">
+                        Confirmar Transferencia
+                    </button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalTransferenciaYape()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ NUEVO: Modal Eliminar Ventas por Rango -->
+        <div id="modalEliminarVentas" class="modal">
+            <div class="modal-content" style="max-width: 450px;">
+                <div class="modal-header" style="color: #dc3545;">🗑️ Eliminar Ventas</div>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+                    Selecciona el rango de fechas para eliminar ventas. <br>
+                    <strong>¡Esta acción no se puede deshacer!</strong>
+                </p>
+
+                <div id="eliminarVentasError" class="error-msg hidden"></div>
+
+                <div class="input-group">
+                    <label>Fecha Inicio</label>
+                    <input type="date" id="fechaInicioEliminar">
+                </div>
+
+                <div class="input-group">
+                    <label>Fecha Fin</label>
+                    <input type="date" id="fechaFinEliminar">
+                </div>
+
+                <div class="modal-buttons">
+                    <button class="btn btn-red btn-full" onclick="eliminarVentasPorRango()">
+                        🗑️ Eliminar Definitivamente
+                    </button>
+                    <button class="btn btn-gray btn-full" onclick="closeModalEliminarVentas()">Cancelar</button>
                 </div>
             </div>
         </div>
