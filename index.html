@@ -197,9 +197,19 @@
             <div class="section-box">
                 <div class="section-header">
                     <h2>Inventario de Productos</h2>
-                    <button id="btnAgregarProducto" class="btn-small btn-green hidden" onclick="showModalProducto()">
-                        ➕ Agregar Producto
-                    </button>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="filtroOrdenInventario" onchange="cambiarOrdenInventario(this.value)"
+                            style="padding: 5px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer;">
+                            <option value="default">Orden por Defecto</option>
+                            <option value="masVendidos">🔥 Más Vendidos</option>
+                            <option value="menosStock">📉 Menos Stock</option>
+                            <option value="categoria">📂 Por Categoría</option>
+                        </select>
+                        <button id="btnAgregarProducto" class="btn-small btn-green hidden"
+                            onclick="showModalProducto()">
+                            ➕ Agregar Producto
+                        </button>
+                    </div>
                 </div>
                 <div id="inventarioGrid" class="inventario-grid"></div>
             </div>
