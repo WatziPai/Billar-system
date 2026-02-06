@@ -61,6 +61,7 @@ let ultimoCierre = null;
 let consumosDueno = [];
 let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
 let lotesAgotados = []; // Historial de lotes de productos agotados
+let ordenInventarioActual = 'default'; // 📦 Variable para el orden del inventario
 
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
 const TIEMPO_EXPIRACION = 30 * 60 * 1000;
@@ -1638,6 +1639,12 @@ window.actualizarTablaLotes = function () {
     `;
 };
 
+window.cambiarOrdenInventario = function (valor) {
+    debugLog('sistema', '🔄 Cambiando orden de inventario', { orden: valor });
+    ordenInventarioActual = valor;
+    actualizarInventario();
+};
+
 function actualizarInventario() {
     const grid = document.getElementById('inventarioGrid');
     if (!grid) return;
@@ -1647,7 +1654,30 @@ function actualizarInventario() {
         return;
     }
 
-    grid.innerHTML = productos.map(p => {
+    // 📦 LÓGICA DE ORDENAMIENTO
+    let productosMostrados = [...productos];
+
+    if (ordenInventarioActual === 'masVendidos') {
+        productosMostrados.sort((a, b) => (b.unidadesVendidas || 0) - (a.unidadesVendidas || 0));
+    } else if (ordenInventarioActual === 'menosStock') {
+        productosMostrados.sort((a, b) => a.stock - b.stock);
+    } else if (ordenInventarioActual === 'categoria') {
+        productosMostrados.sort((a, b) => (a.categoria || '').localeCompare(b.categoria || ''));
+    }
+
+    grid.innerHTML = productosMostrados.map((p, index) => {
+        let htmlExtra = '';
+
+        // Si es por categoría, añadir separadores
+        if (ordenInventarioActual === 'categoria') {
+            const prev = productosMostrados[index - 1];
+            if (!prev || prev.categoria !== p.categoria) {
+                const catInfo = p.categoria || 'Sin Categoría';
+                htmlExtra = `<div style="grid-column: 1/-1; margin-top: 15px; margin-bottom: 5px; border-bottom: 2px solid #e5e7eb; padding-bottom: 5px; font-weight: bold; color: #4b5563; display: flex; align-items: center; gap: 5px;">
+                    ${getCategoriaEmoji(catInfo)} ${catInfo}
+                </div>`;
+            }
+        }
         const stockBajo = p.stock <= p.stockMin;
         const productoJSON = JSON.stringify(p).replace(/"/g, '&quot;');
 
@@ -1677,6 +1707,7 @@ function actualizarInventario() {
         const emoji = categoriaEmoji[p.categoria] || '📦';
 
         return `
+            ${htmlExtra}
             <div class="producto-card" style="border-left: 4px solid ${stockBajo ? '#dc3545' : '#10b981'};">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                     <div>
