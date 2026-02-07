@@ -4342,15 +4342,28 @@ window.actualizarDashboardFinanciero = function () {
             </div>
         </div>
         
-        <div style="margin-top: 30px; padding: 20px; border: 2px dashed #ef4444; border-radius: 12px; background: #fef2f2; text-align: center;">
-            <h4 style="color: #991b1b; margin-bottom: 10px;">⚠️ Zona de Reinicio Financiero</h4>
-            <p style="font-size: 13px; color: #b91c1c; margin-bottom: 15px;">
-                Si el Panel y la Caja no cuadran y quieres empezar de nuevo (S/ 0.00), usa este botón.
-                <br><b>No borra tus productos</b>, solo el historial de ventas y movimientos.
-            </p>
-            <button onclick="reiniciarTodoFinanciero()" style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
-                🔄 Reiniciar Estadísticas y Cajas
-            </button>
+        <div style="margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="padding: 15px; border: 2px dashed #3b82f6; border-radius: 12px; background: #f0f7ff; text-align: center;">
+                <h4 style="color: #1e40af; margin-bottom: 8px;">⚖️ Sincronizar Cuentas</h4>
+                <p style="font-size: 11px; color: #1e3a8a; margin-bottom: 12px;">
+                    ¿El Panel dice que tienes más dinero del que hay en caja?
+                    <br>Usa esto para "cuadrar" la Utilidad con tu saldo real sin borrar nada.
+                </p>
+                <button onclick="sincronizarUtilidadConCaja()" style="background: #3b82f6; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px;">
+                    ✅ Cuadrar Panel con Caja
+                </button>
+            </div>
+
+            <div style="padding: 15px; border: 2px dashed #ef4444; border-radius: 12px; background: #fef2f2; text-align: center;">
+                <h4 style="color: #991b1b; margin-bottom: 8px;">🚨 Reinicio Contable</h4>
+                <p style="font-size: 11px; color: #b91c1c; margin-bottom: 12px;">
+                    Borra todo el historial de ventas y movimientos.
+                    <br>Solo úsalo si quieres empezar el negocio desde Cero hoy.
+                </p>
+                <button onclick="reiniciarTodoFinanciero()" style="background: #ef4444; color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px;">
+                    🔄 Borrar Todo e Ir a Cero
+                </button>
+            </div>
         </div>
     `;
 
@@ -4972,5 +4985,75 @@ window.reiniciarTodoFinanciero = async function () {
 
     alert('✅ Sistema financiero reiniciado. Ahora todo comienza desde S/ 0.00.');
     location.reload(); // Recargar para asegurar limpieza total de modales y estados
+};
+
+window.sincronizarUtilidadConCaja = async function () {
+    // 1. Obtener la Utilidad Neta actual (necesitamos los valores que actualizarDashboardFinanciero calcula)
+    // Para simplificar, calculamos Utility vs Cash Balance
+
+    // Lo mejor es llamar a una versión reducida de la lógica del dashboard
+    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
+    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
+    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
+
+    const totalIngresosExtraActual = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + curr.monto, 0);
+    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
+    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+
+    const totalEgresosActual = movimientos.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((acc, curr) => acc + curr.monto, 0);
+    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
+    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
+
+    const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
+        const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
+        return acc + (m.monto * factor);
+    }, 0);
+    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
+    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
+
+    const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
+    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
+    const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
+
+    const utilidadNetaActual = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
+
+    // 2. Obtener Balance Físico Real
+    const { balLocal, balChica } = calcularBalances();
+    const balanceFisicoReal = balLocal + balChica;
+
+    // 3. Calcular Diferencia
+    const diferencia = balanceFisicoReal - utilidadNetaActual;
+
+    if (Math.abs(diferencia) < 0.01) {
+        alert('✅ Tu Panel ya está perfectamente sincronizado con el dinero en caja.');
+        return;
+    }
+
+    const msg = diferencia > 0
+        ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en caja.\n\n¿Deseas crear un ajuste positivo para que el Panel suba y coincida con la caja?`
+        : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en caja.\n\n¿Deseas crear un ajuste negativo para que el Panel baje y coincida con la caja?`;
+
+    if (!confirm(msg + '\n\nEsto NO borrará nada de tu historia, solo agregará una corrección invisible.')) return;
+
+    // 4. Crear el movimiento de ajuste
+    const ajusteMov = {
+        id: Date.now(),
+        fecha: new Date().toLocaleString(),
+        descripcion: 'Sincronización Automática de Balance (Panel vs Caja)',
+        monto: Math.abs(diferencia),
+        tipo: 'ajuste',
+        ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
+        oculto: true, // Lo ocultamos para no ensuciar la lista de caja, pero efecto contable sigue
+        usuario: usuarioActual.nombre
+    };
+
+    movimientos.unshift(ajusteMov);
+    await guardarMovimientos();
+
+    // 5. Actualizar todo
+    actualizarTablaMovimientos();
+    actualizarDashboardFinanciero();
+
+    alert('✅ ¡Sincronizado! Ahora la Utilidad Neta del Panel coincide exactamente con tu dinero en Caja.');
 };
 
