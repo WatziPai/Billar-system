@@ -4285,17 +4285,31 @@ window.actualizarDashboardFinanciero = function () {
     const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
     const totalEgresos = totalEgresosActual + totalEgresosHistorico;
 
+    // Calcular Ajustes Totales (Para que la Utilidad Neta coincida con la realidad de caja)
+    const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
+        // Si no tiene ajusteTipo, inferirlo (esto es legacy, los nuevos sí tienen)
+        const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
+        return acc + (m.monto * factor);
+    }, 0);
+    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
+    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
+
     const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
     const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
     const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
 
-    // 3. Utilidad Neta Total
-    const utilidadNeta = gananciaBrutaTotal + totalIngresosExtra - totalEgresos - totalConsumoDuenoCosto;
+    // 3. Utilidad Neta Total (Incluyendo ajustes)
+    const utilidadNeta = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
 
     // 4. Margen Promedio
     const margenProm = totalVentaProductosActual > 0 ? (gananciaVentasActual / totalVentaProductosActual) * 100 : 0;
 
     // Actualizar UI - Cards
+    if (document.getElementById('dashDineroCaja')) {
+        // Calcular saldo actual (reutilizando lógica de calcularBalances)
+        const { balLocal, balChica } = calcularBalances();
+        document.getElementById('dashDineroCaja').textContent = `S/ ${(balLocal + balChica).toFixed(2)}`;
+    }
     document.getElementById('dashGananciaBruta').textContent = `S/ ${gananciaBrutaTotal.toFixed(2)}`;
     document.getElementById('dashGananciaPotencial').textContent = `S/ ${gananciaPotencialTotal.toFixed(2)}`;
     document.getElementById('dashUtilidadNeta').textContent = `S/ ${utilidadNeta.toFixed(2)}`;
@@ -4734,40 +4748,57 @@ window.eliminarMovimiento = async function (id) {
 };
 
 window.borrarRegistroSinEfecto = async function (id) {
-    const index = movimientos.findIndex(m => m.id === id);
-    if (index === -1) return;
-    const mov = movimientos[index];
-
     if (!confirm('¿Borrar registro del historial?\n\n❌ El registro desaparecerá de la lista.\n✅ PERO el efecto en la caja (dinero) se mantendrá igual.\n\nÚsalo para limpiar la lista sin alterar los saldos reales.')) return;
 
-    // Convertir a tipo 'ajuste' oculto para que no sume en reportes de gastos pero mantenga saldo
-    // Si era egreso, el ajuste debe ser negativo para mantener el saldo bajo.
-    // Si era ingreso, el ajuste debe ser positivo.
+    // Buscar índice nuevamente para evitar errores de referencia
+    const index = movimientos.findIndex(m => m.id === id);
+    if (index === -1) {
+        alert('❌ Error: No se encontró el movimiento. Intenta recargar la página.');
+        return;
+    }
 
-    // Simplificación: Lo marcamos como 'oculto' y tipo 'ajuste'
+    const mov = movimientos[index];
 
-    let esNegativo = ['egreso', 'retiro', 'reposicion'].includes(mov.tipo);
-    if (mov.tipo === 'ajuste') esNegativo = mov.ajusteTipo === 'negativo';
+    // Determinar si era una salida de dinero (para mantener el saldo igual, el ajuste debe ser negativo)
+    // O si era entrada (ajuste positivo)
 
-    mov.tipo = 'ajuste';
-    mov.ajusteTipo = esNegativo ? 'negativo' : 'positivo';
-    mov.oculto = true; // OCULTARLO DE LA LISTA
+    // Tipos que restan dinero: egreso, retiro, reposicion
+    // Tipos que suman: ingreso
+    // Ajustes: depende del tipo anterior
+
+    let esNegativo = false;
+
+    if (['egreso', 'retiro', 'reposicion'].includes(mov.tipo)) {
+        esNegativo = true;
+    } else if (mov.tipo === 'ingreso') {
+        esNegativo = false;
+    } else if (mov.tipo === 'ajuste') {
+        esNegativo = mov.ajusteTipo === 'negativo';
+    } else {
+        // Transferencias y otros no deberían borrarse así, pero por si acaso
+        esNegativo = false; // Default
+    }
+
+    // Modificar el objeto DIRECTAMENTE en el array global
+    movimientos[index].tipo = 'ajuste';
+    movimientos[index].ajusteTipo = esNegativo ? 'negativo' : 'positivo';
+    movimientos[index].oculto = true; // OCULTARLO DE LA LISTA
 
     await guardarMovimientos();
-    actualizarTablaMovimientos();
 
-    // Actualizar dashboard
+    // Forzar actualización de todo
+    actualizarTablaMovimientos();
     if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
 
-    // Actualizar balance en header (si existe la función)
+    // Actualizar header explícitamente
     if (typeof calcularBalances === 'function') {
         const balances = calcularBalances();
         if (document.getElementById('balanceCajaLocal')) document.getElementById('balanceCajaLocal').textContent = `S/ ${balances.balLocal.toFixed(2)}`;
         if (document.getElementById('balanceCajaChica')) document.getElementById('balanceCajaChica').textContent = `S/ ${balances.balChica.toFixed(2)}`;
-        if (document.getElementById('cajaEgresos')) document.getElementById('cajaEgresos').textContent = `S/ ${balances.totalEgresosTotal.toFixed(2)}`;
     }
 
-    alert('✅ Registro borrado de la lista. El saldo de caja se ha mantenido.');
+    // Feedback visual pequeño
+    debugLog('sistema', '🗑️ Registro borrado (sin efecto en caja)', { id });
 };
 
 // ===========================================
@@ -4889,4 +4920,6 @@ window.guardarTransferenciaYape = async function () {
     closeModalTransferenciaYape();
     alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
 };
+
+
 
