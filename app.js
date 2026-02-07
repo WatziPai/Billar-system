@@ -4406,6 +4406,7 @@ window.actualizarDashboardFinanciero = function () {
     `).join('') || '<p style="text-align:center; color: #666; margin-top:20px;">Sin ventas aún</p>';
 
     actualizarAlertasDashboard();
+    actualizarTablaRentabilidad(); // ⭐ NUEVO: Tabla de rentabilidad en tiempo real
 };
 
 function crearBreakdownContainer() {
@@ -4431,28 +4432,120 @@ function actualizarAlertasDashboard() {
 
     if (prodsBajoMargen.length > 0) {
         alertHTML += `
-        < div style = "background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; border-radius: 4px;" >
+            <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
                 <strong style="color: #92400e; font-size: 14px;">⚠️ Margen Bajo (< 20%)</strong>
                 <p style="margin: 5px 0 0 0; font-size: 12px; color: #b45309;">
-                    ${prodsBajoMargen.map(p => p.nombre).join(', ')}
+                    ${prodsBajoMargen.slice(0, 5).map(p => p.nombre).join(', ')}${prodsBajoMargen.length > 5 ? ' y más...' : ''}
                 </p>
-            </div >
+            </div>
         `;
     }
 
     const prodsSinCosto = productos.filter(p => !p.precioCosto || p.precioCosto <= 0);
     if (prodsSinCosto.length > 0) {
         alertHTML += `
-        < div style = "background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 10px; border-radius: 4px;" >
+            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
                 <strong style="color: #991b1b; font-size: 14px;">🚫 Sin Precio de Costo</strong>
                 <p style="margin: 5px 0 0 0; font-size: 12px; color: #b91c1c;">
-                    ${prodsSinCosto.map(p => p.nombre).join(', ')}
+                    ${prodsSinCosto.slice(0, 10).map(p => p.nombre).join(', ')}${prodsSinCosto.length > 10 ? ' y más...' : ''}
                 </p>
-            </div >
+            </div>
         `;
     }
 
     dashAlertas.innerHTML = alertHTML;
+}
+
+// ===========================================
+// ========== RENTABILIDAD EN TIEMPO REAL ====
+// ===========================================
+function actualizarTablaRentabilidad() {
+    const container = document.getElementById('sectionRentabilidadReal');
+    if (!container) return;
+
+    if (productos.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #666;">No hay productos registrados</p>';
+        return;
+    }
+
+    // Calcular métricas para cada producto
+    const reporte = productos.map(p => {
+        const precioVenta = p.precio || 0;
+        const precioCosto = p.precioCosto || 0;
+        const vendidos = p.unidadesVendidas || 0;
+
+        // Métricas financieras
+        const costoVendido = vendidos * precioCosto;
+        const gananciaReal = p.gananciaAcumulada || 0;
+        // Venta total la derivamos: Ganancia + Costo (Más exacto que precioVenta * vendidos si hubo cambios de precio)
+        // O si preferimos precio actual: precioVenta * vendidos. 
+        // Usemos lo acumulado para consistencia con ganancia
+        const ventaTotal = costoVendido + gananciaReal;
+
+        const margenPorcentaje = ventaTotal > 0 ? (gananciaReal / ventaTotal) * 100 : 0;
+
+        return {
+            ...p,
+            costoVendido,
+            gananciaReal,
+            ventaTotal,
+            margenPorcentaje
+        };
+    });
+
+    // Ordenar: Primero los que dan más ganancia
+    reporte.sort((a, b) => b.gananciaReal - a.gananciaReal);
+
+    // Totales
+    const totalGanancia = reporte.reduce((sum, p) => sum + p.gananciaReal, 0);
+    const totalVenta = reporte.reduce((sum, p) => sum + p.ventaTotal, 0);
+
+    // Renderizar Tabla
+    container.innerHTML = `
+        <table class="ventas-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="background: #e5e7eb; color: #374151; border-bottom: 2px solid #d1d5db;">
+                    <th style="padding: 10px; text-align: left;">Producto</th>
+                    <th style="padding: 10px; text-align: center;">Stock</th>
+                    <th style="padding: 10px; text-align: center;">Vendido</th>
+                    <th style="padding: 10px; text-align: right;">Costo Vendido</th>
+                    <th style="padding: 10px; text-align: right;">Venta Total</th>
+                    <th style="padding: 10px; text-align: right;">GANANCIA REAL</th>
+                    <th style="padding: 10px; text-align: center;">%</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${reporte.map(p => `
+                    <tr style="border-bottom: 1px solid #e5e7eb;">
+                        <td style="padding: 8px;">
+                            <strong>${p.nombre}</strong><br>
+                            <small style="color: #666;">${p.categoria || 'Otros'}</small>
+                        </td>
+                        <td style="padding: 8px; text-align: center;">${p.stock}</td>
+                        <td style="padding: 8px; text-align: center;">${p.unidadesVendidas || 0}</td>
+                        <td style="padding: 8px; text-align: right; color: #666;">S/ ${p.costoVendido.toFixed(2)}</td>
+                        <td style="padding: 8px; text-align: right; color: #1e40af;">S/ ${p.ventaTotal.toFixed(2)}</td>
+                        <td style="padding: 8px; text-align: right; font-weight: bold; color: ${p.gananciaReal >= 0 ? '#10b981' : '#dc3545'};">
+                            S/ ${p.gananciaReal.toFixed(2)}
+                        </td>
+                        <td style="padding: 8px; text-align: center; font-size: 11px;">
+                            <span style="padding: 2px 5px; border-radius: 4px; background: ${p.margenPorcentaje < 20 ? '#fee2e2' : '#d1fae5'}; color: ${p.margenPorcentaje < 20 ? '#b91c1c' : '#065f46'};">
+                                ${p.margenPorcentaje.toFixed(0)}%
+                            </span>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+            <tfoot style="background: #ecfdf5; font-weight: bold; border-top: 2px solid #10b981; color: #065f46;">
+                <tr>
+                    <td colspan="4" style="padding: 15px; text-align: right;">TOTAL ACUMULADO (STOCK ACTUAL):</td>
+                    <td style="padding: 15px; text-align: right;">S/ ${totalVenta.toFixed(2)}</td>
+                    <td style="padding: 15px; text-align: right; font-size: 15px;">S/ ${totalGanancia.toFixed(2)}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    `;
 }
 
 // ===========================================
