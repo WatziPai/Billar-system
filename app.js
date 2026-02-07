@@ -835,6 +835,32 @@ async function iniciarMesa(id) {
     actualizarMesas();
 }
 
+// ========== FUNCIÓN AUXILIAR: ORDENAR PRODUCTOS CON LICORES PRIMERO ==========
+function ordenarProductosPorCategoria(productos) {
+    const ordenCategorias = {
+        'Licores': 1,
+        'Gaseosas': 2,
+        'Golosinas': 3,
+        'Otros': 4
+    };
+
+    return [...productos].sort((a, b) => {
+        const categoriaA = a.categoria || 'Otros';
+        const categoriaB = b.categoria || 'Otros';
+
+        const ordenA = ordenCategorias[categoriaA] || 99;
+        const ordenB = ordenCategorias[categoriaB] || 99;
+
+        // Ordenar primero por categoría
+        if (ordenA !== ordenB) {
+            return ordenA - ordenB;
+        }
+
+        // Si son de la misma categoría, ordenar alfabéticamente por nombre
+        return a.nombre.localeCompare(b.nombre);
+    });
+}
+
 function calcularCostoTiempo(segundos) {
     const tarifaHora = parseFloat(document.getElementById('tarifaHora').value) || 5.00;
     const tarifaExtra = parseFloat(document.getElementById('tarifaExtra5Min').value) || 1.00;
@@ -964,6 +990,7 @@ async function finalizarMesa(id) {
     actualizarTablaVentas();
     calcularTotal();
     actualizarDashboardFinanciero(); // 🚀 Reflejar ganancia de tiempo y productos en el dashboard
+    actualizarTablaMovimientos(); // 💰 Actualizar balance de Caja Local
 }
 
 function actualizarTimer(id) {
@@ -1027,6 +1054,7 @@ window.agregarVentaManual = async function () {
     actualizarTablaVentas();
     calcularTotal();
     actualizarDashboardFinanciero(); // Actualizar dashboard
+    actualizarTablaMovimientos(); // 💰 Actualizar balance de Caja Local
     window.closeModalVentaManual();
 
     btn.disabled = false;
@@ -1050,7 +1078,10 @@ function renderProductosVenta() {
         return;
     }
 
-    container.innerHTML = productos.map(p => {
+    // 🍺 Ordenar productos con Licores primero
+    const productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
 
         return `
@@ -1130,6 +1161,7 @@ window.agregarVentaProducto = async function (productoId) {
     renderProductosVenta();
     actualizarInventario();
     actualizarDashboardFinanciero();
+    actualizarTablaMovimientos(); // 💰 Actualizar balance de Caja Local
 
     alert(`Venta de ${cantidad}x ${producto.nombre} por S/ ${montoTotal.toFixed(2)} registrada (${metodoPago}).`);
 
@@ -1992,6 +2024,7 @@ async function finalizarMesaConsumo(id) {
     actualizarTablaVentas();
     calcularTotal();
     actualizarDashboardFinanciero(); // 🚀 Reflejar ganancia en el dashboard
+    actualizarTablaMovimientos(); // 💰 Actualizar balance de Caja Local
 }
 
 // ========== CONSUMOS ==========
@@ -2024,7 +2057,10 @@ function renderProductosConsumo() {
         return;
     }
 
-    container.innerHTML = productos.map(p => {
+    // 🍺 Ordenar productos con Licores primero
+    const productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
 
         return `
@@ -2459,6 +2495,7 @@ window.procesarCobroParcial = async function () {
     actualizarTablaVentas();
     calcularTotal();
     actualizarDashboardFinanciero();
+    actualizarTablaMovimientos(); // 💰 Actualizar balance de Caja Local
 };
 
 // ========== CONSUMO DEL DUEÑO ==========
