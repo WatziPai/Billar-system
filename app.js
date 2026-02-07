@@ -4261,7 +4261,17 @@ window.actualizarDashboardFinanciero = function () {
     const ventasYapeHistorica = cierres.reduce((acc, c) => acc + (c.totalYape || 0), 0);
 
     const totalEfectivo = ventasEfectivoActual + ventasEfectivoHistorica;
-    const totalYape = ventasYapeActual + ventasYapeHistorica;
+
+    // Calcular Transferencias de Yape (para restar del balance digital)
+    const transYapeActual = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + m.monto, 0);
+    const transYapeHistorica = cierres.reduce((acc, c) => {
+        if (c.movimientos) {
+            return acc + c.movimientos.filter(m => m.origenYape === true).reduce((sum, m) => sum + (m.monto || 0), 0);
+        }
+        return acc;
+    }, 0);
+
+    const totalYape = (ventasYapeActual + ventasYapeHistorica) - (transYapeActual + transYapeHistorica);
 
     let inversionStockActual = 0;
     let totalVentaProductosActual = 0;
@@ -4329,7 +4339,7 @@ window.actualizarDashboardFinanciero = function () {
                 <div style="font-size: 20px; font-weight: bold; color: #064e3b;">S/ ${totalEfectivo.toFixed(2)}</div>
             </div>
             <div style="background: #f5f0f7; border: 1px solid #742284; padding: 15px; border-radius: 10px; text-align: center;">
-                <small style="color: #742284; font-weight: 600;">📱 Digital Total (Yape/Plin)</small>
+                <small style="color: #742284; font-weight: 600;">📱 Saldo Digital (Yape/Plin)</small>
                 <div style="font-size: 20px; font-weight: bold; color: #4c1d95;">S/ ${totalYape.toFixed(2)}</div>
             </div>
             <div style="background: #eff6ff; border: 1px solid #3b82f6; padding: 15px; border-radius: 10px; text-align: center;">
