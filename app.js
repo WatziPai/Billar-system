@@ -4256,31 +4256,23 @@ window.actualizarDashboardFinanciero = function () {
     const ventasEfectivoActual = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
     const ventasYapeActual = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
 
-    // Histórico por método (si existe en los cierres, si no default a efectivo para datos viejos)
+    // Histórico por método
     const ventasEfectivoHistorica = cierres.reduce((acc, c) => acc + (c.totalEfectivo || c.totalVentas || 0), 0);
     const ventasYapeHistorica = cierres.reduce((acc, c) => acc + (c.totalYape || 0), 0);
 
     const totalEfectivo = ventasEfectivoActual + ventasEfectivoHistorica;
 
-    // Calcular Transferencias de Yape (para restar del balance digital)
-    const transYapeActual = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + m.monto, 0);
-    const transYapeHistorica = cierres.reduce((acc, c) => {
-        if (c.movimientos) {
-            return acc + c.movimientos.filter(m => m.origenYape === true).reduce((sum, m) => sum + (m.monto || 0), 0);
-        }
-        return acc;
-    }, 0);
-
-    const totalYape = (ventasYapeActual + ventasYapeHistorica) - (transYapeActual + transYapeHistorica);
+    // Balance Yape (Ventas - Transferencias + Ajustes)
+    const { balLocal, balChica, balYape } = calcularBalances();
+    const totalDashboardYape = balYape;
 
     let inversionStockActual = 0;
     let totalVentaProductosActual = 0;
-    let gananciaPotencialTotal = 0; // ⭐ NUEVO: Ganancia en estante
+    let gananciaPotencialTotal = 0;
 
     productos.forEach(p => {
         const costo = p.precioCosto || 0;
         const margenPorUnidad = (p.precio || 0) - costo;
-
         inversionStockActual += (p.stock || 0) * costo;
         totalVentaProductosActual += (p.unidadesVendidas || 0) * p.precio;
         gananciaPotencialTotal += (p.stock || 0) * margenPorUnidad;
@@ -4295,9 +4287,7 @@ window.actualizarDashboardFinanciero = function () {
     const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
     const totalEgresos = totalEgresosActual + totalEgresosHistorico;
 
-    // Calcular Ajustes Totales (Para que la Utilidad Neta coincida con la realidad de caja)
     const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
-        // Si no tiene ajusteTipo, inferirlo (esto es legacy, los nuevos sí tienen)
         const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
         return acc + (m.monto * factor);
     }, 0);
@@ -4308,7 +4298,7 @@ window.actualizarDashboardFinanciero = function () {
     const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
     const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
 
-    // 3. Utilidad Neta Total (Incluyendo ajustes)
+    // 3. Utilidad Neta Total
     const utilidadNeta = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
 
     // 4. Margen Promedio
@@ -4316,9 +4306,7 @@ window.actualizarDashboardFinanciero = function () {
 
     // Actualizar UI - Cards
     if (document.getElementById('dashDineroCaja')) {
-        // Calcular saldo actual (reutilizando lógica de calcularBalances)
-        const { balLocal, balChica } = calcularBalances();
-        document.getElementById('dashDineroCaja').textContent = `S/ ${(balLocal + balChica).toFixed(2)}`;
+        document.getElementById('dashDineroCaja').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
     }
     document.getElementById('dashGananciaBruta').textContent = `S/ ${gananciaBrutaTotal.toFixed(2)}`;
     document.getElementById('dashGananciaPotencial').textContent = `S/ ${gananciaPotencialTotal.toFixed(2)}`;
@@ -4329,9 +4317,6 @@ window.actualizarDashboardFinanciero = function () {
     // --- MOSTRAR DESGLOSE DE PAGO Y CAJAS EN DASHBOARD ---
     const containerBreakdown = document.getElementById('dashBreakdownContainer') || crearBreakdownContainer();
 
-    // USAR LOS BALANCES REALES (ya calculados arriba con calcularBalances)
-    const { balLocal, balChica } = calcularBalances();
-
     containerBreakdown.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">
             <div style="background: #f0fdf4; border: 1px solid #10b981; padding: 15px; border-radius: 10px; text-align: center;">
@@ -4340,7 +4325,7 @@ window.actualizarDashboardFinanciero = function () {
             </div>
             <div style="background: #f5f0f7; border: 1px solid #742284; padding: 15px; border-radius: 10px; text-align: center;">
                 <small style="color: #742284; font-weight: 600;">📱 Saldo Digital (Yape/Plin)</small>
-                <div style="font-size: 20px; font-weight: bold; color: #4c1d95;">S/ ${totalYape.toFixed(2)}</div>
+                <div style="font-size: 20px; font-weight: bold; color: #4c1d95;">S/ ${balYape.toFixed(2)}</div>
             </div>
             <div style="background: #eff6ff; border: 1px solid #3b82f6; padding: 15px; border-radius: 10px; text-align: center;">
                 <small style="color: #1d4ed8; font-weight: 600;">🏠 Saldo Real Caja Local</small>
@@ -4385,7 +4370,6 @@ window.actualizarDashboardFinanciero = function () {
         const prodsCat = productos.filter(p => (p.categoria || 'Otros') === cat);
         const gananciaCat = prodsCat.reduce((acc, p) => acc + ((p.unidadesVendidas || 0) * (p.precio - (p.precioCosto || 0))), 0);
 
-        // Calcular porcentaje relativo al total de ganancia para la barra
         const maxGanancia = Math.max(...categorias.map(c =>
             productos.filter(p => (p.categoria || 'Otros') === c).reduce((acc, p) => acc + ((p.unidadesVendidas || 0) * (p.precio - (p.precioCosto || 0))), 0)
         ), 1);
@@ -4421,7 +4405,6 @@ window.actualizarDashboardFinanciero = function () {
         </div>
     `).join('') || '<p style="text-align:center; color: #666; margin-top:20px;">Sin ventas aún</p>';
 
-    // Alertas
     actualizarAlertasDashboard();
 };
 
@@ -4448,24 +4431,24 @@ function actualizarAlertasDashboard() {
 
     if (prodsBajoMargen.length > 0) {
         alertHTML += `
-            <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
+        < div style = "background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 10px; border-radius: 4px;" >
                 <strong style="color: #92400e; font-size: 14px;">⚠️ Margen Bajo (< 20%)</strong>
                 <p style="margin: 5px 0 0 0; font-size: 12px; color: #b45309;">
                     ${prodsBajoMargen.map(p => p.nombre).join(', ')}
                 </p>
-            </div>
+            </div >
         `;
     }
 
     const prodsSinCosto = productos.filter(p => !p.precioCosto || p.precioCosto <= 0);
     if (prodsSinCosto.length > 0) {
         alertHTML += `
-            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 10px; border-radius: 4px;">
+        < div style = "background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin-bottom: 10px; border-radius: 4px;" >
                 <strong style="color: #991b1b; font-size: 14px;">🚫 Sin Precio de Costo</strong>
                 <p style="margin: 5px 0 0 0; font-size: 12px; color: #b91c1c;">
                     ${prodsSinCosto.map(p => p.nombre).join(', ')}
                 </p>
-            </div>
+            </div >
         `;
     }
 
@@ -4565,7 +4548,7 @@ window.guardarTransferencia = async function () {
     // 🛡️ VALIDACIÓN: No transferir más de lo que hay en Caja Local
     const balances = calcularBalances();
     if (monto > balances.balLocal) {
-        errorDiv.textContent = `⚠️ No puedes transferir S/ ${monto.toFixed(2)} porque solo tienes S/ ${balances.balLocal.toFixed(2)} en Caja Local.`;
+        errorDiv.textContent = `⚠️ No puedes transferir S / ${monto.toFixed(2)} porque solo tienes S / ${balances.balLocal.toFixed(2)} en Caja Local.`;
         errorDiv.classList.remove('hidden');
         return;
     }
@@ -4585,7 +4568,7 @@ window.guardarTransferencia = async function () {
     await guardarMovimientos();
     actualizarTablaMovimientos();
     closeModalTransferencia();
-    alert(`✅ Transferencia de S/ ${monto.toFixed(2)} realizada con éxito.`);
+    alert(`✅ Transferencia de S / ${monto.toFixed(2)} realizada con éxito.`);
 };
 
 // --- AJUSTE DE SALDO (GENÉRICO) ---
@@ -4597,12 +4580,12 @@ window.showModalAjusteCaja = function (caja) {
     modal.classList.add('show');
 
     // Texto dinámico
-    document.getElementById('ajusteTitulo').textContent = `Ajustar Saldo Caja ${caja === 'local' ? 'Local' : 'Chica'}`;
+    document.getElementById('ajusteTitulo').textContent = `Ajustar Saldo Caja ${caja === 'local' ? 'Local' : 'Chica'} `;
 
     const balances = calcularBalances();
     const saldoActual = caja === 'local' ? balances.balLocal : balances.balChica;
 
-    document.getElementById('ajusteMontoActual').textContent = `S/ ${saldoActual.toFixed(2)}`;
+    document.getElementById('ajusteMontoActual').textContent = `S / ${saldoActual.toFixed(2)} `;
     document.getElementById('ajusteMontoNuevo').value = '';
     document.getElementById('ajusteError').classList.add('hidden');
 };
@@ -4638,7 +4621,7 @@ window.guardarAjusteCaja = async function () {
     const nuevoMovimiento = {
         id: Date.now(),
         fecha: new Date().toLocaleString(),
-        descripcion: `Ajuste manual de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'}`,
+        descripcion: `Ajuste manual de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} `,
         monto: Math.abs(diferencia),
         tipo: 'ajuste',
         ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
@@ -4650,7 +4633,7 @@ window.guardarAjusteCaja = async function () {
     await guardarMovimientos();
     actualizarTablaMovimientos();
     closeModalAjusteCaja();
-    alert(`✅ Saldo de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} ajustado a S/ ${nuevoMonto.toFixed(2)}`);
+    alert(`✅ Saldo de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} ajustado a S / ${nuevoMonto.toFixed(2)} `);
 };
 
 window.calcularBalances = function () {
@@ -4676,9 +4659,18 @@ window.calcularBalances = function () {
 
     const balLocal = ventasEfectivo + ingresosLocal - egresosLocal - transferenciasSalientes + ajustesLocal;
     const balChica = ingresosChica + transferenciasEntrantes - egresosChica + ajustesChica;
+
+    // 3. Balance Yape (Ventas - Transferencias + Ajustes)
+    const ventasYapeTotal = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const transYapeTotal = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + (m.monto || 0), 0);
+    const ajustesYape = movimientos.filter(m => m.caja === 'yape' && m.tipo === 'ajuste').reduce((acc, m) => {
+        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
+    }, 0);
+    const balYape = ventasYapeTotal - transYapeTotal + ajustesYape;
+
     const totalEgresosTotal = egresosLocal + egresosChica;
 
-    return { balLocal, balChica, totalEgresosTotal };
+    return { balLocal, balChica, balYape, totalEgresosTotal };
 };
 
 window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 'todo') {
@@ -4713,19 +4705,14 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
         });
     }
 
-    const { balLocal, balChica, totalEgresosTotal } = calcularBalances();
-
-    // Calcular balance Yape disponible
-    const totalVentasYape = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
-    const transferenciasDesdeYape = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + m.monto, 0);
-    const totalYape = totalVentasYape - transferenciasDesdeYape;
+    const { balLocal, balChica, balYape, totalEgresosTotal } = calcularBalances();
 
     // Actualizar UI de balances
     document.getElementById('balanceCajaLocal').textContent = `S/ ${balLocal.toFixed(2)}`;
     document.getElementById('balanceCajaChica').textContent = `S/ ${balChica.toFixed(2)}`;
-    document.getElementById('balanceYape').textContent = `S/ ${totalYape.toFixed(2)}`;
+    document.getElementById('balanceYape').textContent = `S/ ${balYape.toFixed(2)}`;
     document.getElementById('cajaEgresos').textContent = `S/ ${totalEgresosTotal.toFixed(2)}`;
-    document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica).toFixed(2)}`;
+    document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
 
     // Renderizar tabla
     tbody.innerHTML = movsFiltrados.map(m => {
@@ -4758,8 +4745,8 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
                 <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación (Devolver dinero)" style="background: #ef4444; color: white;">🗑️</button>
                 <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial (Mantener saldo igual)" style="background: #6b7280; color: white;">❌</button>
             </td>
-        </tr>
-    `;
+        </tr >
+        `;
     }).join('') || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
 };
 
@@ -4951,7 +4938,7 @@ window.guardarTransferenciaYape = async function () {
     await guardarMovimientos();
     actualizarTablaMovimientos();
     closeModalTransferenciaYape();
-    alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
+    alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S / ${monto.toFixed(2)} `);
 };
 
 // ========== REINICIO FINANCIERO TOTAL ==========
@@ -4998,72 +4985,97 @@ window.reiniciarTodoFinanciero = async function () {
 };
 
 window.sincronizarUtilidadConCaja = async function () {
-    // 1. Obtener la Utilidad Neta actual (necesitamos los valores que actualizarDashboardFinanciero calcula)
-    // Para simplificar, calculamos Utility vs Cash Balance
+    const choice = prompt('¿Qué deseas sincronizar?\n\n1 - Sincronizar PANEL (Hacer que la Utilidad coincida con el dinero en cajas física)\n2 - Sincronizar YAPE (Hacer que el saldo del sistema coincida con tu Yape real)', '1');
 
-    // Lo mejor es llamar a una versión reducida de la lógica del dashboard
-    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
-    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
-    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
+    if (choice === '1') {
+        const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
+        const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
+        const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
 
-    const totalIngresosExtraActual = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + curr.monto, 0);
-    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
-    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+        const totalIngresosExtraActual = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + curr.monto, 0);
+        const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
+        const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
 
-    const totalEgresosActual = movimientos.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((acc, curr) => acc + curr.monto, 0);
-    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
-    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
+        const totalEgresosActual = movimientos.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((acc, curr) => acc + curr.monto, 0);
+        const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
+        const totalEgresos = totalEgresosActual + totalEgresosHistorico;
 
-    const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
-        const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
-        return acc + (m.monto * factor);
-    }, 0);
-    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
-    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
+        const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
+            const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
+            return acc + (m.monto * factor);
+        }, 0);
+        const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
+        const totalAjustes = totalAjustesActual + totalAjustesHistorico;
 
-    const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
-    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
-    const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
+        const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
+        const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
+        const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
 
-    const utilidadNetaActual = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
+        const utilidadNetaActual = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
 
-    // 2. Obtener Balance Físico Real
-    const { balLocal, balChica } = calcularBalances();
-    const balanceFisicoReal = balLocal + balChica;
+        const { balLocal, balChica } = calcularBalances();
+        const balanceFisicoReal = balLocal + balChica;
 
-    // 3. Calcular Diferencia
-    const diferencia = balanceFisicoReal - utilidadNetaActual;
+        const diferencia = balanceFisicoReal - utilidadNetaActual;
 
-    if (Math.abs(diferencia) < 0.01) {
-        alert('✅ Tu Panel ya está perfectamente sincronizado con el dinero en caja.');
-        return;
+        if (Math.abs(diferencia) < 0.01) {
+            alert('✅ Tu Panel ya está sincronizado con las cajas físicas.');
+            return;
+        }
+
+        const msg = diferencia > 0
+            ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`
+            : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`;
+
+        if (!confirm(msg)) return;
+
+        movimientos.unshift({
+            id: Date.now(),
+            fecha: new Date().toLocaleString(),
+            descripcion: 'Sincronización Panel vs Cajas Físicas',
+            monto: Math.abs(diferencia),
+            tipo: 'ajuste',
+            ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
+            oculto: true,
+            usuario: usuarioActual.nombre
+        });
+
+        await guardarMovimientos();
+        actualizarTablaMovimientos();
+        actualizarDashboardFinanciero();
+        alert('✅ Panel sincronizado.');
+
+    } else if (choice === '2') {
+        const { balYape } = calcularBalances();
+        const realStr = prompt(`Saldo actual en YAPE (Sistema): S/ ${balYape.toFixed(2)}\n\nIngresa el saldo REAL que ves hoy en tu Yape del celular:`, balYape.toFixed(2));
+        const real = parseFloat(realStr);
+
+        if (isNaN(real)) return;
+
+        const diff = real - balYape;
+        if (Math.abs(diff) < 0.01) {
+            alert('✅ El saldo Yape ya coincide.');
+            return;
+        }
+
+        if (!confirm(`Se creará un ajuste de S/ ${Math.abs(diff).toFixed(2)} (${diff > 0 ? 'Positivo' : 'Negativo'}) para que el sistema coincida con tu Yape.\n\n¿Proceder?`)) return;
+
+        movimientos.unshift({
+            id: Date.now(),
+            fecha: new Date().toLocaleString(),
+            descripcion: 'Ajuste manual de Sincronización Yape',
+            monto: Math.abs(diff),
+            tipo: 'ajuste',
+            ajusteTipo: diff > 0 ? 'positivo' : 'negativo',
+            caja: 'yape',
+            oculto: true,
+            usuario: usuarioActual.nombre
+        });
+
+        await guardarMovimientos();
+        actualizarTablaMovimientos();
+        actualizarDashboardFinanciero();
+        alert('✅ Saldo Yape sincronizado con tu celular.');
     }
-
-    const msg = diferencia > 0
-        ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en caja.\n\n¿Deseas crear un ajuste positivo para que el Panel suba y coincida con la caja?`
-        : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en caja.\n\n¿Deseas crear un ajuste negativo para que el Panel baje y coincida con la caja?`;
-
-    if (!confirm(msg + '\n\nEsto NO borrará nada de tu historia, solo agregará una corrección invisible.')) return;
-
-    // 4. Crear el movimiento de ajuste
-    const ajusteMov = {
-        id: Date.now(),
-        fecha: new Date().toLocaleString(),
-        descripcion: 'Sincronización Automática de Balance (Panel vs Caja)',
-        monto: Math.abs(diferencia),
-        tipo: 'ajuste',
-        ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
-        oculto: true, // Lo ocultamos para no ensuciar la lista de caja, pero efecto contable sigue
-        usuario: usuarioActual.nombre
-    };
-
-    movimientos.unshift(ajusteMov);
-    await guardarMovimientos();
-
-    // 5. Actualizar todo
-    actualizarTablaMovimientos();
-    actualizarDashboardFinanciero();
-
-    alert('✅ ¡Sincronizado! Ahora la Utilidad Neta del Panel coincide exactamente con tu dinero en Caja.');
 };
 
