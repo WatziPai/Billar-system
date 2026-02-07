@@ -4582,9 +4582,15 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
 
     const { balLocal, balChica, totalEgresosTotal } = calcularBalances();
 
+    // Calcular balance Yape disponible
+    const totalVentasYape = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const transferenciasDesdeYape = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + m.monto, 0);
+    const totalYape = totalVentasYape - transferenciasDesdeYape;
+
     // Actualizar UI de balances
     document.getElementById('balanceCajaLocal').textContent = `S/ ${balLocal.toFixed(2)}`;
     document.getElementById('balanceCajaChica').textContent = `S/ ${balChica.toFixed(2)}`;
+    document.getElementById('balanceYape').textContent = `S/ ${totalYape.toFixed(2)}`;
     document.getElementById('cajaEgresos').textContent = `S/ ${totalEgresosTotal.toFixed(2)}`;
     document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica).toFixed(2)}`;
 
@@ -4735,6 +4741,7 @@ window.guardarTransferenciaYape = async function () {
         monto: monto,
         tipo: 'ingreso', // Es un ingreso para la caja física
         caja: destino,
+        origenYape: true, // ⭐ NUEVO: Flag para restar del balance Yape
         usuario: usuarioActual.nombre
     };
 
