@@ -4638,16 +4638,78 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
             <td style="font-weight: bold; color: ${colorMonto}">
                 ${m.tipo === 'transferencia' ? '' : signo} S/ ${m.monto.toFixed(2)}
             </td>
-            <td style="text-align: center;">
-                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})">🗑️</button>
+    <td style="text-align: center;">
+                ${(m.tipo === 'egreso' || m.tipo === 'ingreso') ?
+                `<button class="btn-icon" onclick="convertirEnAjuste(${m.id})" title="Convertir en Ajuste (No afecta Gastos)" style="margin-right:5px; background:none; border:none; cursor:pointer;">🛠️</button>`
+                : ''}
+                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Eliminar Movimiento">🗑️</button>
             </td>
         </tr>
     `;
     }).join('') || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
 };
 
+window.convertirEnAjuste = async function (id) {
+    const mov = movimientos.find(m => m.id === id);
+    if (!mov) return;
+
+    if (!confirm('¿Convertir este registro en un "Ajuste de Caja"?\n\nEsto hará que:\n1. NO sume a Gastos Totales\n2. Mantenga el descuento/aumento en la Caja\n3. Corrija el historial sin alterar el saldo actual.')) return;
+
+    // Transformar a ajuste
+    mov.tipo = 'ajuste';
+    // Si era egreso o retiro, es negativo. Si era ingreso, es positivo.
+    // Ojo: 'retiro' y 'reposicion' también podrían convertirse? El usuario habló de 'error u otro cambio'. 
+    // Asumamos egreso/ingreso por ahora que son los que suman mal.
+
+    // Determinamos dirección original
+    // En el sistema actual, no guardamos signo explícito, sino 'tipo'.
+    // egreso = resta, ingreso = suma.
+
+    if (mov.caja === undefined) mov.caja = 'local'; // Default legacy
+
+    // Asignar ajusteTipo basado en el tipo anterior
+    // Si venía de crear un 'egreso', restaba. Entonces es ajuste negativo.
+    // Si venía de 'ingreso', sumaba. Ajuste positivo.
+    if (!mov.ajusteTipo) {
+        // Lógica inversa a calcularBalances:
+        // egresos restan -> ajuste negativo
+        // ingresos suman -> ajuste positivo
+        const tiposRestan = ['egreso', 'retiro', 'reposicion'];
+        if (tiposRestan.includes(mov.tipo) || mov.tipo === 'egreso') { // mov.tipo ya lo cambiamos a 'ajuste' arriba, error de lógica si no guardamos temp.
+            mov.ajusteTipo = 'negativo';
+        } else {
+            mov.ajusteTipo = 'positivo';
+        }
+    }
+
+    // Corrijo mi lógica arriba: mov.tipo YA FUE ASIGNADO. Debo chequear ANTES.
+};
+
+// Re-implementación correcta de la función completa para evitar el error de referencia:
+window.convertirEnAjuste = async function (id) {
+    const index = movimientos.findIndex(m => m.id === id);
+    if (index === -1) return;
+    const mov = movimientos[index]; // Referencia directa
+
+    if (mov.tipo === 'ajuste') return; // Ya es ajuste
+
+    if (!confirm('¿Convertir este registro en un "Ajuste de Caja"?\n\nAl hacerlo:\n✅ Dejará de sumar en "Gastos Totales"\n✅ Se MANTENDRÁ el efecto en el saldo de Caja\n\nÚsalo para corregir errores de caja mal registrados.')) return;
+
+    // Determinar tipo de ajuste
+    let esNegativo = ['egreso', 'retiro', 'reposicion'].includes(mov.tipo);
+
+    // Actualizar registro
+    mov.tipo = 'ajuste';
+    mov.ajusteTipo = esNegativo ? 'negativo' : 'positivo';
+
+    // Guardar cambio
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    alert('✅ Registro convertido a Ajuste. Ya no afecta los Gastos Totales.');
+};
+
 window.eliminarMovimiento = async function (id) {
-    if (!confirm('¿Deseas eliminar este registro de caja?')) return;
+    if (!confirm('¿Deseas eliminar este registro de caja?\n\n⚠️ El dinero volverá a impactar el saldo (se deshará la operación).')) return;
     movimientos = movimientos.filter(m => m.id !== id);
     await guardarMovimientos();
     actualizarTablaMovimientos();
@@ -4772,4 +4834,6 @@ window.guardarTransferenciaYape = async function () {
     closeModalTransferenciaYape();
     alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
 };
+
+
 
