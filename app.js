@@ -3445,8 +3445,16 @@ window.cerrarDia = async function () {
     const egresosChicaActual = movimientosActuales.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((sum, m) => sum + m.monto, 0);
     const transfChicaActual = transfLocalActual;
 
-    const balanceLocalActual = ventasEfectivoActual + ingresosLocalActual - egresosLocalActual - transfLocalActual;
-    const balanceChicaActual = ingresosChicaActual + transfChicaActual - egresosChicaActual;
+    const ajustesLocalActual = movimientosActuales.filter(m => m.caja === 'local' && m.tipo === 'ajuste').reduce((sum, m) => {
+        return sum + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
+    }, 0);
+
+    const ajustesChicaActual = movimientosActuales.filter(m => m.caja === 'chica' && m.tipo === 'ajuste').reduce((sum, m) => {
+        return sum + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
+    }, 0);
+
+    const balanceLocalActual = ventasEfectivoActual + ingresosLocalActual - egresosLocalActual - transfLocalActual + ajustesLocalActual;
+    const balanceChicaActual = ingresosChicaActual + transfChicaActual - egresosChicaActual + ajustesChicaActual;
 
     const confirmar = confirm(
         `📊 RESUMEN DE CIERRE\n` +
@@ -4511,13 +4519,14 @@ window.guardarAjusteCaja = async function () {
         return;
     }
 
-    // Registramos la diferencia como un movimiento de tipo "ingreso" o "egreso" especial
+    // Registramos la diferencia como un movimiento de tipo "ajuste"
     const nuevoMovimiento = {
         id: Date.now(),
         fecha: new Date().toLocaleString(),
         descripcion: `Ajuste manual de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'}`,
         monto: Math.abs(diferencia),
-        tipo: diferencia > 0 ? 'ingreso' : 'egreso',
+        tipo: 'ajuste',
+        ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
         caja: cajaAjusteActual,
         usuario: usuarioActual.nombre
     };
@@ -4538,12 +4547,20 @@ window.calcularBalances = function () {
     const egresosLocal = movimientos.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
     const transferenciasSalientes = movimientos.filter(m => m.tipo === 'transferencia').reduce((acc, m) => acc + m.monto, 0);
 
+    const ajustesLocal = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ajuste').reduce((acc, m) => {
+        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
+    }, 0);
+
     const ingresosChica = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
     const egresosChica = movimientos.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
     const transferenciasEntrantes = transferenciasSalientes;
 
-    const balLocal = ventasEfectivo + ingresosLocal - egresosLocal - transferenciasSalientes;
-    const balChica = ingresosChica + transferenciasEntrantes - egresosChica;
+    const ajustesChica = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ajuste').reduce((acc, m) => {
+        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
+    }, 0);
+
+    const balLocal = ventasEfectivo + ingresosLocal - egresosLocal - transferenciasSalientes + ajustesLocal;
+    const balChica = ingresosChica + transferenciasEntrantes - egresosChica + ajustesChica;
     const totalEgresosTotal = egresosLocal + egresosChica;
 
     return { balLocal, balChica, totalEgresosTotal };
@@ -4602,11 +4619,15 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
         else if (m.tipo === 'retiro') colorBadge = '#ffedd5';
         else if (m.tipo === 'reposicion') colorBadge = '#f3e8ff';
         else if (m.tipo === 'transferencia') colorBadge = '#dbeafe';
+        else if (m.tipo === 'ajuste') colorBadge = '#fef3c7';
 
-        const esPositivo = m.tipo === 'ingreso' || (m.tipo === 'transferencia' && m.caja === 'chica'); // Visualmente en la tabla depende de la caja?
-        // Para simplificar, en la tabla mostramos el signo del movimiento base
-        let signo = (m.tipo === 'ingreso' || m.tipo === 'transferencia') ? '+' : '-';
+        // Signo
+        let signo = (m.tipo === 'ingreso') ? '+' : '-';
         if (m.tipo === 'transferencia') signo = '🔄';
+        if (m.tipo === 'ajuste') signo = (m.ajusteTipo === 'positivo') ? '+' : '-';
+
+        let colorMonto = m.tipo === 'ingreso' ? '#10b981' : (m.tipo === 'transferencia' ? '#3b82f6' : '#ef4444');
+        if (m.tipo === 'ajuste') colorMonto = m.ajusteTipo === 'positivo' ? '#10b981' : '#ef4444';
 
         return `
         <tr>
@@ -4614,7 +4635,7 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
             <td style="text-transform: capitalize;">${m.caja || 'local'}</td>
             <td><span class="user-badge" style="background: ${colorBadge}; color: #333">${m.tipo.toUpperCase()}</span></td>
             <td>${m.descripcion}</td>
-            <td style="font-weight: bold; color: ${m.tipo === 'ingreso' ? '#10b981' : (m.tipo === 'transferencia' ? '#3b82f6' : '#ef4444')}">
+            <td style="font-weight: bold; color: ${colorMonto}">
                 ${m.tipo === 'transferencia' ? '' : signo} S/ ${m.monto.toFixed(2)}
             </td>
             <td style="text-align: center;">
