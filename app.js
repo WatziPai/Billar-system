@@ -4751,7 +4751,23 @@ window.borrarRegistroSinEfecto = async function (id) {
 
     mov.tipo = 'ajuste';
     mov.ajusteTipo = esNegativo ? 'negativo' : 'positivo';
+    mov.oculto = true; // OCULTARLO DE LA LISTA
+
+    await guardarMovimientos();
     actualizarTablaMovimientos();
+
+    // Actualizar dashboard
+    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+
+    // Actualizar balance en header (si existe la función)
+    if (typeof calcularBalances === 'function') {
+        const balances = calcularBalances();
+        if (document.getElementById('balanceCajaLocal')) document.getElementById('balanceCajaLocal').textContent = `S/ ${balances.balLocal.toFixed(2)}`;
+        if (document.getElementById('balanceCajaChica')) document.getElementById('balanceCajaChica').textContent = `S/ ${balances.balChica.toFixed(2)}`;
+        if (document.getElementById('cajaEgresos')) document.getElementById('cajaEgresos').textContent = `S/ ${balances.totalEgresosTotal.toFixed(2)}`;
+    }
+
+    alert('✅ Registro borrado de la lista. El saldo de caja se ha mantenido.');
 };
 
 // ===========================================
