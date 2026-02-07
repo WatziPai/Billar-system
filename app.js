@@ -4316,25 +4316,16 @@ window.actualizarDashboardFinanciero = function () {
     document.getElementById('dashInversionStock').textContent = `S/ ${inversionStockActual.toFixed(2)}`;
     document.getElementById('dashMargenPromedio').textContent = `${margenProm.toFixed(1)}%`;
 
-    // --- NUEVO: Mostrar Desglose de Pago y Cajas en Dashboard ---
+    // --- MOSTRAR DESGLOSE DE PAGO Y CAJAS EN DASHBOARD ---
     const containerBreakdown = document.getElementById('dashBreakdownContainer') || crearBreakdownContainer();
 
-    // Recalcular balances actuales (evitar error de scope)
-    const vf = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
-    const il = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
-    const el = movimientos.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
-    const to = movimientos.filter(m => m.tipo === 'transferencia').reduce((acc, m) => acc + m.monto, 0);
-
-    const ic = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
-    const ec = movimientos.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
-
-    const bl = vf + il - el - to;
-    const bc = ic + to - ec;
+    // USAR LOS BALANCES REALES (ya calculados arriba con calcularBalances)
+    const { balLocal, balChica } = calcularBalances();
 
     containerBreakdown.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">
             <div style="background: #f0fdf4; border: 1px solid #10b981; padding: 15px; border-radius: 10px; text-align: center;">
-                <small style="color: #047857; font-weight: 600;">💵 Ventas Efectivo (Ene-Hoy)</small>
+                <small style="color: #047857; font-weight: 600;">💵 Ventas Efectivo (Total)</small>
                 <div style="font-size: 20px; font-weight: bold; color: #064e3b;">S/ ${totalEfectivo.toFixed(2)}</div>
             </div>
             <div style="background: #f5f0f7; border: 1px solid #742284; padding: 15px; border-radius: 10px; text-align: center;">
@@ -4342,13 +4333,24 @@ window.actualizarDashboardFinanciero = function () {
                 <div style="font-size: 20px; font-weight: bold; color: #4c1d95;">S/ ${totalYape.toFixed(2)}</div>
             </div>
             <div style="background: #eff6ff; border: 1px solid #3b82f6; padding: 15px; border-radius: 10px; text-align: center;">
-                <small style="color: #1d4ed8; font-weight: 600;">🏠 Saldo en Caja Local</small>
-                <div style="font-size: 20px; font-weight: bold; color: #1e3a8a;">S/ ${bl.toFixed(2)}</div>
+                <small style="color: #1d4ed8; font-weight: 600;">🏠 Saldo Real Caja Local</small>
+                <div style="font-size: 20px; font-weight: bold; color: #1e3a8a;">S/ ${balLocal.toFixed(2)}</div>
             </div>
             <div style="background: #fff7ed; border: 1px solid #f97316; padding: 15px; border-radius: 10px; text-align: center;">
-                <small style="color: #c2410c; font-weight: 600;">👛 Saldo en Caja Chica</small>
-                <div style="font-size: 20px; font-weight: bold; color: #7c2d12;">S/ ${bc.toFixed(2)}</div>
+                <small style="color: #c2410c; font-weight: 600;">👛 Saldo Real Caja Chica</small>
+                <div style="font-size: 20px; font-weight: bold; color: #7c2d12;">S/ ${balChica.toFixed(2)}</div>
             </div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 20px; border: 2px dashed #ef4444; border-radius: 12px; background: #fef2f2; text-align: center;">
+            <h4 style="color: #991b1b; margin-bottom: 10px;">⚠️ Zona de Reinicio Financiero</h4>
+            <p style="font-size: 13px; color: #b91c1c; margin-bottom: 15px;">
+                Si el Panel y la Caja no cuadran y quieres empezar de nuevo (S/ 0.00), usa este botón.
+                <br><b>No borra tus productos</b>, solo el historial de ventas y movimientos.
+            </p>
+            <button onclick="reiniciarTodoFinanciero()" style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                🔄 Reiniciar Estadísticas y Cajas
+            </button>
         </div>
     `;
 
@@ -4750,55 +4752,63 @@ window.eliminarMovimiento = async function (id) {
 window.borrarRegistroSinEfecto = async function (id) {
     if (!confirm('¿Borrar registro del historial?\n\n❌ El registro desaparecerá de la lista.\n✅ PERO el efecto en la caja (dinero) se mantendrá igual.\n\nÚsalo para limpiar la lista sin alterar los saldos reales.')) return;
 
-    // Buscar índice nuevamente para evitar errores de referencia
     const index = movimientos.findIndex(m => m.id === id);
     if (index === -1) {
-        alert('❌ Error: No se encontró el movimiento. Intenta recargar la página.');
+        alert('❌ Error: No se encontró el registro.');
         return;
     }
 
     const mov = movimientos[index];
+    let esNegativo = ['egreso', 'retiro', 'reposicion'].includes(mov.tipo);
+    if (mov.tipo === 'ajuste') esNegativo = mov.ajusteTipo === 'negativo';
 
-    // Determinar si era una salida de dinero (para mantener el saldo igual, el ajuste debe ser negativo)
-    // O si era entrada (ajuste positivo)
-
-    // Tipos que restan dinero: egreso, retiro, reposicion
-    // Tipos que suman: ingreso
-    // Ajustes: depende del tipo anterior
-
-    let esNegativo = false;
-
-    if (['egreso', 'retiro', 'reposicion'].includes(mov.tipo)) {
-        esNegativo = true;
-    } else if (mov.tipo === 'ingreso') {
-        esNegativo = false;
-    } else if (mov.tipo === 'ajuste') {
-        esNegativo = mov.ajusteTipo === 'negativo';
-    } else {
-        // Transferencias y otros no deberían borrarse así, pero por si acaso
-        esNegativo = false; // Default
-    }
-
-    // Modificar el objeto DIRECTAMENTE en el array global
+    // Convertir a ajuste oculto
     movimientos[index].tipo = 'ajuste';
     movimientos[index].ajusteTipo = esNegativo ? 'negativo' : 'positivo';
-    movimientos[index].oculto = true; // OCULTARLO DE LA LISTA
+    movimientos[index].oculto = true;
 
     await guardarMovimientos();
 
-    // Forzar actualización de todo
-    actualizarTablaMovimientos();
+    // Notificar y refrescar
     if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+    actualizarTablaMovimientos();
 
-    // Actualizar header explícitamente
-    if (typeof calcularBalances === 'function') {
-        const balances = calcularBalances();
-        if (document.getElementById('balanceCajaLocal')) document.getElementById('balanceCajaLocal').textContent = `S/ ${balances.balLocal.toFixed(2)}`;
-        if (document.getElementById('balanceCajaChica')) document.getElementById('balanceCajaChica').textContent = `S/ ${balances.balChica.toFixed(2)}`;
-    }
+    alert('✅ Registro borrado de la lista. El dinero en caja NO se ha movido.');
+};
 
-    // Feedback visual pequeño
-    debugLog('sistema', '🗑️ Registro borrado (sin efecto en caja)', { id });
+window.reiniciarTodoFinanciero = async function () {
+    if (!confirm('🚨 ¡CUIDADO! Esta acción borrará TODAS las ventas, gastos y cierres históricos para que el Panel empiece de nuevo en S/ 0.00.\n\n¿Estás seguro de querer borrar el historial financiero?')) return;
+    if (!confirm('⚠️ Confirmación FINAL: Se borrarán VENTAS, MOVIMIENTOS y CIERRES.\n\nTus productos y el inventario se mantendrán intactos.\n¿Proceder con el reinicio?')) return;
+
+    // Limpiar datos
+    ventas = [];
+    movimientos = [];
+    cierres = [];
+    consumosDueno = [];
+    lotesAgotados = [];
+    ultimoCierre = null;
+
+    // Resetear contadores de productos
+    productos.forEach(p => {
+        p.unidadesVendidas = 0;
+        p.gananciaAcumulada = 0;
+        p.unidadesConsumidasDueno = 0;
+        p.conteoAcumuladoLote = 0;
+        p.fechaUltimaReposicion = Date.now();
+    });
+
+    // Guardar todo
+    await Promise.all([
+        guardarVentas(),
+        guardarMovimientos(),
+        guardarCierres(),
+        guardarConsumoDueno(),
+        guardarLotesAgotados(),
+        guardarProductos()
+    ]);
+
+    alert('✅ Sistema financiero reiniciado correctamente.');
+    location.reload(); // Recargar para limpiar todo el estado
 };
 
 // ===========================================
@@ -4921,5 +4931,46 @@ window.guardarTransferenciaYape = async function () {
     alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
 };
 
+// ========== REINICIO FINANCIERO TOTAL ==========
+window.reiniciarTodoFinanciero = async function () {
+    if (!confirm('🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?')) return;
+    if (!confirm('⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?')) return;
 
+    // 1. Limpiar arrays globales
+    ventas = [];
+    movimientos = [];
+    cierres = [];
+    consumosDueno = [];
+    lotesAgotados = [];
+    ultimoCierre = null;
+
+    // 2. Resetear productos
+    productos.forEach(p => {
+        p.unidadesVendidas = 0;
+        p.gananciaAcumulada = 0;
+        p.unidadesConsumidasDueno = 0;
+        p.conteoAcumuladoLote = 0;
+        p.fechaUltimaReposicion = Date.now();
+    });
+
+    // 3. Guardar todo
+    await Promise.all([
+        guardarVentas(),
+        guardarMovimientos(),
+        guardarCierres(),
+        guardarConsumoDueno(),
+        guardarLotesAgotados(),
+        guardarProductos()
+    ]);
+
+    // 4. Actualizar UI
+    actualizarInventario();
+    actualizarTablaVentas();
+    actualizarTablaMovimientos();
+    actualizarDashboardFinanciero();
+    actualizarHistorialCierres();
+
+    alert('✅ Sistema financiero reiniciado. Ahora todo comienza desde S/ 0.00.');
+    location.reload(); // Recargar para asegurar limpieza total de modales y estados
+};
 
