@@ -436,7 +436,10 @@ async function cargarDatos() {
         }
 
         const consumosDuenoData = await getData(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO);
-        consumosDueno = consumosDuenoData?.lista || [];
+        consumosDueno = (consumosDuenoData?.lista || []).map(c => ({
+            ...c,
+            total: c.total !== undefined ? c.total : (c.totalVenta || 0)
+        }));
 
         const lotesData = await getData(COLLECTIONS.LOTES, DOC_IDS.TODOS);
         lotesAgotados = lotesData?.lista || [];
@@ -1770,7 +1773,7 @@ function actualizarInventario() {
     } else if (ordenInventarioActual === 'menosStock') {
         productosMostrados.sort((a, b) => a.stock - b.stock);
     } else if (ordenInventarioActual === 'categoria') {
-        productosMostrados.sort((a, b) => (a.categoria || '').localeCompare(b.categoria || ''));
+        productosMostrados = ordenarProductosPorCategoria(productosMostrados);
     }
 
     grid.innerHTML = productosMostrados.map((p, index) => {
@@ -2597,7 +2600,10 @@ function renderProductosConsumoDueno() {
         return;
     }
 
-    container.innerHTML = productos.map(p => {
+    // 🍺 Ordenar productos con Licores primero
+    const productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
 
         return `
@@ -2720,6 +2726,7 @@ window.guardarConsumoDueno = async function () {
                 };
             }),
             totalVenta: totalVenta,
+            total: totalVenta, // ✅ Asegurar consistencia con la UI
             totalCosto: totalCosto
         };
 
@@ -2794,7 +2801,7 @@ function actualizarConsumoDueno() {
         return;
     }
 
-    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + (c.total || c.totalVenta || 0), 0);
 
     const htmlConsumos = consumosActuales.slice().reverse().map(c => `
         <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
@@ -2802,13 +2809,13 @@ function actualizarConsumoDueno() {
                 <div>
                     <div style="font-weight: 600; font-size: 15px; color: #333;">🍽️ ${c.fecha}</div>
                 </div>
-                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+                <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${(c.total || c.totalVenta || 0).toFixed(2)}</div>
             </div>
             <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-top: 10px;">
                 ${c.productos.map(p => `
                     <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
-                        <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
-                        <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                        <span>• ${p.nombre} x${p.cantidad} (S/ ${(p.precio || 0).toFixed(2)} c/u)</span>
+                        <strong>S/ ${((p.precio || 0) * p.cantidad).toFixed(2)}</strong>
                     </div>
                 `).join('')}
             </div>
@@ -2833,7 +2840,7 @@ function actualizarConsumoDueno() {
                     </div>
                 </div>
                 <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                    S/ ${totalGeneral.toFixed(2)}
+                    S/ ${(totalGeneral || 0).toFixed(2)}
                 </div>
             </div>
             ${usuarioActual.rol === 'admin' ? `
@@ -2859,7 +2866,7 @@ window.descargarConsumoDuenoPDF = function () {
         return;
     }
 
-    const totalGeneral = consumosActuales.reduce((sum, c) => sum + c.total, 0);
+    const totalGeneral = consumosActuales.reduce((sum, c) => sum + (c.total || c.totalVenta || 0), 0);
 
     const ventanaImpresion = window.open('', '_blank', 'width=800,height=600');
 
@@ -2967,13 +2974,13 @@ window.descargarConsumoDuenoPDF = function () {
                 <div class="consumo-item">
                     <div class="consumo-header">
                         <div style="font-weight: bold; color: #333;">${c.fecha}</div>
-                        <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${c.total.toFixed(2)}</div>
+                        <div style="font-size: 20px; font-weight: bold; color: #ff9800;">S/ ${(c.total || c.totalVenta || 0).toFixed(2)}</div>
                     </div>
                     <div style="background: #fff3cd; padding: 10px; border-radius: 4px;">
                         ${c.productos.map(p => `
                             <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: #856404;">
-                                <span>• ${p.nombre} x${p.cantidad} (S/ ${p.precio.toFixed(2)} c/u)</span>
-                                <strong>S/ ${(p.precio * p.cantidad).toFixed(2)}</strong>
+                                <span>• ${p.nombre} x${p.cantidad} (S/ ${(p.precio || 0).toFixed(2)} c/u)</span>
+                                <strong>S/ ${((p.precio || 0) * p.cantidad).toFixed(2)}</strong>
                             </div>
                         `).join('')}
                     </div>
