@@ -1244,6 +1244,7 @@ window.showModalProducto = function (producto = null) {
         document.getElementById('productoCategoria').value = producto.categoria || 'Otros';
         document.getElementById('productoStock').value = producto.stock;
         document.getElementById('productoStockMin').value = producto.stockMin;
+        document.getElementById('productoTamanoLote').value = producto.tamanoLote || ''; // Cargar valor existente
 
         // Calcular y mostrar margen si existe precio de costo
         setTimeout(() => calcularMargenProducto(), 100);
@@ -1259,6 +1260,8 @@ window.showModalProducto = function (producto = null) {
         // Ocultar indicadores
         document.getElementById('margenIndicador').classList.add('hidden');
         document.getElementById('gananciaTotalIndicador').classList.add('hidden');
+
+        document.getElementById('productoTamanoLote').value = '';
     }
 
     document.getElementById('productoError').classList.add('hidden');
@@ -1288,6 +1291,7 @@ window.guardarProducto = async function () {
     const categoria = document.getElementById('productoCategoria').value;
     const stock = parseInt(document.getElementById('productoStock').value);
     const stockMin = parseInt(document.getElementById('productoStockMin').value);
+    const tamanoLote = parseInt(document.getElementById('productoTamanoLote').value) || 0;
     const errorDiv = document.getElementById('productoError');
 
     // Validaciones
@@ -1312,6 +1316,7 @@ window.guardarProducto = async function () {
         productoEditando.categoria = categoria;
         productoEditando.stock = stock;
         productoEditando.stockMin = stockMin;
+        productoEditando.tamanoLote = tamanoLote; // Guardar tamaño de lote
 
         // Si no existía stockInicial, establecerlo ahora
         if (!productoEditando.stockInicial) {
@@ -1331,8 +1336,10 @@ window.guardarProducto = async function () {
             stock,
             stockInicial: stock,
             stockMin,
+            tamanoLote, // Guardar nuevo campo
             unidadesVendidas: 0,
             gananciaAcumulada: 0,
+            conteoAcumuladoLote: 0, // Iniciar contador de lote
             fechaUltimaReposicion: Date.now()
         });
     }
@@ -1341,7 +1348,7 @@ window.guardarProducto = async function () {
     actualizarInventario();
     window.closeModalProducto();
 
-    debugLog('stock', '✅ Producto guardado', { nombre, precio, precioCosto, categoria });
+    debugLog('stock', '✅ Producto guardado', { nombre, precio, precioCosto, categoria, tamanoLote });
 };
 
 // ========== FUNCIÓN PARA CALCULAR MARGEN EN TIEMPO REAL ==========
@@ -1413,10 +1420,36 @@ async function actualizarGananciaProducto(productoId, cantidadVendida, esGratis 
         stockRestante: producto.stock
     });
 
-    // Detectar si el producto se agotó
+    // Detectar si el producto se agotó (Stock 0) O si se completó un lote acumulado
+    let loteCompletado = false;
+
+    // Nueva lógica: Lote Acumulado
+    if (producto.tamanoLote && producto.tamanoLote > 0) {
+        if (!producto.conteoAcumuladoLote) producto.conteoAcumuladoLote = 0;
+        producto.conteoAcumuladoLote += cantidadVendida;
+
+        if (producto.conteoAcumuladoLote >= producto.tamanoLote) {
+            loteCompletado = true;
+            // Guardamos cuántos lotes se completaron (por si vendió 24 de golpe y lote es 12)
+            const lotesHechos = Math.floor(producto.conteoAcumuladoLote / producto.tamanoLote);
+            const remanente = producto.conteoAcumuladoLote % producto.tamanoLote;
+
+            // Generar reporte por cada lote completado
+            for (let i = 0; i < lotesHechos; i++) {
+                await generarReporteAgotamiento(producto, true); // true = reporte parcial por lote
+            }
+
+            producto.conteoAcumuladoLote = remanente;
+
+            // Notificar visualmente (discreto)
+            debugLog('stock', '📦 Lote acumulado completado', { lotes: lotesHechos, producto: producto.nombre });
+        }
+    }
+
+    // Lógica original: Stock agotado
     if (producto.stock === 0) {
         mostrarNotificacionAgotamiento(producto);
-        await generarReporteAgotamiento(producto);
+        await generarReporteAgotamiento(producto, false); // false = reporte final por stock 0
     }
 
     await guardarProductos();
@@ -1424,30 +1457,70 @@ async function actualizarGananciaProducto(productoId, cantidadVendida, esGratis 
 }
 
 // ========== FUNCIÓN PARA ARCHIVAR LOTE AGOTADO ==========
-async function generarReporteAgotamiento(producto) {
-    // Si no tiene ventas ni consumo, no archivamos nada
-    if ((producto.unidadesVendidas || 0) === 0 && (producto.unidadesConsumidasDueno || 0) === 0) return;
+async function generarReporteAgotamiento(producto, esParcial = false) {
+    // Si es parcial (por lote acumulado), usamos el tamaño de lote como unidades vendidas para el reporte
+    // Si es final (stock 0), usamos todo lo acumulado
+
+    let unidadesReporte = 0;
+    let gananciaReporte = 0;
+
+    if (esParcial) {
+        unidadesReporte = producto.tamanoLote;
+        const margen = (producto.precio || 0) - (producto.precioCosto || 0);
+        gananciaReporte = margen * unidadesReporte;
+    } else {
+        // Reporte por agotamiento total (lo que quede)
+        // Ojo: Si usas lotes acumulados, el 'total acumulado' ya se fue reportando por partes.
+        // Aquí solo reportaríamos el remanente si quisiéramos ser exactos, o todo lo que tenga.
+        // Para mantener compatibilidad:
+        unidadesReporte = producto.unidadesVendidas;
+        gananciaReporte = producto.gananciaAcumulada;
+    }
+
+    // Si no hay nada que reportar, salir
+    if (unidadesReporte === 0 && !esParcial) return;
 
     const reporte = {
         id: Date.now(),
         productoId: producto.id,
         nombre: producto.nombre,
         categoria: producto.categoria || 'Otros',
-        stockInicial: producto.stockInicial || 0,
-        unidadesVendidas: producto.unidadesVendidas || 0,
-        unidadesConsumidasDueno: producto.unidadesConsumidasDueno || 0,
+        stockInicial: esParcial ? producto.tamanoLote : (producto.stockInicial || 0),
+        unidadesVendidas: unidadesReporte,
+        unidadesConsumidasDueno: esParcial ? 0 : (producto.unidadesConsumidasDueno || 0), // En parcial no contamos consumo dueño por ahora
         precioCosto: producto.precioCosto || 0,
         precioVendido: producto.precio || 0,
-        gananciaGenerada: producto.gananciaAcumulada || 0,
+        gananciaGenerada: gananciaReporte,
         fechaInicio: producto.fechaUltimaReposicion || Date.now(),
-        fechaFin: Date.now()
+        fechaFin: Date.now(),
+        tipo: esParcial ? 'Lote Acumulado' : 'Stock Agotado' // Para distinguir
     };
 
     lotesAgotados.unshift(reporte);
+
+    // Si es reporte final (Stock 0), reiniciamos contadores. 
+    // Si es parcial, NO reiniciamos (seguimos acumulando métricas globales del producto, 
+    // aunque 'gananciaReporte' se haya calculado para este lote específico).
+    // PERO: Si reportamos ganancia aquí, y luego al final reportamos TODA la ganancia acumulada, se duplicaría en el historial.
+    // SOLUCIÓN: Si usamos lotes parciales, vamos restando de los acumuladores globales para que el reporte final solo tenga el remanente.
+
+    if (esParcial) {
+        producto.unidadesVendidas -= unidadesReporte;
+        producto.gananciaAcumulada -= gananciaReporte;
+        // No tocamos stockInicial ni fechaUltimaReposicion para que siga contando como el mismo "gran lote" físico hasta que se acabe real.
+    } else {
+        // Stock 0: Se reinicia todo para el próximo reabastecimiento
+        producto.unidadesVendidas = 0;
+        producto.unidadesConsumidasDueno = 0;
+        producto.gananciaAcumulada = 0;
+        producto.fechaUltimaReposicion = Date.now();
+        producto.conteoAcumuladoLote = 0;
+    }
+
     await guardarLotesAgotados();
     actualizarTablaLotes();
 
-    debugLog('stock', '📊 Reporte de lote agotado generado', reporte);
+    debugLog('stock', esParcial ? '📦 Reporte parcial generado' : '📊 Reporte agotado generado', reporte);
 }
 
 window.guardarLotesAgotados = async function () {
@@ -1620,7 +1693,7 @@ window.actualizarTablaLotes = function () {
     container.innerHTML = `
         <table class="ventas-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
-                <tr style="background: #fee2e2; color: #991b1b;">
+                <tr style="background: #e5e7eb; color: #374151; border-bottom: 2px solid #d1d5db;">
                     <th style="padding: 10px; text-align: left;">Producto</th>
                     <th style="padding: 10px; text-align: center;">Vendido</th>
                     <th style="padding: 10px; text-align: center;">Consumo</th>
@@ -1636,15 +1709,18 @@ window.actualizarTablaLotes = function () {
         const gananciaLote = l.gananciaGenerada || 0;
         const ventaLote = costoLote + gananciaLote;
 
-        totalCostoHistorico += costoLote;
-        totalVentaHistorica += ventaLote;
         totalGananciaHistorica += gananciaLote;
 
+        const esParcial = l.tipo === 'Lote Acumulado';
+        const iconoTipo = esParcial ? '📦' : '📉';
+        const colorFondo = esParcial ? '#f0f9ff' : '#fff5f5'; // Azulito vs Rojito
+        const colorBorde = esParcial ? '#bae6fd' : '#fecaca';
+
         return `
-                    <tr style="border-bottom: 1px solid #fecaca;">
+                    <tr style="border-bottom: 1px solid ${colorBorde}; background: ${colorFondo};">
                         <td style="padding: 10px;">
                             <strong>${l.nombre}</strong><br>
-                            <small style="color: #666;">${l.categoria}</small>
+                            <small style="color: #666;">${l.categoria} • ${iconoTipo} ${l.tipo || 'Stock Agotado'}</small>
                         </td>
                         <td style="padding: 10px; text-align: center;">${l.unidadesVendidas} / ${l.stockInicial}</td>
                         <td style="padding: 10px; text-align: center; color: #856404;">${l.unidadesConsumidasDueno || 0}</td>
@@ -4570,7 +4646,8 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
     const tbody = document.getElementById('tablaMovimientos');
     if (!tbody) return;
 
-    let movsFiltrados = movimientos;
+    // Obtener movimientos (filtro básico)
+    let movsFiltrados = movimientos.filter(m => !m.oculto); // Filtrar ocultos
 
     // Filtro por tipo
     if (filtro !== 'todos') {
@@ -4635,83 +4712,45 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
             <td style="text-transform: capitalize;">${m.caja || 'local'}</td>
             <td><span class="user-badge" style="background: ${colorBadge}; color: #333">${m.tipo.toUpperCase()}</span></td>
             <td>${m.descripcion}</td>
-            <td style="font-weight: bold; color: ${colorMonto}">
+            <td style="font-weight: bold; color: ${m.tipo === 'ingreso' ? '#10b981' : (m.tipo === 'transferencia' ? '#3b82f6' : '#ef4444')}">
                 ${m.tipo === 'transferencia' ? '' : signo} S/ ${m.monto.toFixed(2)}
             </td>
-    <td style="text-align: center;">
-                ${(m.tipo === 'egreso' || m.tipo === 'ingreso') ?
-                `<button class="btn-icon" onclick="convertirEnAjuste(${m.id})" title="Convertir en Ajuste (No afecta Gastos)" style="margin-right:5px; background:none; border:none; cursor:pointer;">🛠️</button>`
-                : ''}
-                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Eliminar Movimiento">🗑️</button>
+            <td style="text-align: center; display: flex; gap: 5px; justify-content: center;">
+                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación (Devolver dinero)" style="background: #ef4444; color: white;">🗑️</button>
+                <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial (Mantener saldo igual)" style="background: #6b7280; color: white;">❌</button>
             </td>
         </tr>
     `;
     }).join('') || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
 };
 
-window.convertirEnAjuste = async function (id) {
-    const mov = movimientos.find(m => m.id === id);
-    if (!mov) return;
-
-    if (!confirm('¿Convertir este registro en un "Ajuste de Caja"?\n\nEsto hará que:\n1. NO sume a Gastos Totales\n2. Mantenga el descuento/aumento en la Caja\n3. Corrija el historial sin alterar el saldo actual.')) return;
-
-    // Transformar a ajuste
-    mov.tipo = 'ajuste';
-    // Si era egreso o retiro, es negativo. Si era ingreso, es positivo.
-    // Ojo: 'retiro' y 'reposicion' también podrían convertirse? El usuario habló de 'error u otro cambio'. 
-    // Asumamos egreso/ingreso por ahora que son los que suman mal.
-
-    // Determinamos dirección original
-    // En el sistema actual, no guardamos signo explícito, sino 'tipo'.
-    // egreso = resta, ingreso = suma.
-
-    if (mov.caja === undefined) mov.caja = 'local'; // Default legacy
-
-    // Asignar ajusteTipo basado en el tipo anterior
-    // Si venía de crear un 'egreso', restaba. Entonces es ajuste negativo.
-    // Si venía de 'ingreso', sumaba. Ajuste positivo.
-    if (!mov.ajusteTipo) {
-        // Lógica inversa a calcularBalances:
-        // egresos restan -> ajuste negativo
-        // ingresos suman -> ajuste positivo
-        const tiposRestan = ['egreso', 'retiro', 'reposicion'];
-        if (tiposRestan.includes(mov.tipo) || mov.tipo === 'egreso') { // mov.tipo ya lo cambiamos a 'ajuste' arriba, error de lógica si no guardamos temp.
-            mov.ajusteTipo = 'negativo';
-        } else {
-            mov.ajusteTipo = 'positivo';
-        }
-    }
-
-    // Corrijo mi lógica arriba: mov.tipo YA FUE ASIGNADO. Debo chequear ANTES.
-};
-
-// Re-implementación correcta de la función completa para evitar el error de referencia:
-window.convertirEnAjuste = async function (id) {
-    const index = movimientos.findIndex(m => m.id === id);
-    if (index === -1) return;
-    const mov = movimientos[index]; // Referencia directa
-
-    if (mov.tipo === 'ajuste') return; // Ya es ajuste
-
-    if (!confirm('¿Convertir este registro en un "Ajuste de Caja"?\n\nAl hacerlo:\n✅ Dejará de sumar en "Gastos Totales"\n✅ Se MANTENDRÁ el efecto en el saldo de Caja\n\nÚsalo para corregir errores de caja mal registrados.')) return;
-
-    // Determinar tipo de ajuste
-    let esNegativo = ['egreso', 'retiro', 'reposicion'].includes(mov.tipo);
-
-    // Actualizar registro
-    mov.tipo = 'ajuste';
-    mov.ajusteTipo = esNegativo ? 'negativo' : 'positivo';
-
-    // Guardar cambio
-    await guardarMovimientos();
-    actualizarTablaMovimientos();
-    alert('✅ Registro convertido a Ajuste. Ya no afecta los Gastos Totales.');
-};
-
 window.eliminarMovimiento = async function (id) {
-    if (!confirm('¿Deseas eliminar este registro de caja?\n\n⚠️ El dinero volverá a impactar el saldo (se deshará la operación).')) return;
+    if (!confirm('¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).\n\nSi solo quieres borrar el registro visualmente pero mantener el gasto, usa el otro botón (❌).')) return;
     movimientos = movimientos.filter(m => m.id !== id);
     await guardarMovimientos();
+    actualizarTablaMovimientos();
+    // Actualizar dashboard también
+    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+};
+
+window.borrarRegistroSinEfecto = async function (id) {
+    const index = movimientos.findIndex(m => m.id === id);
+    if (index === -1) return;
+    const mov = movimientos[index];
+
+    if (!confirm('¿Borrar registro del historial?\n\n❌ El registro desaparecerá de la lista.\n✅ PERO el efecto en la caja (dinero) se mantendrá igual.\n\nÚsalo para limpiar la lista sin alterar los saldos reales.')) return;
+
+    // Convertir a tipo 'ajuste' oculto para que no sume en reportes de gastos pero mantenga saldo
+    // Si era egreso, el ajuste debe ser negativo para mantener el saldo bajo.
+    // Si era ingreso, el ajuste debe ser positivo.
+
+    // Simplificación: Lo marcamos como 'oculto' y tipo 'ajuste'
+
+    let esNegativo = ['egreso', 'retiro', 'reposicion'].includes(mov.tipo);
+    if (mov.tipo === 'ajuste') esNegativo = mov.ajusteTipo === 'negativo';
+
+    mov.tipo = 'ajuste';
+    mov.ajusteTipo = esNegativo ? 'negativo' : 'positivo';
     actualizarTablaMovimientos();
 };
 
@@ -4834,6 +4873,4 @@ window.guardarTransferenciaYape = async function () {
     closeModalTransferenciaYape();
     alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S/ ${monto.toFixed(2)}`);
 };
-
-
 
