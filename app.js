@@ -4680,10 +4680,18 @@ window.showModalAjusteCaja = function (caja) {
     modal.classList.add('show');
 
     // Texto dinámico
-    document.getElementById('ajusteTitulo').textContent = `Ajustar Saldo Caja ${caja === 'local' ? 'Local' : 'Chica'} `;
+    let cajaNombre;
+    if (caja === 'local') cajaNombre = 'Local';
+    else if (caja === 'chica') cajaNombre = 'Chica';
+    else cajaNombre = 'Yape 📱';
+
+    document.getElementById('ajusteTitulo').textContent = `Ajustar Saldo Caja ${cajaNombre} `;
 
     const balances = calcularBalances();
-    const saldoActual = caja === 'local' ? balances.balLocal : balances.balChica;
+    let saldoActual;
+    if (caja === 'local') saldoActual = balances.balLocal;
+    else if (caja === 'chica') saldoActual = balances.balChica;
+    else saldoActual = balances.balYape;
 
     document.getElementById('ajusteMontoActual').textContent = `S / ${saldoActual.toFixed(2)} `;
     document.getElementById('ajusteMontoNuevo').value = '';
@@ -4709,7 +4717,11 @@ window.guardarAjusteCaja = async function () {
     }
 
     const balances = calcularBalances();
-    const saldoActual = cajaAjusteActual === 'local' ? balances.balLocal : balances.balChica;
+    let saldoActual;
+    if (cajaAjusteActual === 'local') saldoActual = balances.balLocal;
+    else if (cajaAjusteActual === 'chica') saldoActual = balances.balChica;
+    else saldoActual = balances.balYape;
+
     const diferencia = nuevoMonto - saldoActual;
 
     if (Math.abs(diferencia) < 0.01) {
@@ -4718,10 +4730,15 @@ window.guardarAjusteCaja = async function () {
     }
 
     // Registramos la diferencia como un movimiento de tipo "ajuste"
+    let cajaNombre;
+    if (cajaAjusteActual === 'local') cajaNombre = 'Local';
+    else if (cajaAjusteActual === 'chica') cajaNombre = 'Chica';
+    else cajaNombre = 'Yape';
+
     const nuevoMovimiento = {
         id: Date.now(),
         fecha: new Date().toLocaleString(),
-        descripcion: `Ajuste manual de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} `,
+        descripcion: `Ajuste manual de Caja ${cajaNombre} `,
         monto: Math.abs(diferencia),
         tipo: 'ajuste',
         ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
@@ -4732,8 +4749,9 @@ window.guardarAjusteCaja = async function () {
     movimientos.unshift(nuevoMovimiento);
     await guardarMovimientos();
     actualizarTablaMovimientos();
+    actualizarDashboardFinanciero();
     closeModalAjusteCaja();
-    alert(`✅ Saldo de Caja ${cajaAjusteActual === 'local' ? 'Local' : 'Chica'} ajustado a S / ${nuevoMonto.toFixed(2)} `);
+    alert(`✅ Saldo de Caja ${cajaNombre} ajustado a S / ${nuevoMonto.toFixed(2)} `);
 };
 
 window.calcularBalances = function () {
@@ -4766,9 +4784,10 @@ window.calcularBalances = function () {
     const ajustesYape = movimientos.filter(m => m.caja === 'yape' && m.tipo === 'ajuste').reduce((acc, m) => {
         return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
     }, 0);
-    const balYape = ventasYapeTotal - transYapeTotal + ajustesYape;
+    const egresosYape = movimientos.filter(m => m.caja === 'yape' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+    const balYape = ventasYapeTotal - transYapeTotal - egresosYape + ajustesYape;
 
-    const totalEgresosTotal = egresosLocal + egresosChica;
+    const totalEgresosTotal = egresosLocal + egresosChica + egresosYape;
 
     return { balLocal, balChica, balYape, totalEgresosTotal };
 };
