@@ -3346,6 +3346,10 @@ function generarReporte() {
     const totalVentas = ventasActuales.reduce((sum, v) => sum + v.monto, 0);
     const cantidadVentas = ventasActuales.length;
 
+    // Desglose por método de pago
+    const totalEfectivo = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + v.monto, 0);
+    const totalYape = ventasActuales.filter(v => v.metodoPago === 'Yape').reduce((sum, v) => sum + v.monto, 0);
+
     const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = ventasActuales.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
     const ventasConsumo = ventasActuales.filter(v => v.tipo === 'Mesa Consumo').reduce((sum, v) => sum + v.monto, 0);
@@ -3373,10 +3377,70 @@ function generarReporte() {
     productosEl.textContent = `S/ ${(ventasProductos + ventasConsumo + ventasManuales).toFixed(2)}`;
     transaccionesEl.textContent = cantidadVentas;
 
+    // Actualizar tarjetas Efectivo y Yape
+    const efectivoEl = document.getElementById('reporteTotalEfectivo');
+    const yapeEl = document.getElementById('reporteTotalYape');
+    if (efectivoEl) efectivoEl.textContent = `S/ ${totalEfectivo.toFixed(2)}`;
+    if (yapeEl) yapeEl.textContent = `S/ ${totalYape.toFixed(2)}`;
+
     const consumoDuenoEl = document.getElementById('reporteConsumoDueno');
     if (consumoDuenoEl) {
         consumoDuenoEl.textContent = `S/ ${totalConsumosDueno.toFixed(2)} (${consumosDuenoActuales.length} consumos)`;
     }
+
+    // Panel de desglose Yape vs Efectivo
+    let desgloseContainer = document.getElementById('reporteDesgloseMetodo');
+    if (!desgloseContainer) {
+        desgloseContainer = document.createElement('div');
+        desgloseContainer.id = 'reporteDesgloseMetodo';
+        // Insertar antes del botón de cierre
+        const btnCierre = document.querySelector('#tabReportes .section-box > div[style*="margin: 20px"]');
+        if (btnCierre) btnCierre.parentNode.insertBefore(desgloseContainer, btnCierre);
+    }
+
+    const pctEfectivo = totalVentas > 0 ? (totalEfectivo / totalVentas) * 100 : 0;
+    const pctYape = totalVentas > 0 ? (totalYape / totalVentas) * 100 : 0;
+
+    desgloseContainer.innerHTML = `
+        <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin: 0 0 20px 0; border: 1px solid #e0e0e0;">
+            <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">💳 Desglose por Método de Pago (Período Actual)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div style="background: white; border: 2px solid #10b981; border-radius: 10px; padding: 15px; text-align: center;">
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">💵 Efectivo</div>
+                    <div style="font-size: 26px; font-weight: 800; color: #065f46;">S/ ${totalEfectivo.toFixed(2)}</div>
+                    <div style="font-size: 12px; color: #10b981; margin-top: 5px;">${pctEfectivo.toFixed(1)}% del total</div>
+                    <div style="background: #e5e7eb; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                        <div style="background: #10b981; height: 100%; width: ${pctEfectivo}%; border-radius: 3px;"></div>
+                    </div>
+                </div>
+                <div style="background: white; border: 2px solid #7c3aed; border-radius: 10px; padding: 15px; text-align: center;">
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">📱 Yape / Plin</div>
+                    <div style="font-size: 26px; font-weight: 800; color: #4c1d95;">S/ ${totalYape.toFixed(2)}</div>
+                    <div style="font-size: 12px; color: #7c3aed; margin-top: 5px;">${pctYape.toFixed(1)}% del total</div>
+                    <div style="background: #e5e7eb; height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                        <div style="background: #7c3aed; height: 100%; width: ${pctYape}%; border-radius: 3px;"></div>
+                    </div>
+                </div>
+            </div>
+            ${totalVentas > 0 ? `
+            <div style="background: white; border-radius: 8px; padding: 12px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 6px; font-weight: 600;">Barra de distribución</div>
+                <div style="display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px;">
+                    <div style="background: #10b981; flex: ${pctEfectivo}; display: flex; align-items: center; justify-content: center; min-width: ${pctEfectivo > 5 ? 'auto' : '0'}">
+                        ${pctEfectivo > 10 ? `<span style="color: white; font-size: 11px; font-weight: bold;">Efectivo ${pctEfectivo.toFixed(0)}%</span>` : ''}
+                    </div>
+                    <div style="background: #7c3aed; flex: ${pctYape}; display: flex; align-items: center; justify-content: center; min-width: ${pctYape > 5 ? 'auto' : '0'}">
+                        ${pctYape > 10 ? `<span style="color: white; font-size: 11px; font-weight: bold;">Yape ${pctYape.toFixed(0)}%</span>` : ''}
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #9ca3af;">
+                    <span>💵 S/ ${totalEfectivo.toFixed(2)}</span>
+                    <span>Total: S/ ${totalVentas.toFixed(2)}</span>
+                    <span>S/ ${totalYape.toFixed(2)} 📱</span>
+                </div>
+            </div>` : '<p style="text-align:center; color:#999; font-size:13px;">Sin ventas en este período</p>'}
+        </div>
+    `;
 
     let infoCierre = '';
     if (ultimoCierre) {
