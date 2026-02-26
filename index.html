@@ -252,6 +252,17 @@
                         <h3>Consumo Dueño</h3>
                         <div class="valor" id="reporteConsumoDueno" style="font-size: 14px;">S/ 0.00</div>
                     </div>
+                    <!-- Desglose por método de pago -->
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #134e5e 0%, #71b280 100%);">
+                        <h3>💵 Total Efectivo</h3>
+                        <div class="valor" id="reporteTotalEfectivo">S/ 0.00</div>
+                        <span style="font-size: 11px; opacity: 0.85;">Ventas pagadas en efectivo</span>
+                    </div>
+                    <div class="reporte-card" style="background: linear-gradient(135deg, #4c0070 0%, #ad00ff 100%);">
+                        <h3>📱 Total Yape</h3>
+                        <div class="valor" id="reporteTotalYape">S/ 0.00</div>
+                        <span style="font-size: 11px; opacity: 0.85;">Ventas pagadas por Yape/Plin</span>
+                    </div>
                 </div>
 
                 <div style="margin: 20px 0; text-align: center;">
@@ -384,8 +395,8 @@
                         title="Ajustar Saldo Caja Local" style="background: #4b5563; color: white;">
                         ⚙️ Ajuste Local
                     </button>
-                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('yape')"
-                        title="Ajustar Saldo Yape" style="background: #742284; color: white;">
+                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('yape')" title="Ajustar Saldo Yape"
+                        style="background: #742284; color: white;">
                         📱 Ajuste Yape
                     </button>
                 </div>
