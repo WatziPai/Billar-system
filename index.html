@@ -342,7 +342,8 @@
                     </div>
                 </div>
 
-                <div class="section-box" style="margin-top: 20px; background: white; padding: 15px; border-top: 5px solid #10b981;">
+                <div class="section-box"
+                    style="margin-top: 20px; background: white; padding: 15px; border-top: 5px solid #10b981;">
                     <div class="section-header">
                         <h3 style="color: #065f46;">🛒 Rentabilidad en Tiempo Real (Todos los Productos)</h3>
                         <small style="color: #666;">Progreso de ganancia acumulada del stock actual</small>
@@ -382,6 +383,10 @@
                     <button class="btn-small btn-gray" onclick="showModalAjusteCaja('local')"
                         title="Ajustar Saldo Caja Local" style="background: #4b5563; color: white;">
                         ⚙️ Ajuste Local
+                    </button>
+                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('yape')"
+                        title="Ajustar Saldo Yape" style="background: #742284; color: white;">
+                        📱 Ajuste Yape
                     </button>
                 </div>
 
@@ -633,6 +638,7 @@
                     <select id="movimientoCaja">
                         <option value="local">🏠 Caja Local</option>
                         <option value="chica">👛 Caja Chica</option>
+                        <option value="yape">📱 Yape</option>
                     </select>
                 </div>
 
