@@ -189,6 +189,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabConsumoDueno', true);
         toggleElement('btnTabDashboard', true);
         toggleElement('btnTabCaja', true);
+        toggleElement('btnTabMensual', true);
         toggleElement('sectionLotesAgotados', true);
         toggleElement('btnEliminarVentas', true);
     } else {
@@ -204,6 +205,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabConsumoDueno', false);
         toggleElement('btnTabDashboard', false);
         toggleElement('btnTabCaja', false);
+        toggleElement('btnTabMensual', false);
         toggleElement('sectionLotesAgotados', false);
         toggleElement('btnEliminarVentas', false);
     }
@@ -260,6 +262,8 @@ window.changeTab = function (tab, event) {
         actualizarDashboardFinanciero();
     } else if (tab === 'caja') {
         actualizarTablaMovimientos();
+    } else if (tab === 'mensual') {
+        generarReporteMensual();
     }
 };
 
@@ -4117,6 +4121,14 @@ window.descargarCierrePDF = function (cierreId) {
                         <div style="font-size: 11px; color: #666;">Ventas Productos</div>
                         <div style="font-size: 18px; font-weight: bold; color: #2d7a4d;">S/ ${cierre.ventasProductos.toFixed(2)}</div>
                     </div>
+                    <div class="resumen-item" style="border-left: 4px solid #16a34a; background: #f0fdf4;">
+                        <div style="font-size: 11px; color: #666;">💵 Cobrado en Efectivo</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #16a34a;">S/ ${(cierre.totalEfectivo !== undefined ? cierre.totalEfectivo : (cierre.ventas ? cierre.ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((s, v) => s + (v.monto || 0), 0) : 0)).toFixed(2)}</div>
+                    </div>
+                    <div class="resumen-item" style="border-left: 4px solid #7c3aed; background: #f5f3ff;">
+                        <div style="font-size: 11px; color: #666;">📱 Cobrado en Yape/Plin</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #7c3aed;">S/ ${(cierre.totalYape !== undefined ? cierre.totalYape : (cierre.ventas ? cierre.ventas.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0) : 0)).toFixed(2)}</div>
+                    </div>
                     <div class="resumen-item" style="border-top: 2px solid #2d7a4d; margin-top: 5px;">
                         <div style="font-size: 11px; color: #666;">Margen Ventas</div>
                         <div style="font-size: 18px; font-weight: bold; color: #10b981;">+ S/ ${(cierre.gananciaVentas || 0).toFixed(2)}</div>
@@ -5261,4 +5273,418 @@ window.sincronizarUtilidadConCaja = async function () {
         alert('✅ Saldo Yape sincronizado con tu celular.');
     }
 };
+};
+
+
+// ===========================================
+// ========== REPORTE MENSUAL ================
+// ===========================================
+
+const NOMBRES_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function obtenerClavesMes(ts) {
+    // Devuelve { anio, mes } desde un timestamp o string de fecha
+    let d;
+    if (typeof ts === 'number') {
+        d = new Date(ts);
+    } else if (typeof ts === 'string') {
+        // Intentar parsear "DD/MM/YYYY, HH:MM:SS" (formato peruano)
+        const partes = ts.split(',')[0].trim().split('/');
+        if (partes.length === 3) {
+            d = new Date(`${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`);
+        } else {
+            d = new Date(ts);
+        }
+    } else {
+        d = new Date();
+    }
+    if (isNaN(d.getTime())) d = new Date();
+    return { anio: d.getFullYear(), mes: d.getMonth() }; // mes 0-11
+}
+
+window.generarReporteMensual = function () {
+    // ---- Recolectar todos los años disponibles ----
+    const todasFechas = [
+        ...ventas.map(v => obtenerClavesMes(v.fecha || v.id)),
+        ...movimientos.map(m => obtenerClavesMes(m.fecha || m.id))
+    ];
+    const aniosSet = new Set(todasFechas.map(f => f.anio));
+    const anioActual = new Date().getFullYear();
+    aniosSet.add(anioActual); // siempre incluir el año actual
+
+    // ---- Selector de año ----
+    const selectAnio = document.getElementById('filtroAnioMensual');
+    if (selectAnio) {
+        const anioSeleccionado = parseInt(selectAnio.value) || anioActual;
+        selectAnio.innerHTML = [...aniosSet].sort((a, b) => b - a).map(a =>
+            `<option value="${a}" ${a === anioSeleccionado ? 'selected' : ''}>${a}</option>`
+        ).join('');
+    }
+
+    const anioFiltro = parseInt(selectAnio?.value) || anioActual;
+
+    // ---- Agrupar ventas por mes ----
+    const datosMes = {}; // clave: "anio-mes"
+    for (let m = 0; m < 12; m++) {
+        const clave = `${anioFiltro}-${m}`;
+        datosMes[clave] = {
+            mes: m, anio: anioFiltro,
+            ventas: 0, efectivo: 0, yape: 0,
+            gastos: 0, ingresos: 0, margen: 0,
+            transacciones: 0, consumoDueno: 0
+        };
+    }
+
+    ventas.forEach(v => {
+        const { anio, mes } = obtenerClavesMes(v.fecha || v.id);
+        if (anio !== anioFiltro) return;
+        const clave = `${anio}-${mes}`;
+        if (!datosMes[clave]) return;
+        const monto = v.monto || 0;
+        datosMes[clave].ventas += monto;
+        datosMes[clave].margen += (v.ganancia || 0);
+        datosMes[clave].transacciones++;
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') {
+            datosMes[clave].efectivo += monto;
+        } else if (v.metodoPago === 'Yape') {
+            datosMes[clave].yape += monto;
+        }
+    });
+
+    movimientos.forEach(m => {
+        const { anio, mes } = obtenerClavesMes(m.fecha || m.id);
+        if (anio !== anioFiltro) return;
+        const clave = `${anio}-${mes}`;
+        if (!datosMes[clave]) return;
+        if (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion') {
+            datosMes[clave].gastos += (m.monto || 0);
+        } else if (m.tipo === 'ingreso') {
+            datosMes[clave].ingresos += (m.monto || 0);
+        }
+    });
+
+    consumosDueno.forEach(c => {
+        const { anio, mes } = obtenerClavesMes(c.fecha || c.id);
+        if (anio !== anioFiltro) return;
+        const clave = `${anio}-${mes}`;
+        if (!datosMes[clave]) return;
+        datosMes[clave].consumoDueno += (c.totalCosto || 0);
+    });
+
+    const meses = Object.values(datosMes);
+
+    // ---- Totales anuales ----
+    const totalAnual = {
+        ventas: meses.reduce((s, m) => s + m.ventas, 0),
+        efectivo: meses.reduce((s, m) => s + m.efectivo, 0),
+        yape: meses.reduce((s, m) => s + m.yape, 0),
+        gastos: meses.reduce((s, m) => s + m.gastos, 0),
+        margen: meses.reduce((s, m) => s + m.margen, 0),
+        ingresos: meses.reduce((s, m) => s + m.ingresos, 0),
+        consumoDueno: meses.reduce((s, m) => s + m.consumoDueno, 0),
+        transacciones: meses.reduce((s, m) => s + m.transacciones, 0)
+    };
+    const utilidadAnual = totalAnual.margen + totalAnual.ingresos - totalAnual.gastos - totalAnual.consumoDueno;
+
+    // ---- Tarjetas de resumen anual ----
+    const resumenEl = document.getElementById('resumenAnualContainer');
+    if (resumenEl) {
+        resumenEl.innerHTML = `
+            <div style="background: linear-gradient(135deg,#2d7a4d,#1a5c35); color:white; border-radius:10px; padding:18px; text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🛒 Ventas Totales ${anioFiltro}</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.ventas.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">${totalAnual.transacciones} transacciones</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#065f46,#10b981);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">💵 Total Efectivo</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.efectivo.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">${totalAnual.ventas > 0 ? (totalAnual.efectivo / totalAnual.ventas * 100).toFixed(1) : 0}% del total</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#4c0070,#9333ea);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">📱 Total Yape</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.yape.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">${totalAnual.ventas > 0 ? (totalAnual.yape / totalAnual.ventas * 100).toFixed(1) : 0}% del total</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#991b1b,#ef4444);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">📉 Total Gastos</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.gastos.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">Egresos + Retiros</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🚀 Utilidad Neta ${anioFiltro}</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${utilidadAnual.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">Margen - Gastos</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#92400e,#f59e0b);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🍽️ Consumo Dueño</div>
+                <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.consumoDueno.toFixed(2)}</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">Costo real</div>
+            </div>
+        `;
+    }
+
+    // ---- Tabla por mes ----
+    const tbody = document.getElementById('tablaMensualBody');
+    if (tbody) {
+        const mesesConDatos = meses.filter(m => m.transacciones > 0 || m.gastos > 0);
+        if (mesesConDatos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">No hay datos para ${anioFiltro}</td></tr>`;
+        } else {
+            const maxVentas = Math.max(...meses.map(m => m.ventas), 1);
+            tbody.innerHTML = meses.map(m => {
+                const utilidad = m.margen + m.ingresos - m.gastos - m.consumoDueno;
+                const utilColor = utilidad >= 0 ? '#16a34a' : '#dc2626';
+                const barPct = Math.round((m.ventas / maxVentas) * 100);
+                return `<tr style="border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+                    <td style="padding:10px;font-weight:600;color:#2d7a4d;">
+                        ${NOMBRES_MESES[m.mes]}
+                        ${m.ventas > 0 ? `<div style="margin-top:4px;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="width:${barPct}%;background:#2d7a4d;height:100%;border-radius:2px;"></div></div>` : ''}
+                    </td>
+                    <td style="padding:10px;text-align:right;font-weight:600;">S/ ${m.ventas.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;color:#16a34a;">S/ ${m.efectivo.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;color:#7c3aed;">S/ ${m.yape.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;color:#dc2626;">S/ ${m.gastos.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;color:#10b981;">S/ ${m.margen.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;font-weight:700;color:${utilColor};">S/ ${utilidad.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:center;color:#666;">${m.transacciones}</td>
+                    <td style="padding:10px;text-align:center;">
+                        ${m.transacciones > 0 || m.gastos > 0
+                        ? `<button onclick="descargarReporteMensualPDF(${m.anio},${m.mes})" style="background:#2d7a4d;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;">📄 PDF</button>`
+                        : '<span style="color:#ccc;font-size:12px;">—</span>'}
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    // ---- Gráfica de barras ----
+    const grafEl = document.getElementById('graficaMensualContainer');
+    if (grafEl) {
+        const maxBar = Math.max(...meses.map(m => m.ventas), 1);
+        grafEl.innerHTML = `
+            <div style="display:flex;align-items:flex-end;gap:8px;height:160px;padding-bottom:25px;position:relative;border-bottom:2px solid #e5e7eb;">
+                ${meses.map(m => {
+            const pct = (m.ventas / maxBar) * 100;
+            const pctYape = m.ventas > 0 ? (m.yape / m.ventas) * 100 : 0;
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0;height:100%;justify-content:flex-end;" title="${NOMBRES_MESES[m.mes]}: S/ ${m.ventas.toFixed(2)}">
+                        <div style="width:100%;height:${pct}%;min-height:${m.ventas > 0 ? 2 : 0}px;background:linear-gradient(to top,#2d7a4d,#4ade80);border-radius:4px 4px 0 0;position:relative;overflow:hidden;">
+                            ${pctYape > 0 ? `<div style="position:absolute;bottom:0;left:0;right:0;height:${pctYape}%;background:rgba(124,58,237,0.7);"></div>` : ''}
+                        </div>
+                    </div>`;
+        }).join('')}
+            </div>
+            <div style="display:flex;gap:8px;margin-top:5px;">
+                ${meses.map(m => `<div style="flex:1;text-align:center;font-size:9px;color:#6b7280;">${NOMBRES_MESES[m.mes].slice(0, 3)}</div>`).join('')}
+            </div>
+            <div style="margin-top:12px;display:flex;gap:15px;font-size:11px;color:#555;flex-wrap:wrap;">
+                <span><span style="display:inline-block;width:12px;height:12px;background:linear-gradient(to top,#2d7a4d,#4ade80);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Efectivo</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:rgba(124,58,237,0.7);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Yape (sobre barra verde)</span>
+            </div>
+        `;
+    }
+};
+
+// ---- PDF de un mes específico ----
+window.descargarReporteMensualPDF = function (anio, mes) {
+    const nombreMes = NOMBRES_MESES[mes];
+
+    // Filtrar datos del mes
+    const ventasMes = ventas.filter(v => {
+        const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
+        return a === anio && m === mes;
+    });
+    const movsMes = movimientos.filter(mv => {
+        const { anio: a, mes: m } = obtenerClavesMes(mv.fecha || mv.id);
+        return a === anio && m === mes;
+    });
+    const consumosMes = consumosDueno.filter(c => {
+        const { anio: a, mes: m } = obtenerClavesMes(c.fecha || c.id);
+        return a === anio && m === mes;
+    });
+
+    const totalVentas = ventasMes.reduce((s, v) => s + (v.monto || 0), 0);
+    const totalEfectivo = ventasMes.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((s, v) => s + (v.monto || 0), 0);
+    const totalYape = ventasMes.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0);
+    const totalGastos = movsMes.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((s, m) => s + (m.monto || 0), 0);
+    const totalIngresos = movsMes.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + (m.monto || 0), 0);
+    const totalMargen = ventasMes.reduce((s, v) => s + (v.ganancia || 0), 0);
+    const totalConsumoDueno = consumosMes.reduce((s, c) => s + (c.totalCosto || 0), 0);
+    const utilidadNeta = totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
+
+    // Agrupar gastos por tipo
+    const gastosPorTipo = {};
+    movsMes.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').forEach(m => {
+        const t = m.tipo;
+        if (!gastosPorTipo[t]) gastosPorTipo[t] = 0;
+        gastosPorTipo[t] += (m.monto || 0);
+    });
+
+    // Agrupar ventas por tipo
+    const ventasPorTipo = {};
+    ventasMes.forEach(v => {
+        const t = v.tipo || 'Otros';
+        if (!ventasPorTipo[t]) ventasPorTipo[t] = { monto: 0, cant: 0 };
+        ventasPorTipo[t].monto += (v.monto || 0);
+        ventasPorTipo[t].cant++;
+    });
+
+    const w = window.open('', '_blank', 'width=860,height=700');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Reporte Mensual - ${nombreMes} ${anio}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Arial,sans-serif;padding:30px;background:white;color:#333;font-size:13px}
+        .header{text-align:center;border-bottom:4px solid #2d7a4d;padding-bottom:20px;margin-bottom:25px}
+        h1{color:#2d7a4d;font-size:26px;margin-bottom:6px}
+        .subtitle{color:#666;font-size:14px}
+        .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:25px}
+        .kpi{padding:18px;border-radius:8px;text-align:center}
+        .kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:6px;opacity:.8}
+        .kpi-val{font-size:24px;font-weight:800}
+        .section{margin-bottom:25px}
+        .section-title{font-size:16px;font-weight:700;color:#2d7a4d;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th{background:#f0fdf4;padding:9px;text-align:left;font-weight:600;color:#1e5a35;border-bottom:2px solid #2d7a4d}
+        td{padding:9px;border-bottom:1px solid #f0f0f0}
+        tr:hover{background:#fafafa}
+        .right{text-align:right}
+        .center{text-align:center}
+        .green{color:#16a34a;font-weight:700}
+        .red{color:#dc2626;font-weight:700}
+        .purple{color:#7c3aed;font-weight:700}
+        .blue{color:#1e40af;font-weight:800}
+        .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+        .badge-green{background:#dcfce7;color:#15803d}
+        .badge-purple{background:#f3e8ff;color:#7e22ce}
+        .footer{margin-top:30px;text-align:center;color:#aaa;font-size:11px;border-top:1px solid #e5e7eb;padding-top:15px}
+        .utilidad-box{background:#eff6ff;border:2px solid #2563eb;border-radius:10px;padding:20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
+        .btn-print{background:#2d7a4d;color:white;border:none;padding:10px 25px;border-radius:6px;cursor:pointer;font-size:14px;margin-bottom:20px}
+        @media print{.no-print{display:none}body{padding:10px}@page{margin:.8cm}}
+    </style></head><body>
+    <div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button></div>
+    <div class="header">
+        <h1>📅 REPORTE MENSUAL</h1>
+        <div class="subtitle">${nombreMes} ${anio} &nbsp;|&nbsp; Generado: ${new Date().toLocaleString('es-PE')}</div>
+    </div>
+
+    <!-- KPIs principales -->
+    <div class="kpi-grid">
+        <div class="kpi" style="background:linear-gradient(135deg,#2d7a4d,#4ade80);color:white">
+            <div class="kpi-label">Ventas Totales</div>
+            <div class="kpi-val">S/ ${totalVentas.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">${ventasMes.length} transacciones</div>
+        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#065f46,#10b981);color:white">
+            <div class="kpi-label">💵 Efectivo</div>
+            <div class="kpi-val">S/ ${totalEfectivo.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalVentas > 0 ? (totalEfectivo / totalVentas * 100).toFixed(1) : 0}% del total</div>
+        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#4c0070,#9333ea);color:white">
+            <div class="kpi-label">📱 Yape/Plin</div>
+            <div class="kpi-val">S/ ${totalYape.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalVentas > 0 ? (totalYape / totalVentas * 100).toFixed(1) : 0}% del total</div>
+        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#991b1b,#ef4444);color:white">
+            <div class="kpi-label">📉 Gastos Totales</div>
+            <div class="kpi-val">S/ ${totalGastos.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">Egresos + Retiros</div>
+        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white">
+            <div class="kpi-label">📈 Margen Ventas</div>
+            <div class="kpi-val">S/ ${totalMargen.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">Ganancia bruta</div>
+        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:white">
+            <div class="kpi-label">🍽️ Consumo Dueño</div>
+            <div class="kpi-val">S/ ${totalConsumoDueno.toFixed(2)}</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">Costo real</div>
+        </div>
+    </div>
+
+    <!-- Utilidad neta destacada -->
+    <div class="utilidad-box">
+        <div>
+            <div style="font-size:14px;font-weight:700;color:#1e40af">🚀 UTILIDAD NETA DEL MES</div>
+            <div style="font-size:12px;color:#666;margin-top:4px">Margen + Ingresos Extra − Gastos − Consumo Dueño</div>
+        </div>
+        <div style="font-size:32px;font-weight:900;color:${utilidadNeta >= 0 ? '#1e40af' : '#dc2626'}">S/ ${utilidadNeta.toFixed(2)}</div>
+    </div>
+
+    <!-- Ventas por tipo -->
+    ${Object.keys(ventasPorTipo).length > 0 ? `
+    <div class="section">
+        <div class="section-title">🛒 Ventas por Tipo</div>
+        <table>
+            <thead><tr><th>Tipo</th><th class="right">Cantidad</th><th class="right">Total</th><th class="right">% del mes</th></tr></thead>
+            <tbody>
+                ${Object.entries(ventasPorTipo).sort((a, b) => b[1].monto - a[1].monto).map(([tipo, d]) => `
+                <tr>
+                    <td>${tipo}</td>
+                    <td class="right">${d.cant}</td>
+                    <td class="right green">S/ ${d.monto.toFixed(2)}</td>
+                    <td class="right">${totalVentas > 0 ? (d.monto / totalVentas * 100).toFixed(1) : 0}%</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>` : ''}
+
+    <!-- Gastos por tipo -->
+    ${movsMes.length > 0 ? `
+    <div class="section">
+        <div class="section-title">📉 Movimientos de Caja</div>
+        <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Caja</th><th class="right">Monto</th></tr></thead>
+            <tbody>
+                ${movsMes.map(m => `<tr>
+                    <td>${m.fecha || '—'}</td>
+                    <td><span class="badge ${m.tipo === 'ingreso' ? 'badge-green' : 'badge-purple'}">${m.tipo}</span></td>
+                    <td>${m.descripcion || '—'}</td>
+                    <td>${m.caja || '—'}</td>
+                    <td class="right ${m.tipo === 'ingreso' ? 'green' : 'red'}">${m.tipo === 'ingreso' ? '+' : '−'} S/ ${(m.monto || 0).toFixed(2)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>` : ''}
+
+    <!-- Detalle de ventas -->
+    ${ventasMes.length > 0 ? `
+    <div class="section">
+        <div class="section-title">🧾 Detalle de Ventas (${ventasMes.length})</div>
+        <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Usuario</th><th class="center">Pago</th><th class="right">Monto</th></tr></thead>
+            <tbody>
+                ${[...ventasMes].reverse().map(v => `<tr>
+                    <td style="font-size:11px">${v.fecha || '—'}</td>
+                    <td>${v.tipo || '—'}</td>
+                    <td>${v.usuario || '—'}</td>
+                    <td class="center"><span class="badge ${(v.metodoPago || 'Efectivo') === 'Efectivo' ? 'badge-green' : 'badge-purple'}">${v.metodoPago || 'Efectivo'}</span></td>
+                    <td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>` : '<p style="text-align:center;color:#999;padding:20px;">Sin ventas en este mes</p>'}
+
+    <!-- Consumos dueño -->
+    ${consumosMes.length > 0 ? `
+    <div class="section">
+        <div class="section-title">🍽️ Consumo del Dueño</div>
+        <table>
+            <thead><tr><th>Fecha</th><th>Productos</th><th class="right">Costo</th></tr></thead>
+            <tbody>
+                ${consumosMes.map(c => `<tr>
+                    <td>${c.fecha || '—'}</td>
+                    <td style="font-size:11px">${(c.productos || []).map(p => `${p.nombre} x${p.cantidad}`).join(', ')}</td>
+                    <td class="right red">S/ ${(c.totalCosto || 0).toFixed(2)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>` : ''}
+
+    <div class="footer">Sistema de Gestión de Billar &nbsp;|&nbsp; Reporte ${nombreMes} ${anio}</div>
+    <script>window.onload=function(){setTimeout(()=>window.print(),600)}<\/script>
+    </body></html>`);
+    w.document.close();
+};
+
 
