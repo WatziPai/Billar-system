@@ -5331,7 +5331,8 @@ window.generarReporteMensual = function () {
             mes: m, anio: anioFiltro,
             ventas: 0, efectivo: 0, yape: 0,
             gastos: 0, ingresos: 0, margen: 0,
-            transacciones: 0, consumoDueno: 0
+            transacciones: 0, consumoDueno: 0,
+            productos: {} // { "Nombre": { cant: 0, total: 0 } }
         };
     }
 
@@ -5348,6 +5349,18 @@ window.generarReporteMensual = function () {
             datosMes[clave].efectivo += monto;
         } else if (v.metodoPago === 'Yape') {
             datosMes[clave].yape += monto;
+        }
+
+        // --- Agrear desglose de productos ---
+        if (v.detalle && v.detalle.consumos) {
+            v.detalle.consumos.forEach(c => {
+                const nombre = c.producto || 'Desconocido';
+                if (!datosMes[clave].productos[nombre]) {
+                    datosMes[clave].productos[nombre] = { cant: 0, total: 0 };
+                }
+                datosMes[clave].productos[nombre].cant += (c.cantidad || 0);
+                datosMes[clave].productos[nombre].total += (c.subtotal || 0);
+            });
         }
     });
 
@@ -5447,9 +5460,10 @@ window.generarReporteMensual = function () {
                     <td style="padding:10px;text-align:right;color:#10b981;">S/ ${m.margen.toFixed(2)}</td>
                     <td style="padding:10px;text-align:right;font-weight:700;color:${utilColor};">S/ ${utilidad.toFixed(2)}</td>
                     <td style="padding:10px;text-align:center;color:#666;">${m.transacciones}</td>
-                    <td style="padding:10px;text-align:center;">
+                    <td style="padding:10px;text-align:center;display:flex;gap:5px;justify-content:center;">
                         ${m.transacciones > 0 || m.gastos > 0
-                        ? `<button onclick="descargarReporteMensualPDF(${m.anio},${m.mes})" style="background:#2d7a4d;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;">📄 PDF</button>`
+                        ? `<button onclick="verProductosMes(${m.anio},${m.mes})" style="background:#0ea5e9;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;">📦 Prod.</button>
+                               <button onclick="descargarReporteMensualPDF(${m.anio},${m.mes})" style="background:#2d7a4d;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;">📄 PDF</button>`
                         : '<span style="color:#ccc;font-size:12px;">—</span>'}
                     </td>
                 </tr>`;
@@ -5484,6 +5498,75 @@ window.generarReporteMensual = function () {
     }
 };
 
+// ---- Ver productos de un mes específico en la UI ----
+window.verProductosMes = function (anio, mes) {
+    const nombreMes = NOMBRES_MESES[mes];
+    const productosMap = {};
+
+    ventas.forEach(v => {
+        const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
+        if (a === anio && m === mes && v.detalle && v.detalle.consumos) {
+            v.detalle.consumos.forEach(c => {
+                const n = c.producto || 'Desconocido';
+                if (!productosMap[n]) productosMap[n] = { cant: 0, total: 0 };
+                productosMap[n].cant += (c.cantidad || 0);
+                productosMap[n].total += (c.subtotal || 0);
+            });
+        }
+    });
+
+    const items = Object.entries(productosMap).sort((a, b) => b[1].cant - a[1].cant);
+
+    if (items.length === 0) {
+        alert(`No hay registro detallado de productos para ${nombreMes} ${anio}`);
+        return;
+    }
+
+    const html = `
+        <div style="padding:10px;">
+            <h3 style="color:#2d7a4d;margin-bottom:15px;display:flex;align-items:center;gap:10px;">
+                📦 Productos Vendidos - ${nombreMes} ${anio}
+            </h3>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="background:#f0fdf4;border-bottom:2px solid #2d7a4d;">
+                        <th style="padding:10px;text-align:left;">Producto</th>
+                        <th style="padding:10px;text-align:center;">Unidades</th>
+                        <th style="padding:10px;text-align:right;">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${items.map(([nombre, d]) => `
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:10px;">${nombre}</td>
+                            <td style="padding:10px;text-align:center;font-weight:700;">${d.cant}</td>
+                            <td style="padding:10px;text-align:right;">S/ ${d.total.toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    // Usar un Swal si está disponible o un div temporal
+    if (window.Swal) {
+        Swal.fire({
+            title: '',
+            html: html,
+            width: '500px',
+            showConfirmButton: true,
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#2d7a4d'
+        });
+    } else {
+        alert("Instalando vista de productos...");
+        const modal = document.createElement('div');
+        modal.style = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.3);z-index:10000;max-height:80vh;overflow-y:auto;width:90%;max-width:500px;";
+        modal.innerHTML = html + '<button onclick="this.parentElement.remove()" style="margin-top:20px;width:100%;padding:10px;background:#2d7a4d;color:white;border:none;border-radius:5px;cursor:pointer;">Cerrar</button>';
+        document.body.appendChild(modal);
+    }
+};
+
 // ---- PDF de un mes específico ----
 window.descargarReporteMensualPDF = function (anio, mes) {
     const nombreMes = NOMBRES_MESES[mes];
@@ -5510,6 +5593,20 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     const totalMargen = ventasMes.reduce((s, v) => s + (v.ganancia || 0), 0);
     const totalConsumoDueno = consumosMes.reduce((s, c) => s + (c.totalCosto || 0), 0);
     const utilidadNeta = totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
+
+    // Agrupar unidades vendidas (LA MEJORA SOLICITADA)
+    const productosVendidos = {};
+    ventasMes.forEach(v => {
+        if (v.detalle && v.detalle.consumos) {
+            v.detalle.consumos.forEach(c => {
+                const n = c.producto || 'Desconocido';
+                if (!productosVendidos[n]) productosVendidos[n] = { cant: 0, total: 0 };
+                productosVendidos[n].cant += (c.cantidad || 0);
+                productosVendidos[n].total += (c.subtotal || 0);
+            });
+        }
+    });
+    const listaProductos = Object.entries(productosVendidos).sort((a, b) => b[1].cant - a[1].cant);
 
     // Agrupar gastos por tipo
     const gastosPorTipo = {};
@@ -5608,6 +5705,41 @@ window.descargarReporteMensualPDF = function (anio, mes) {
             <div style="font-size:12px;color:#666;margin-top:4px">Margen + Ingresos Extra − Gastos − Consumo Dueño</div>
         </div>
         <div style="font-size:32px;font-weight:900;color:${utilidadNeta >= 0 ? '#1e40af' : '#dc2626'}">S/ ${utilidadNeta.toFixed(2)}</div>
+    </div>
+
+    <!-- Desglose de unidades (LA PARTE QUE LE IMPORTA AL USUARIO) -->
+    <div class="section">
+        <div class="section-title">📦 PRODUCTOS VENDIDOS (UNIDADES Y MONTO)</div>
+        <p style="margin-bottom:10px;font-size:11px;color:#666;">Este desglose ayuda a cuadrar el balance de inventario físico versus ventas registradas.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Producto / Artículo</th>
+                    <th class="center">Unidades Vendidas</th>
+                    <th class="right">Subtotal Ventas</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${listaProductos.length > 0
+            ? listaProductos.map(([nombre, d]) => `
+                        <tr>
+                            <td style="font-weight:600">${nombre}</td>
+                            <td class="center" style="font-size:14px;font-weight:800;color:#1e40af">${d.cant}</td>
+                            <td class="right green">S/ ${d.total.toFixed(2)}</td>
+                        </tr>
+                    `).join('')
+            : '<tr><td colspan="3" class="center" style="padding:20px;color:#999;">No hay detalle de productos en las ventas de este mes</td></tr>'
+        }
+            </tbody>
+            ${listaProductos.length > 0 ? `
+            <tfoot>
+                <tr style="background:#f8fafc;font-weight:800;">
+                    <td style="padding:10px;border-top:2px solid #2d7a4d;">TOTAL PRODUCTOS</td>
+                    <td class="center" style="padding:10px;border-top:2px solid #2d7a4d;">${listaProductos.reduce((s, p) => s + p[1].cant, 0)}</td>
+                    <td class="right" style="padding:10px;border-top:2px solid #2d7a4d;">S/ ${listaProductos.reduce((s, p) => s + p[1].total, 0).toFixed(2)}</td>
+                </tr>
+            </tfoot>` : ''}
+        </table>
     </div>
 
     <!-- Ventas por tipo -->
