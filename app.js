@@ -5273,7 +5273,6 @@ window.sincronizarUtilidadConCaja = async function () {
         alert('✅ Saldo Yape sincronizado con tu celular.');
     }
 };
-};
 
 
 // ===========================================
@@ -5686,5 +5685,3 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     </body></html>`);
     w.document.close();
 };
-
-
