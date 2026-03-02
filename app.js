@@ -5332,6 +5332,7 @@ window.generarReporteMensual = function () {
             ventas: 0, efectivo: 0, yape: 0,
             gastos: 0, ingresos: 0, margen: 0,
             transacciones: 0, consumoDueno: 0,
+            horasBillar: 0, // Suma de minutos totales
             productos: {} // { "Nombre": { cant: 0, total: 0 } }
         };
     }
@@ -5349,6 +5350,11 @@ window.generarReporteMensual = function () {
             datosMes[clave].efectivo += monto;
         } else if (v.metodoPago === 'Yape') {
             datosMes[clave].yape += monto;
+        }
+
+        // --- Sumar horas de billar ---
+        if (v.tipo === 'Mesa Billar' && v.detalle && v.detalle.tiempoMinutos) {
+            datosMes[clave].horasBillar += v.detalle.tiempoMinutos;
         }
 
         // --- Agrear desglose de productos ---
@@ -5395,9 +5401,14 @@ window.generarReporteMensual = function () {
         margen: meses.reduce((s, m) => s + m.margen, 0),
         ingresos: meses.reduce((s, m) => s + m.ingresos, 0),
         consumoDueno: meses.reduce((s, m) => s + m.consumoDueno, 0),
-        transacciones: meses.reduce((s, m) => s + m.transacciones, 0)
+        transacciones: meses.reduce((s, m) => s + m.transacciones, 0),
+        minutosBillar: meses.reduce((s, m) => s + m.horasBillar, 0)
     };
     const utilidadAnual = totalAnual.margen + totalAnual.ingresos - totalAnual.gastos - totalAnual.consumoDueno;
+
+    // Formatear horas anuales
+    const hAnual = Math.floor(totalAnual.minutosBillar / 60);
+    const mAnual = totalAnual.minutosBillar % 60;
 
     // ---- Tarjetas de resumen anual ----
     const resumenEl = document.getElementById('resumenAnualContainer');
@@ -5432,6 +5443,11 @@ window.generarReporteMensual = function () {
                 <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🍽️ Consumo Dueño</div>
                 <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.consumoDueno.toFixed(2)}</div>
                 <div style="font-size:11px;opacity:.75;margin-top:4px;">Costo real</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#64748b,#94a3b8);color:white;border-radius:10px;padding:18px;text-align:center;">
+                <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🎱 Tiempo Billar ${anioFiltro}</div>
+                <div style="font-size:26px;font-weight:800;">${hAnual}h ${mAnual}min</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">Total acumulado</div>
             </div>
         `;
     }
@@ -5594,6 +5610,11 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     const totalConsumoDueno = consumosMes.reduce((s, c) => s + (c.totalCosto || 0), 0);
     const utilidadNeta = totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
 
+    // Totales de tiempo billar
+    const totalMinutosMes = ventasMes.filter(v => v.tipo === 'Mesa Billar').reduce((s, v) => s + (v.detalle?.tiempoMinutos || 0), 0);
+    const hMes = Math.floor(totalMinutosMes / 60);
+    const mMes = totalMinutosMes % 60;
+
     // Agrupar unidades vendidas (LA MEJORA SOLICITADA)
     const productosVendidos = {};
     ventasMes.forEach(v => {
@@ -5696,6 +5717,11 @@ window.descargarReporteMensualPDF = function (anio, mes) {
             <div class="kpi-val">S/ ${totalConsumoDueno.toFixed(2)}</div>
             <div style="font-size:11px;opacity:.8;margin-top:4px">Costo real</div>
         </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#64748b,#94a3b8);color:white">
+            <div class="kpi-label">🎱 Tiempo de Juego</div>
+            <div class="kpi-val">${hMes}h ${mMes}min</div>
+            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalMinutosMes} minutos totales</div>
+        </div>
     </div>
 
     <!-- Utilidad neta destacada -->
@@ -5791,29 +5817,3 @@ window.descargarReporteMensualPDF = function (anio, mes) {
                     <td>${v.usuario || '—'}</td>
                     <td class="center"><span class="badge ${(v.metodoPago || 'Efectivo') === 'Efectivo' ? 'badge-green' : 'badge-purple'}">${v.metodoPago || 'Efectivo'}</span></td>
                     <td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-    </div>` : '<p style="text-align:center;color:#999;padding:20px;">Sin ventas en este mes</p>'}
-
-    <!-- Consumos dueño -->
-    ${consumosMes.length > 0 ? `
-    <div class="section">
-        <div class="section-title">🍽️ Consumo del Dueño</div>
-        <table>
-            <thead><tr><th>Fecha</th><th>Productos</th><th class="right">Costo</th></tr></thead>
-            <tbody>
-                ${consumosMes.map(c => `<tr>
-                    <td>${c.fecha || '—'}</td>
-                    <td style="font-size:11px">${(c.productos || []).map(p => `${p.nombre} x${p.cantidad}`).join(', ')}</td>
-                    <td class="right red">S/ ${(c.totalCosto || 0).toFixed(2)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-    </div>` : ''}
-
-    <div class="footer">Sistema de Gestión de Billar &nbsp;|&nbsp; Reporte ${nombreMes} ${anio}</div>
-    <script>window.onload=function(){setTimeout(()=>window.print(),600)}<\/script>
-    </body></html>`);
-    w.document.close();
-};
