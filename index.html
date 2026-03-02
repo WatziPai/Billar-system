@@ -122,6 +122,9 @@
             <button id="btnTabCaja" class="tab hidden" onclick="changeTab('caja', event)" data-tab="caja">
                 💸 Caja/Gastos
             </button>
+            <button id="btnTabMensual" class="tab hidden" onclick="changeTab('mensual', event)" data-tab="mensual">
+                📅 Mensual
+            </button>
             <button id="btnTabConsumoDueno" class="tab hidden" onclick="changeTab('consumoDueno', event)"
                 data-tab="consumoDueno">
                 🍽️ Consumo Dueño
@@ -463,6 +466,65 @@
                 </div>
             </div>
         </div>
+
+        <!-- ========== TAB REPORTE MENSUAL ========== -->
+        <div id="tabMensual" class="tab-content">
+            <div class="section-box">
+                <div class="section-header">
+                    <h2>📅 Reporte Mensual</h2>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <select id="filtroAnioMensual" onchange="generarReporteMensual()"
+                            style="padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px;"></select>
+                        <button class="btn-small btn-green" onclick="generarReporteMensual()">🔄 Actualizar</button>
+                    </div>
+                </div>
+
+                <!-- Tarjetas de resumen anual -->
+                <div id="resumenAnualContainer"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                </div>
+
+                <!-- Tabla comparativa por mes -->
+                <h3 style="color: #2d7a4d; margin-bottom: 15px; font-size: 16px;">📊 Comparativo por Mes</h3>
+                <div class="table-responsive">
+                    <table id="tablaMensual" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr style="background: #f0fdf4;">
+                                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #2d7a4d;">Mes</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">Ventas
+                                    Totales</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">💵
+                                    Efectivo</th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">📱 Yape
+                                </th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">Gastos
+                                </th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">Margen
+                                </th>
+                                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #2d7a4d;">Utilidad
+                                    Neta</th>
+                                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #2d7a4d;">
+                                    Transacc.</th>
+                                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #2d7a4d;">PDF
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaMensualBody">
+                            <tr>
+                                <td colspan="9" style="text-align:center; padding: 30px; color: #999;">Cargando datos...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Gráfico de barras simple -->
+                <h3 style="color: #2d7a4d; margin: 25px 0 15px 0; font-size: 16px;">📈 Evolución de Ventas</h3>
+                <div id="graficaMensualContainer"
+                    style="background: #f8f9fa; border-radius: 10px; padding: 20px; min-height: 180px;"></div>
+            </div>
+        </div>
+        <!-- FIN TAB MENSUAL -->
 
         <div id="tabErrores" class="tab-content">
             <div class="section-box">
