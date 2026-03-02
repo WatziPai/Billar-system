@@ -5333,6 +5333,7 @@ window.generarReporteMensual = function () {
             gastos: 0, ingresos: 0, margen: 0,
             transacciones: 0, consumoDueno: 0,
             horasBillar: 0, // Suma de minutos totales
+            montoBillar: 0, // Dinero percibido por tiempo de juego
             productos: {} // { "Nombre": { cant: 0, total: 0 } }
         };
     }
@@ -5353,8 +5354,9 @@ window.generarReporteMensual = function () {
         }
 
         // --- Sumar horas de billar ---
-        if (v.tipo === 'Mesa Billar' && v.detalle && v.detalle.tiempoMinutos) {
-            datosMes[clave].horasBillar += v.detalle.tiempoMinutos;
+        if (v.tipo === 'Mesa Billar' && v.detalle) {
+            if (v.detalle.tiempoMinutos) datosMes[clave].horasBillar += v.detalle.tiempoMinutos;
+            if (v.detalle.costoTiempo) datosMes[clave].montoBillar += v.detalle.costoTiempo;
         }
 
         // --- Agrear desglose de productos ---
@@ -5402,7 +5404,8 @@ window.generarReporteMensual = function () {
         ingresos: meses.reduce((s, m) => s + m.ingresos, 0),
         consumoDueno: meses.reduce((s, m) => s + m.consumoDueno, 0),
         transacciones: meses.reduce((s, m) => s + m.transacciones, 0),
-        minutosBillar: meses.reduce((s, m) => s + m.horasBillar, 0)
+        minutosBillar: meses.reduce((s, m) => s + m.horasBillar, 0),
+        montoBillar: meses.reduce((s, m) => s + m.montoBillar, 0)
     };
     const utilidadAnual = totalAnual.margen + totalAnual.ingresos - totalAnual.gastos - totalAnual.consumoDueno;
 
@@ -5447,7 +5450,7 @@ window.generarReporteMensual = function () {
             <div style="background:linear-gradient(135deg,#64748b,#94a3b8);color:white;border-radius:10px;padding:18px;text-align:center;">
                 <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🎱 Tiempo Billar ${anioFiltro}</div>
                 <div style="font-size:26px;font-weight:800;">${hAnual}h ${mAnual}min</div>
-                <div style="font-size:11px;opacity:.75;margin-top:4px;">Total acumulado</div>
+                <div style="font-size:11px;opacity:.75;margin-top:4px;">Ganancia: S/ ${totalAnual.montoBillar.toFixed(2)}</div>
             </div>
         `;
     }
