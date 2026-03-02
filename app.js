@@ -5587,7 +5587,7 @@ window.verProductosMes = function (anio, mes) {
 window.descargarReporteMensualPDF = function (anio, mes) {
     const nombreMes = NOMBRES_MESES[mes];
 
-    // Filtrar datos del mes
+    // 1. Filtrar datos del mes
     const ventasMes = ventas.filter(v => {
         const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
         return a === anio && m === mes;
@@ -5601,6 +5601,7 @@ window.descargarReporteMensualPDF = function (anio, mes) {
         return a === anio && m === mes;
     });
 
+    // 2. Cálculos base
     const totalVentas = ventasMes.reduce((s, v) => s + (v.monto || 0), 0);
     const totalEfectivo = ventasMes.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((s, v) => s + (v.monto || 0), 0);
     const totalYape = ventasMes.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0);
@@ -5610,12 +5611,13 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     const totalConsumoDueno = consumosMes.reduce((s, c) => s + (c.totalCosto || 0), 0);
     const utilidadNeta = totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
 
-    // Totales de tiempo billar
     const totalMinutosMes = ventasMes.filter(v => v.tipo === 'Mesa Billar').reduce((s, v) => s + (v.detalle?.tiempoMinutos || 0), 0);
     const hMes = Math.floor(totalMinutosMes / 60);
     const mMes = totalMinutosMes % 60;
 
-    // Agrupar unidades vendidas (LA MEJORA SOLICITADA)
+    // 3. Generar bloques HTML auxiliares para evitar anidamiento de `
+
+    // Bloque Productos
     const productosVendidos = {};
     ventasMes.forEach(v => {
         if (v.detalle && v.detalle.consumos) {
@@ -5628,16 +5630,24 @@ window.descargarReporteMensualPDF = function (anio, mes) {
         }
     });
     const listaProductos = Object.entries(productosVendidos).sort((a, b) => b[1].cant - a[1].cant);
+    let htmlProductos = '';
+    if (listaProductos.length > 0) {
+        htmlProductos = `
+        <div class="section">
+            <div class="section-title">📦 PRODUCTOS VENDIDOS (UNIDADES Y MONTO)</div>
+            <table>
+                <thead><tr><th>Producto</th><th class="center">Unidades</th><th class="right">Subtotal</th></tr></thead>
+                <tbody>
+                    ${listaProductos.map(([nombre, d]) => `
+                        <tr><td style="font-weight:600">${nombre}</td><td class="center" style="font-size:14px;font-weight:800;color:#1e40af">${d.cant}</td><td class="right green">S/ ${d.total.toFixed(2)}</td></tr>
+                    `).join('')}
+                </tbody>
+                <tfoot><tr style="background:#f8fafc;font-weight:800;"><td style="padding:10px;">TOTAL</td><td class="center">${listaProductos.reduce((s, p) => s + p[1].cant, 0)}</td><td class="right">S/ ${listaProductos.reduce((s, p) => s + p[1].total, 0).toFixed(2)}</td></tr></tfoot>
+            </table>
+        </div>`;
+    }
 
-    // Agrupar gastos por tipo
-    const gastosPorTipo = {};
-    movsMes.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').forEach(m => {
-        const t = m.tipo;
-        if (!gastosPorTipo[t]) gastosPorTipo[t] = 0;
-        gastosPorTipo[t] += (m.monto || 0);
-    });
-
-    // Agrupar ventas por tipo
+    // Bloque Ventas por Tipo
     const ventasPorTipo = {};
     ventasMes.forEach(v => {
         const t = v.tipo || 'Otros';
@@ -5645,175 +5655,116 @@ window.descargarReporteMensualPDF = function (anio, mes) {
         ventasPorTipo[t].monto += (v.monto || 0);
         ventasPorTipo[t].cant++;
     });
+    let htmlPorTipo = '';
+    if (Object.keys(ventasPorTipo).length > 0) {
+        htmlPorTipo = `
+        <div class="section">
+            <div class="section-title">🛒 Ventas por Tipo</div>
+            <table>
+                <thead><tr><th>Tipo</th><th class="right">Cant.</th><th class="right">Total</th></tr></thead>
+                <tbody>
+                    ${Object.entries(ventasPorTipo).sort((a, b) => b[1].monto - a[1].monto).map(([tipo, d]) => `
+                        <tr><td>${tipo}</td><td class="right">${d.cant}</td><td class="right green">S/ ${d.monto.toFixed(2)}</td></tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
 
+    // Bloque Gastos
+    let htmlGastos = '';
+    if (movsMes.length > 0) {
+        htmlGastos = `
+        <div class="section">
+            <div class="section-title">📉 Movimientos de Caja</div>
+            <table>
+                <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th class="right">Monto</th></tr></thead>
+                <tbody>
+                    ${movsMes.map(m => `
+                        <tr><td>${m.fecha || '—'}</td><td><span class="badge ${m.tipo === 'ingreso' ? 'badge-green' : 'badge-purple'}">${m.tipo}</span></td><td>${m.descripcion || '—'}</td><td class="right ${m.tipo === 'ingreso' ? 'green' : 'red'}">${m.tipo === 'ingreso' ? '+' : '−'} S/ ${(m.monto || 0).toFixed(2)}</td></tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
+
+    // Bloque Detalle Ventas
+    let htmlDetalleVentas = '<tr><td colspan="5" class="center">Sin ventas</td></tr>';
+    if (ventasMes.length > 0) {
+        htmlDetalleVentas = [...ventasMes].reverse().map(v => `
+            <tr><td>${v.fecha || '—'}</td><td>${v.tipo || '—'}</td><td>${v.usuario || '—'}</td><td class="center"><span class="badge ${(v.metodoPago || 'Efectivo') === 'Efectivo' ? 'badge-green' : 'badge-purple'}">${v.metodoPago || 'Efectivo'}</span></td><td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td></tr>
+        `).join('');
+    }
+
+    // Bloque Consumos Dueño
+    let htmlDueno = '';
+    if (consumosMes.length > 0) {
+        htmlDueno = `
+        <div class="section">
+            <div class="section-title">🍽️ Consumo del Dueño</div>
+            <table>
+                <thead><tr><th>Fecha</th><th>Productos</th><th class="right">Costo</th></tr></thead>
+                <tbody>
+                    ${consumosMes.map(c => `<tr><td>${c.fecha || '—'}</td><td style="font-size:11px">${(c.productos || []).map(p => `${p.nombre} x${p.cantidad}`).join(', ')}</td><td class="right red">S/ ${(c.totalCosto || 0).toFixed(2)}</td></tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
+
+    // 4. Escribir PDF final
     const w = window.open('', '_blank', 'width=860,height=700');
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Reporte Mensual - ${nombreMes} ${anio}</title>
+    <title>Reporte - ${nombreMes} ${anio}</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:'Segoe UI',Arial,sans-serif;padding:30px;background:white;color:#333;font-size:13px}
         .header{text-align:center;border-bottom:4px solid #2d7a4d;padding-bottom:20px;margin-bottom:25px}
         h1{color:#2d7a4d;font-size:26px;margin-bottom:6px}
         .subtitle{color:#666;font-size:14px}
-        .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:25px}
-        .kpi{padding:18px;border-radius:8px;text-align:center}
-        .kpi-label{font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:6px;opacity:.8}
-        .kpi-val{font-size:24px;font-weight:800}
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:25px}
+        .kpi{padding:18px;border-radius:8px;text-align:center;color:white}
+        .kpi-label{font-size:11px;font-weight:600;margin-bottom:6px;opacity:.8}
+        .kpi-val{font-size:20px;font-weight:800}
         .section{margin-bottom:25px}
         .section-title{font-size:16px;font-weight:700;color:#2d7a4d;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px}
         table{width:100%;border-collapse:collapse;font-size:12px}
-        th{background:#f0fdf4;padding:9px;text-align:left;font-weight:600;color:#1e5a35;border-bottom:2px solid #2d7a4d}
+        th{background:#f0fdf4;padding:9px;text-align:left;color:#1e5a35;border-bottom:2px solid #2d7a4d}
         td{padding:9px;border-bottom:1px solid #f0f0f0}
-        tr:hover{background:#fafafa}
-        .right{text-align:right}
-        .center{text-align:center}
-        .green{color:#16a34a;font-weight:700}
-        .red{color:#dc2626;font-weight:700}
-        .purple{color:#7c3aed;font-weight:700}
-        .blue{color:#1e40af;font-weight:800}
+        .right{text-align:right} .center{text-align:center} .green{color:#16a34a;font-weight:700} .red{color:#dc2626;font-weight:700}
         .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-        .badge-green{background:#dcfce7;color:#15803d}
-        .badge-purple{background:#f3e8ff;color:#7e22ce}
-        .footer{margin-top:30px;text-align:center;color:#aaa;font-size:11px;border-top:1px solid #e5e7eb;padding-top:15px}
+        .badge-green{background:#dcfce7;color:#15803d} .badge-purple{background:#f3e8ff;color:#7e22ce}
         .utilidad-box{background:#eff6ff;border:2px solid #2563eb;border-radius:10px;padding:20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
-        .btn-print{background:#2d7a4d;color:white;border:none;padding:10px 25px;border-radius:6px;cursor:pointer;font-size:14px;margin-bottom:20px}
-        @media print{.no-print{display:none}body{padding:10px}@page{margin:.8cm}}
+        @media print{.no-print{display:none}body{padding:10px}}
     </style></head><body>
-    <div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button></div>
-    <div class="header">
-        <h1>📅 REPORTE MENSUAL</h1>
-        <div class="subtitle">${nombreMes} ${anio} &nbsp;|&nbsp; Generado: ${new Date().toLocaleString('es-PE')}</div>
-    </div>
+    <div class="no-print"><button onclick="window.print()" style="background:#2d7a4d;color:white;border:none;padding:10px 25px;border-radius:6px;cursor:pointer;margin-bottom:20px">🖨️ Imprimir</button></div>
+    <div class="header"><h1>📅 REPORTE MENSUAL</h1><div class="subtitle">${nombreMes} ${anio}</div></div>
 
-    <!-- KPIs principales -->
     <div class="kpi-grid">
-        <div class="kpi" style="background:linear-gradient(135deg,#2d7a4d,#4ade80);color:white">
-            <div class="kpi-label">Ventas Totales</div>
-            <div class="kpi-val">S/ ${totalVentas.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">${ventasMes.length} transacciones</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#065f46,#10b981);color:white">
-            <div class="kpi-label">💵 Efectivo</div>
-            <div class="kpi-val">S/ ${totalEfectivo.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalVentas > 0 ? (totalEfectivo / totalVentas * 100).toFixed(1) : 0}% del total</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#4c0070,#9333ea);color:white">
-            <div class="kpi-label">📱 Yape/Plin</div>
-            <div class="kpi-val">S/ ${totalYape.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalVentas > 0 ? (totalYape / totalVentas * 100).toFixed(1) : 0}% del total</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#991b1b,#ef4444);color:white">
-            <div class="kpi-label">📉 Gastos Totales</div>
-            <div class="kpi-val">S/ ${totalGastos.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">Egresos + Retiros</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#1e40af,#3b82f6);color:white">
-            <div class="kpi-label">📈 Margen Ventas</div>
-            <div class="kpi-val">S/ ${totalMargen.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">Ganancia bruta</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#92400e,#f59e0b);color:white">
-            <div class="kpi-label">🍽️ Consumo Dueño</div>
-            <div class="kpi-val">S/ ${totalConsumoDueno.toFixed(2)}</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">Costo real</div>
-        </div>
-        <div class="kpi" style="background:linear-gradient(135deg,#64748b,#94a3b8);color:white">
-            <div class="kpi-label">🎱 Tiempo de Juego</div>
-            <div class="kpi-val">${hMes}h ${mMes}min</div>
-            <div style="font-size:11px;opacity:.8;margin-top:4px">${totalMinutosMes} minutos totales</div>
-        </div>
+        <div class="kpi" style="background:linear-gradient(135deg,#2d7a4d,#4ade80)"><div class="kpi-label">Ventas</div><div class="kpi-val">S/ ${totalVentas.toFixed(2)}</div></div>
+        <div class="kpi" style="background:linear-gradient(135deg,#991b1b,#ef4444)"><div class="kpi-label">Gastos</div><div class="kpi-val">S/ ${totalGastos.toFixed(2)}</div></div>
+        <div class="kpi" style="background:linear-gradient(135deg,#1e40af,#3b82f6)"><div class="kpi-label">Margen</div><div class="kpi-val">S/ ${totalMargen.toFixed(2)}</div></div>
+        <div class="kpi" style="background:linear-gradient(135deg,#64748b,#94a3b8)"><div class="kpi-label">🎱 Billar</div><div class="kpi-val">${hMes}h ${mMes}min</div></div>
     </div>
 
-    <!-- Utilidad neta destacada -->
     <div class="utilidad-box">
-        <div>
-            <div style="font-size:14px;font-weight:700;color:#1e40af">🚀 UTILIDAD NETA DEL MES</div>
-            <div style="font-size:12px;color:#666;margin-top:4px">Margen + Ingresos Extra − Gastos − Consumo Dueño</div>
-        </div>
-        <div style="font-size:32px;font-weight:900;color:${utilidadNeta >= 0 ? '#1e40af' : '#dc2626'}">S/ ${utilidadNeta.toFixed(2)}</div>
+        <div><div style="font-weight:700;color:#1e40af">🚀 UTILIDAD NETA</div></div>
+        <div style="font-size:28px;font-weight:900;color:${utilidadNeta >= 0 ? '#1e40af' : '#dc2626'}">S/ ${utilidadNeta.toFixed(2)}</div>
     </div>
 
-    <!-- Desglose de unidades (LA PARTE QUE LE IMPORTA AL USUARIO) -->
+    ${htmlProductos}
+    ${htmlPorTipo}
+    ${htmlGastos}
+
     <div class="section">
-        <div class="section-title">📦 PRODUCTOS VENDIDOS (UNIDADES Y MONTO)</div>
-        <p style="margin-bottom:10px;font-size:11px;color:#666;">Este desglose ayuda a cuadrar el balance de inventario físico versus ventas registradas.</p>
-        <table>
-            <thead>
-                <tr>
-                    <th>Producto / Artículo</th>
-                    <th class="center">Unidades Vendidas</th>
-                    <th class="right">Subtotal Ventas</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${listaProductos.length > 0
-            ? listaProductos.map(([nombre, d]) => `
-                        <tr>
-                            <td style="font-weight:600">${nombre}</td>
-                            <td class="center" style="font-size:14px;font-weight:800;color:#1e40af">${d.cant}</td>
-                            <td class="right green">S/ ${d.total.toFixed(2)}</td>
-                        </tr>
-                    `).join('')
-            : '<tr><td colspan="3" class="center" style="padding:20px;color:#999;">No hay detalle de productos en las ventas de este mes</td></tr>'
-        }
-            </tbody>
-            ${listaProductos.length > 0 ? `
-            <tfoot>
-                <tr style="background:#f8fafc;font-weight:800;">
-                    <td style="padding:10px;border-top:2px solid #2d7a4d;">TOTAL PRODUCTOS</td>
-                    <td class="center" style="padding:10px;border-top:2px solid #2d7a4d;">${listaProductos.reduce((s, p) => s + p[1].cant, 0)}</td>
-                    <td class="right" style="padding:10px;border-top:2px solid #2d7a4d;">S/ ${listaProductos.reduce((s, p) => s + p[1].total, 0).toFixed(2)}</td>
-                </tr>
-            </tfoot>` : ''}
-        </table>
+        <div class="section-title">🧾 Detalle de Ventas</div>
+        <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Usuario</th><th class="center">Pago</th><th class="right">Monto</th></tr></thead>
+        <tbody>${htmlDetalleVentas}</tbody></table>
     </div>
 
-    <!-- Ventas por tipo -->
-    ${Object.keys(ventasPorTipo).length > 0 ? `
-    <div class="section">
-        <div class="section-title">🛒 Ventas por Tipo</div>
-        <table>
-            <thead><tr><th>Tipo</th><th class="right">Cantidad</th><th class="right">Total</th><th class="right">% del mes</th></tr></thead>
-            <tbody>
-                ${Object.entries(ventasPorTipo).sort((a, b) => b[1].monto - a[1].monto).map(([tipo, d]) => `
-                <tr>
-                    <td>${tipo}</td>
-                    <td class="right">${d.cant}</td>
-                    <td class="right green">S/ ${d.monto.toFixed(2)}</td>
-                    <td class="right">${totalVentas > 0 ? (d.monto / totalVentas * 100).toFixed(1) : 0}%</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-    </div>` : ''}
+    ${htmlDueno}
 
-    <!-- Gastos por tipo -->
-    ${movsMes.length > 0 ? `
-    <div class="section">
-        <div class="section-title">📉 Movimientos de Caja</div>
-        <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Caja</th><th class="right">Monto</th></tr></thead>
-            <tbody>
-                ${movsMes.map(m => `<tr>
-                    <td>${m.fecha || '—'}</td>
-                    <td><span class="badge ${m.tipo === 'ingreso' ? 'badge-green' : 'badge-purple'}">${m.tipo}</span></td>
-                    <td>${m.descripcion || '—'}</td>
-                    <td>${m.caja || '—'}</td>
-                    <td class="right ${m.tipo === 'ingreso' ? 'green' : 'red'}">${m.tipo === 'ingreso' ? '+' : '−'} S/ ${(m.monto || 0).toFixed(2)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-    </div>` : ''}
-
-    <!-- Detalle de ventas -->
-    ${ventasMes.length > 0 ? `
-    <div class="section">
-        <div class="section-title">🧾 Detalle de Ventas (${ventasMes.length})</div>
-        <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Usuario</th><th class="center">Pago</th><th class="right">Monto</th></tr></thead>
-            <tbody>
-                ${[...ventasMes].reverse().map(v => `<tr>
-                    <td style="font-size:11px">${v.fecha || '—'}</td>
-                    <td>${v.tipo || '—'}</td>
-                    <td>${v.usuario || '—'}</td>
-                    <td class="center"><span class="badge ${(v.metodoPago || 'Efectivo') === 'Efectivo' ? 'badge-green' : 'badge-purple'}">${v.metodoPago || 'Efectivo'}</span></td>
-                    <td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td>
+    <footer style="margin-top:30px;text-align:center;color:#aaa;font-size:11px;border-top:1px solid #eee;padding-top:15px">Sistema de Gestión de Billar</footer>
+    <script>window.onload=function(){setTimeout(()=>window.print(),600)}<\/script>
+    </body></html>`);
+    w.document.close();
+};
