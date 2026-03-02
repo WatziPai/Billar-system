@@ -5768,3 +5768,4 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     </body></html>`);
     w.document.close();
 };
+
