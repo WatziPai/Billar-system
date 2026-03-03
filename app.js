@@ -3891,17 +3891,11 @@ function descargarReporteCierre(cierre) {
                     <div class="section">
                         <div class="section-title">🍺 Consumo del Dueño (No Cobrado)</div>
                         <div class="consumo-dueno">
-                            <div style="font-weight: 600; margin-bottom: 10px; color: #856404;">
-                                Total: S/ ${cierre.totalConsumosDueno.toFixed(2)}
-                            </div>
                             ${cierre.consumosDueno.map(c => `
                                 <div class="consumo-item">
                                     <div style="font-weight: 500;">${c.fecha}</div>
                                     <div style="font-size: 12px; color: #666; margin-top: 3px;">
                                         ${c.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ')}
-                                    </div>
-                                    <div style="font-weight: 600; color: #ff9800; margin-top: 3px;">
-                                        S/ ${c.total.toFixed(2)}
                                     </div>
                                 </div>
                             `).join('')}
@@ -4118,18 +4112,7 @@ window.descargarCierrePDF = function (cierreId) {
                         <div style="font-size: 11px; color: #666;">📱 Cobrado en Yape/Plin</div>
                         <div style="font-size: 18px; font-weight: bold; color: #7c3aed;">S/ ${(cierre.totalYape !== undefined ? cierre.totalYape : (cierre.ventas ? cierre.ventas.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0) : 0)).toFixed(2)}</div>
                     </div>
-                    <div class="resumen-item" style="border-top: 2px solid #2d7a4d; margin-top: 5px;">
-                        <div style="font-size: 11px; color: #666;">Margen Ventas</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #10b981;">+ S/ ${(cierre.gananciaVentas || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="resumen-item" style="border-top: 2px solid #ef4444; margin-top: 5px;">
-                        <div style="font-size: 11px; color: #666;">Total Gastos/Egresos</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #ef4444;">- S/ ${(cierre.totalEgresos || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="resumen-item" style="border-top: 2px solid #f59e0b; margin-top: 5px;">
-                        <div style="font-size: 11px; color: #666;">Costo Consumo Dueño</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #f59e0b;">- S/ ${(cierre.totalConsumosDuenoCosto || 0).toFixed(2)}</div>
-                    </div>
+
                 </div>
             </div>
 
@@ -4220,39 +4203,19 @@ window.descargarCierrePDF = function (cierreId) {
             ${cierre.consumosDueno && cierre.consumosDueno.length > 0 ? `
                 <div class="consumo-dueno">
                     <h2 style="font-size: 18px; color: #856404; margin-bottom: 15px;">🍽️ Consumo del Dueño (No Cobrado)</h2>
-                    <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong style="font-size: 16px; color: #856404;">Costo Total Perdido</strong>
-                                <div style="font-size: 13px; color: #856404; margin-top: 5px;">
-                                    ${cierre.consumosDueno.length} ${cierre.consumosDueno.length === 1 ? 'registro' : 'registros'}
-                                </div>
-                            </div>
-                            <div style="font-size: 28px; font-weight: bold; color: #ff9800;">
-                                S/ ${(cierre.totalConsumosDuenoCosto || 0).toFixed(2)}
-                            </div>
-                        </div>
-                    </div>
                     
                     ${cierre.consumosDueno.map(c => `
                         <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                                 <strong>${c.fecha}</strong>
-                                <strong style="color: #ff9800;">Costo: S/ ${(c.totalCosto || 0).toFixed(2)}</strong>
                             </div>
                             <div style="font-size: 12px;">
                                 ${c.productos.map(p =>
-        `<div style="margin: 2px 0;">• ${p.nombre} x${p.cantidad} (Costo: S/ ${(p.precioCosto || 0).toFixed(2)} c/u)</div>`
+        `<div style="margin: 2px 0;">• ${p.nombre} x${p.cantidad}</div>`
     ).join('')}
                             </div>
                         </div>
                     `).join('')}
-                    
-                    <div style="background: #fff; padding: 12px; border-radius: 6px; margin-top: 15px; border: 2px solid #ff9800;">
-                        <p style="font-size: 12px; color: #856404; text-align: center;">
-                            ⚠️ Estos consumos se restan de la utilidad neta a precio de costo.
-                        </p>
-                    </div>
                 </div>
             ` : ''}
             
