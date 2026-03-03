@@ -3627,6 +3627,10 @@ window.cerrarDia = async function () {
 
     if (!confirmar) return;
 
+    const totalHorasBillar = ventasActuales
+        .filter(v => v.tipo === 'Mesa Billar' && v.detalle)
+        .reduce((sum, v) => sum + (v.detalle.tiempoMinutos || 0), 0) / 60;
+
     const cierre = {
         id: Date.now(),
         timestamp: Date.now(),
@@ -3634,21 +3638,22 @@ window.cerrarDia = async function () {
         usuario: usuarioActual.nombre,
         cantidadVentas: ventasActuales.length,
         total: totalCierre,
-        totalEfectivo: totalEfectivoPeriodo, // ⭐ Guardar desglose
-        totalYape: totalYapePeriodo,         // ⭐ Guardar desglose
-        balanceLocal: balanceLocalActual,    // ⭐ Nuevo: Saldo Local
-        balanceChica: balanceChicaActual,    // ⭐ Nuevo: Saldo Chica
+        totalEfectivo: totalEfectivoPeriodo,
+        totalYape: totalYapePeriodo,
+        balanceLocal: balanceLocalActual,
+        balanceChica: balanceChicaActual,
         gananciaVentas: gananciaVentasPeriodo,
         totalEgresos: totalEgresos,
         totalIngresosExtra: totalIngresosExtra,
         utilidadNeta: utilidadNetaPeriodo,
         ventas: ventasActuales.map(v => ({ ...v })),
-        movimientos: movimientosActuales.map(m => ({ ...m })),
+        // movimientos: movimientosActuales.map(m => ({ ...m })), // Removido por solicitud del usuario
         ventasMesas: ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
         ventasProductos: ventasActuales.filter(v => v.tipo !== 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0),
         consumosDueno: consumosDuenoActuales.map(c => ({ ...c })),
         totalConsumosDuenoVenta: totalConsumosDuenoVenta,
-        totalConsumosDuenoCosto: totalConsumosDuenoCosto
+        totalConsumosDuenoCosto: totalConsumosDuenoCosto,
+        horasBillar: totalHorasBillar
     };
 
     cierres.push(cierre);
@@ -3816,14 +3821,6 @@ function descargarReporteCierre(cierre) {
                 <div class="summary-box">
                     <div class="summary-grid">
                         <div class="summary-item">
-                            <div class="summary-label">🏠 Saldo Caja Local</div>
-                            <div class="summary-value">S/ ${(cierre.balanceLocal || 0).toFixed(2)}</div>
-                        </div>
-                        <div class="summary-item">
-                            <div class="summary-label">👛 Saldo Caja Chica</div>
-                            <div class="summary-value">S/ ${(cierre.balanceChica || 0).toFixed(2)}</div>
-                        </div>
-                        <div class="summary-item">
                             <div class="summary-label">Total Recaudado</div>
                             <div class="summary-value">S/ ${cierre.total.toFixed(2)}</div>
                         </div>
@@ -3839,7 +3836,11 @@ function descargarReporteCierre(cierre) {
                             <div class="summary-label">📱 Yape/Plin</div>
                             <div class="summary-value">S/ ${(cierre.totalYape || 0).toFixed(2)}</div>
                         </div>
-                        <div class="summary-item">
+                        <div class="summary-item" style="grid-column: 1 / -1; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.3); padding-top: 10px;">
+                            <div class="summary-label">🎱 Horas de Billar Totales</div>
+                            <div class="summary-value">${(cierre.horasBillar || 0).toFixed(1)} hrs</div>
+                        </div>
+                        <div class="summary-item" style="grid-column: 1 / -1;">
                             <div class="summary-label">🚀 Utilidad Neta</div>
                             <div class="summary-value">S/ ${cierre.utilidadNeta.toFixed(2)}</div>
                         </div>
@@ -3963,16 +3964,16 @@ function actualizarHistorialCierres() {
                     <div style="font-size: 12px; color: #666;">${c.cantidadVentas} ventas</div>
                 </div>
             </div>
-            ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
                 <div style="margin-top: 15px; display: flex; gap: 10px;">
                     <button class="btn btn-blue btn-small" onclick="descargarCierrePDF(${c.id})" style="flex: 1;">
                         📄 PDF
                     </button>
+                    ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
                     <button class="btn btn-red btn-small" onclick="eliminarCierre(${c.id})">
                         🗑️
                     </button>
+                    ` : ''}
                 </div>
-            ` : ''}
         </div>
     `).join('');
 }
@@ -4148,31 +4149,7 @@ window.descargarCierrePDF = function (cierreId) {
                 </div>
             </div>
 
-            ${cierre.movimientos && cierre.movimientos.length > 0 ? `
-                <h2 style="font-size: 18px; color: #333; margin-bottom: 10px; margin-top: 30px;">💸 Movimientos de Caja</h2>
-                <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                        <thead>
-                            <tr style="border-bottom: 2px solid #eee;">
-                                <th style="text-align: left; padding: 8px;">Tipo</th>
-                                <th style="text-align: left; padding: 8px;">Descripción</th>
-                                <th style="text-align: right; padding: 8px;">Monto</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${cierre.movimientos.map(m => `
-                                <tr style="border-bottom: 1px solid #f5f5f5;">
-                                    <td style="padding: 8px;"><span style="color: ${m.tipo === 'ingreso' ? '#10b981' : '#ef4444'}; font-weight: bold;">${m.tipo.toUpperCase()}</span></td>
-                                    <td style="padding: 8px;">${m.descripcion}</td>
-                                    <td style="padding: 8px; text-align: right; font-weight: bold; color: ${m.tipo === 'ingreso' ? '#10b981' : '#ef4444'}">
-                                        ${m.tipo === 'ingreso' ? '+' : '-'} S/ ${m.monto.toFixed(2)}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            ` : ''}
+
             
             <h2 style="font-size: 18px; color: #333; margin-bottom: 15px; margin-top: 30px;">📋 Detalle de Ventas</h2>
             
