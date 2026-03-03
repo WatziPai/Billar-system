@@ -3613,15 +3613,6 @@ window.cerrarDia = async function () {
         `🛒 Ventas Totales: S/ ${totalCierre.toFixed(2)}\n` +
         `   💵 Efectivo : S/ ${totalEfectivoPeriodo.toFixed(2)}\n` +
         `   📱 Yape/Plin: S/ ${totalYapePeriodo.toFixed(2)}\n\n` +
-        `🏠 SALDO CAJA LOCAL: S/ ${balanceLocalActual.toFixed(2)}\n` +
-        `👛 SALDO CAJA CHICA: S/ ${balanceChicaActual.toFixed(2)}\n` +
-        `━━━━━━━━━━━━━━━\n` +
-        `💰 Margen Ventas:  S/ ${gananciaVentasPeriodo.toFixed(2)}\n` +
-        `➕ Ingresos Extra: S/ ${totalIngresosExtra.toFixed(2)}\n` +
-        `➖ Gastos/Retiros: S/ ${totalEgresos.toFixed(2)}\n` +
-        `➖ Consumo Dueño:  S/ ${totalConsumosDuenoCosto.toFixed(2)}\n` +
-        `━━━━━━━━━━━━━━━\n` +
-        `🚀 UTILIDAD NETA: S/ ${utilidadNetaPeriodo.toFixed(2)}\n\n` +
         `¿Deseas confirmar el cierre y generar el reporte?`
     );
 
@@ -3840,10 +3831,7 @@ function descargarReporteCierre(cierre) {
                             <div class="summary-label">🎱 Horas de Billar Totales</div>
                             <div class="summary-value">${(cierre.horasBillar || 0).toFixed(1)} hrs</div>
                         </div>
-                        <div class="summary-item" style="grid-column: 1 / -1;">
-                            <div class="summary-label">🚀 Utilidad Neta</div>
-                            <div class="summary-value">S/ ${cierre.utilidadNeta.toFixed(2)}</div>
-                        </div>
+
                     </div>
                 </div>
 
@@ -4141,10 +4129,6 @@ window.descargarCierrePDF = function (cierreId) {
                     <div class="resumen-item" style="border-top: 2px solid #f59e0b; margin-top: 5px;">
                         <div style="font-size: 11px; color: #666;">Costo Consumo Dueño</div>
                         <div style="font-size: 18px; font-weight: bold; color: #f59e0b;">- S/ ${(cierre.totalConsumosDuenoCosto || 0).toFixed(2)}</div>
-                    </div>
-                    <div class="resumen-item" style="border-top: 2px solid #3b82f6; margin-top: 5px; grid-column: 1 / -1; background: #f0f9ff; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="font-size: 14px; font-weight: bold; color: #1e40af;">🚀 UTILIDAD NETA DEL TURNO</div>
-                        <div style="font-size: 24px; font-weight: 800; color: #1e40af;">S/ ${(cierre.utilidadNeta || 0).toFixed(2)}</div>
                     </div>
                 </div>
             </div>
