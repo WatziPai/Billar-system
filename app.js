@@ -180,9 +180,6 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnUsuarios', true);
         toggleElement('btnAgregarMesa', true);
         toggleElement('btnAgregarMesaConsumo', true);
-        toggleElement('btnUsuarios', true);
-        toggleElement('btnAgregarMesa', true);
-        toggleElement('btnAgregarMesaConsumo', true);
         toggleElement('btnTabErrores', true);
         toggleElement('btnReportarError', false);
         toggleElement('btnAgregarProducto', true);
@@ -196,12 +193,9 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
         toggleElement('btnAgregarMesaConsumo', false);
-        toggleElement('btnUsuarios', false);
-        toggleElement('btnAgregarMesa', false);
-        toggleElement('btnAgregarMesaConsumo', false);
         toggleElement('btnTabErrores', false);
         toggleElement('btnReportarError', true);
-        toggleElement('btnAgregarProducto', false);
+        toggleElement('btnAgregarProducto', true); // ✅ Habilitado para empleados
         toggleElement('btnTabConsumoDueno', false);
         toggleElement('btnTabDashboard', false);
         toggleElement('btnTabCaja', false);
@@ -1234,8 +1228,17 @@ function calcularTotal() {
 
 // ========== GESTIÓN DE PRODUCTOS ==========
 window.showModalProducto = function (producto = null) {
-    if (usuarioActual.rol !== 'admin') {
-        mostrarError('Solo los administradores pueden gestionar productos');
+    const isAdmin = (usuarioActual.rol || '').toLowerCase() === 'admin';
+    const isEmpleado = (usuarioActual.rol || '').toLowerCase() === 'empleado';
+
+    // Si es empleado, solo puede AGREGAR (producto === null)
+    if (isEmpleado && producto !== null) {
+        mostrarError('Los empleados no pueden editar productos existentes');
+        return;
+    }
+
+    if (!isAdmin && !isEmpleado) {
+        mostrarError('No tienes permisos para gestionar productos');
         return;
     }
 
@@ -1290,7 +1293,16 @@ window.closeModalProducto = function () {
 };
 
 window.guardarProducto = async function () {
-    if (usuarioActual.rol !== 'admin') return;
+    const isAdmin = (usuarioActual.rol || '').toLowerCase() === 'admin';
+    const isEmpleado = (usuarioActual.rol || '').toLowerCase() === 'empleado';
+
+    // Bloquear si empleado intenta guardar una edición
+    if (isEmpleado && productoEditando) {
+        mostrarError('Los empleados no pueden editar productos');
+        return;
+    }
+
+    if (!isAdmin && !isEmpleado) return;
 
     const nombre = document.getElementById('productoNombre').value.trim();
     const precio = parseFloat(document.getElementById('productoPrecio').value);
@@ -1581,7 +1593,10 @@ function getCategoriaEmoji(categoria) {
 }
 
 window.eliminarProducto = async function (id) {
-    if (usuarioActual.rol !== 'admin') return;
+    if ((usuarioActual.rol || '').toLowerCase() !== 'admin') {
+        mostrarError('Solo los administradores pueden eliminar productos');
+        return;
+    }
     if (!confirm('¿Estás seguro de eliminar este producto?')) return;
 
     productos = productos.filter(p => p.id !== id);
