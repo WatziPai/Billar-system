@@ -398,9 +398,15 @@
                         title="Ajustar Saldo Caja Local" style="background: #4b5563; color: white;">
                         ⚙️ Ajuste Local
                     </button>
-                    <button id="btnAjusteYape" class="btn-small btn-gray hidden" onclick="showModalAjusteCaja('yape')" title="Ajustar Saldo Yape"
-                        style="background: #742284; color: white;">
+                    <button id="btnAjusteYape" class="btn-small btn-gray hidden" onclick="showModalAjusteCaja('yape')"
+                        title="Ajustar Saldo Yape" style="background: #742284; color: white;">
                         📱 Ajuste Yape
+                    </button>
+                    <button id="btnLimpiarMovimientos" class="btn-small btn-gray hidden"
+                        onclick="limpiarHistorialMovimientos()"
+                        title="Borra todos los movimientos de caja sin afectar las ventas"
+                        style="background: #374151; color: white;">
+                        🧹 Limpiar Historial
                     </button>
                 </div>
 
@@ -418,7 +424,7 @@
                         <strong id="balanceYape" style="color: #742284;">S/ 0.00</strong>
                     </div>
                     <div class="balance-item">
-                        <span>📉 Gastos Totales:</span>
+                        <span>📉 Gastos del Mes:</span>
                         <strong id="cajaEgresos" style="color: #ef4444;">S/ 0.00</strong>
                     </div>
                     <div class="balance-item">
