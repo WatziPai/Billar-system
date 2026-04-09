@@ -189,6 +189,27 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabMensual', true);
         toggleElement('sectionLotesAgotados', true);
         toggleElement('btnEliminarVentas', true);
+        // Solo admin puede ajustar saldos
+        toggleElement('btnAjusteChica', true);
+        toggleElement('btnAjusteLocal', true);
+        toggleElement('btnAjusteYape', true);
+    } else if ((usuarioActual.rol || '').toLowerCase() === 'encargado') {
+        // 🔑 Encargado: empleado + caja + consumo dueño, sin dashboard ni acciones destructivas
+        toggleElement('btnUsuarios', false);
+        toggleElement('btnAgregarMesa', false);
+        toggleElement('btnAgregarMesaConsumo', false);
+        toggleElement('btnTabErrores', false);
+        toggleElement('btnReportarError', true);
+        toggleElement('btnAgregarProducto', true); // igual que empleado
+        toggleElement('btnTabConsumoDueno', true);  // ✅ acceso consumo dueño
+        toggleElement('btnTabDashboard', false);    // ❌ sin dashboard
+        toggleElement('btnTabCaja', true);          // ✅ acceso caja
+        toggleElement('btnTabMensual', false);      // ❌ sin reporte mensual
+        toggleElement('sectionLotesAgotados', false);
+        toggleElement('btnEliminarVentas', false);  // ❌ no eliminar ventas
+        toggleElement('btnAjusteChica', false);     // ❌ sin ajuste saldos
+        toggleElement('btnAjusteLocal', false);
+        toggleElement('btnAjusteYape', false);
     } else {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
@@ -202,6 +223,9 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnTabMensual', false);
         toggleElement('sectionLotesAgotados', false);
         toggleElement('btnEliminarVentas', false);
+        toggleElement('btnAjusteChica', false);
+        toggleElement('btnAjusteLocal', false);
+        toggleElement('btnAjusteYape', false);
     }
 
     try {
@@ -4876,8 +4900,10 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
                 ${m.tipo === 'transferencia' ? '' : signo} S/ ${m.monto.toFixed(2)}
             </td>
             <td style="text-align: center; display: flex; gap: 5px; justify-content: center;">
+                ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
                 <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación (Devolver dinero)" style="background: #ef4444; color: white;">🗑️</button>
                 <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial (Mantener saldo igual)" style="background: #6b7280; color: white;">❌</button>
+                ` : '<span style="color: #999; font-size: 12px;">—</span>'}
             </td>
         </tr >
         `;
@@ -5077,6 +5103,10 @@ window.guardarTransferenciaYape = async function () {
 
 // ========== REINICIO FINANCIERO TOTAL ==========
 window.reiniciarTodoFinanciero = async function () {
+    if ((usuarioActual.rol || '').toLowerCase() !== 'admin') {
+        mostrarError('Solo el administrador puede realizar el reinicio financiero');
+        return;
+    }
     if (!confirm('🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?')) return;
     if (!confirm('⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?')) return;
 
