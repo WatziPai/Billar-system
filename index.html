@@ -390,15 +390,15 @@
                         style="background: #742284; color: white;">
                         📱 Transferencia Yape
                     </button>
-                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('chica')"
+                    <button id="btnAjusteChica" class="btn-small btn-gray hidden" onclick="showModalAjusteCaja('chica')"
                         title="Ajustar Saldo Caja Chica">
                         ⚙️ Ajuste Chica
                     </button>
-                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('local')"
+                    <button id="btnAjusteLocal" class="btn-small btn-gray hidden" onclick="showModalAjusteCaja('local')"
                         title="Ajustar Saldo Caja Local" style="background: #4b5563; color: white;">
                         ⚙️ Ajuste Local
                     </button>
-                    <button class="btn-small btn-gray" onclick="showModalAjusteCaja('yape')" title="Ajustar Saldo Yape"
+                    <button id="btnAjusteYape" class="btn-small btn-gray hidden" onclick="showModalAjusteCaja('yape')" title="Ajustar Saldo Yape"
                         style="background: #742284; color: white;">
                         📱 Ajuste Yape
                     </button>
@@ -577,6 +577,7 @@
                     <label>Rol</label>
                     <select id="nuevoRol">
                         <option value="empleado">Empleado</option>
+                        <option value="encargado">Encargado de Caja</option>
                         <option value="admin">Administrador</option>
                     </select>
                 </div>
