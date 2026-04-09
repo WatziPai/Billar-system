@@ -193,6 +193,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnAjusteChica', true);
         toggleElement('btnAjusteLocal', true);
         toggleElement('btnAjusteYape', true);
+        toggleElement('btnLimpiarMovimientos', true);
     } else if ((usuarioActual.rol || '').toLowerCase() === 'encargado') {
         // 🔑 Encargado: empleado + caja + consumo dueño, sin dashboard ni acciones destructivas
         toggleElement('btnUsuarios', false);
@@ -4865,11 +4866,22 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
 
     const { balLocal, balChica, balYape, totalEgresosTotal } = calcularBalances();
 
+    // Calcular gastos SOLO del mes en curso para la pantalla
+    const ahora = new Date();
+    const mesActual = ahora.getMonth();
+    const anioActual = ahora.getFullYear();
+    const egresosMes = movimientos.filter(m => {
+        if (m.oculto) return false;
+        if (m.tipo !== 'egreso' && m.tipo !== 'retiro' && m.tipo !== 'reposicion') return false;
+        const f = new Date(m.fecha);
+        return f.getMonth() === mesActual && f.getFullYear() === anioActual;
+    }).reduce((acc, m) => acc + m.monto, 0);
+
     // Actualizar UI de balances
     document.getElementById('balanceCajaLocal').textContent = `S/ ${balLocal.toFixed(2)}`;
     document.getElementById('balanceCajaChica').textContent = `S/ ${balChica.toFixed(2)}`;
     document.getElementById('balanceYape').textContent = `S/ ${balYape.toFixed(2)}`;
-    document.getElementById('cajaEgresos').textContent = `S/ ${totalEgresosTotal.toFixed(2)}`;
+    document.getElementById('cajaEgresos').textContent = `S/ ${egresosMes.toFixed(2)}`;
     document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
 
     // Renderizar tabla
@@ -5099,6 +5111,29 @@ window.guardarTransferenciaYape = async function () {
     actualizarTablaMovimientos();
     closeModalTransferenciaYape();
     alert(`✅ Transferencia de Yape a Caja ${destino === 'local' ? 'Local' : 'Chica'} registrada por S / ${monto.toFixed(2)} `);
+};
+
+// ========== LIMPIAR HISTORIAL DE MOVIMIENTOS ==========
+window.limpiarHistorialMovimientos = async function () {
+    if ((usuarioActual.rol || '').toLowerCase() !== 'admin') {
+        mostrarError('Solo el administrador puede limpiar el historial de movimientos');
+        return;
+    }
+
+    const total = movimientos.length;
+    if (total === 0) {
+        alert('ℹ️ El historial de movimientos ya está vacío.');
+        return;
+    }
+
+    if (!confirm(`🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros (gastos, retiros, ingresos, transferencias).\n\n✅ Las VENTAS no se tocan — tus reportes mensuales se conservan.\n⚠️ Los saldos de Caja Local, Chica y Yape volverán a calcularse solo desde las ventas.\n\n¿Continuar?`)) return;
+
+    movimientos = [];
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
+
+    alert('✅ Historial de movimientos limpiado. Las ventas y reportes están intactos.');
 };
 
 // ========== REINICIO FINANCIERO TOTAL ==========
