@@ -965,8 +965,8 @@ async function finalizarMesa(id) {
     }
 
     // ⭐ NUEVO: Confirmación con Modal de Pago
-    const metodoPago = await showModalConfirmacionPago(totalFinal, `Cierre de Mesa Billar ${id}`);
-    if (!metodoPago) return;
+    const pagoInfo = await showModalConfirmacionPago(totalFinal, `Cierre de Mesa Billar ${id}`);
+    if (!pagoInfo || !pagoInfo.metodo) return;
 
     // Calcular ganancia neta de la mesa
     let gananciaMesa = costoTiempo; // El tiempo es 100% ganancia
@@ -982,7 +982,9 @@ async function finalizarMesa(id) {
         tipoDetalle: `Mesa ${mesa.id}`,
         monto: totalFinal,
         ganancia: gananciaMesa, // ⭐ REGISTRAR GANANCIA
-        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
+        metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
+        montoEfectivo: pagoInfo.efectivo,
+        montoYape: pagoInfo.yape,
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -1010,7 +1012,7 @@ async function finalizarMesa(id) {
     mesa.consumos = [];
     await guardarMesas();
 
-    alert(`✅ Mesa ${id} finalizada (${metodoPago}).\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada (${pagoInfo.metodo}).\nTiempo: ${resultado.minutos} minutos (${horaInicio} - ${horaFin})\nTotal: S/ ${totalFinal.toFixed(2)}`);
 
     actualizarMesas();
     actualizarTablaVentas();
@@ -1222,7 +1224,8 @@ function actualizarTablaVentas() {
 
     tbody.innerHTML = ventasOrdenadas.map(v => {
         const metodo = v.metodoPago || 'Efectivo';
-        const metodoColor = metodo === 'Yape' ? '#742284' : '#10b981';
+        const metodoColor = metodo === 'Yape' ? '#742284' : (metodo === 'Mixto' ? '#0ea5e9' : '#10b981');
+        const metodoTexto = metodo === 'Mixto' ? `Ef: S/${(v.montoEfectivo || 0).toFixed(2)} | Yp: S/${(v.montoYape || 0).toFixed(2)}` : metodo;
 
         return `
             <tr>
@@ -1231,7 +1234,7 @@ function actualizarTablaVentas() {
                 <td style="font-size: 13px; color: #666;">${v.usuario}</td>
                 <td style="text-align: right; font-weight: 600; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</td>
                 <td style="text-align: center;">
-                    <span style="background: ${metodoColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${metodo}</span>
+                    <span style="background: ${metodoColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${metodoTexto}</span>
                 </td>
                 <td style="text-align: center;">
                     ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `<button class="delete-btn" onclick="eliminarVenta(${v.id})">🗑️</button>` : '-'}
@@ -1657,19 +1660,76 @@ window.showModalConfirmacionPago = function (monto, detalle) {
     return new Promise((resolve) => {
         resolvePagoActual = resolve;
         document.getElementById('pagoMonto').textContent = `S/ ${parseFloat(monto).toFixed(2)}`;
+        document.getElementById('pagoMonto').dataset.monto = parseFloat(monto).toFixed(2);
         document.getElementById('pagoDetalle').textContent = detalle;
         document.getElementById('modalConfirmacionPago').classList.add('show');
 
         // Reset default option
         const radios = document.getElementsByName('metodoPagoConf');
         radios[0].checked = true;
+        if (typeof window.togglePagoMixto === 'function') window.togglePagoMixto();
 
         document.getElementById('btnConfirmarPagoFinal').onclick = () => {
             const metodo = document.querySelector('input[name="metodoPagoConf"]:checked').value;
-            window.closeModalConfirmacionPago();
-            resolve(metodo);
+
+            if (metodo === 'Mixto') {
+                const montoEfectivo = parseFloat(document.getElementById('pagoMixtoEfectivo').value) || 0;
+                const montoYape = parseFloat(document.getElementById('pagoMixtoYape').value) || 0;
+                const totalCalculado = montoEfectivo + montoYape;
+                const totalReal = parseFloat(document.getElementById('pagoMonto').dataset.monto);
+
+                if (Math.abs(totalCalculado - totalReal) > 0.02) {
+                    mostrarError('Los montos no suman el total a cobrar');
+                    return;
+                }
+
+                if (montoEfectivo <= 0 || montoYape <= 0) {
+                    mostrarError('Ambos montos deben ser > 0 para pago mixto');
+                    return;
+                }
+
+                window.closeModalConfirmacionPago();
+                resolve({ metodo: 'Mixto', efectivo: montoEfectivo, yape: montoYape });
+            } else {
+                window.closeModalConfirmacionPago();
+                const totalReal = parseFloat(document.getElementById('pagoMonto').dataset.monto);
+                resolve({
+                    metodo: metodo,
+                    efectivo: metodo === 'Efectivo' ? totalReal : 0,
+                    yape: metodo === 'Yape' ? totalReal : 0
+                });
+            }
         };
     });
+};
+
+window.togglePagoMixto = function () {
+    const metodos = document.querySelectorAll('input[name="metodoPagoConf"]');
+    let metodoSeleccionado = 'Efectivo';
+    for (let i = 0; i < metodos.length; i++) {
+        if (metodos[i].checked) metodoSeleccionado = metodos[i].value;
+    }
+
+    const mixtoContainer = document.getElementById('pagoMixtoInputs');
+    if (mixtoContainer) {
+        if (metodoSeleccionado === 'Mixto') {
+            mixtoContainer.classList.remove('hidden');
+            document.getElementById('pagoMixtoEfectivo').value = '';
+            document.getElementById('pagoMixtoYape').value = '';
+        } else {
+            mixtoContainer.classList.add('hidden');
+        }
+    }
+};
+
+window.calcularPagoMixtoYape = function () {
+    const total = parseFloat(document.getElementById('pagoMonto').dataset.monto) || 0;
+    const ef = parseFloat(document.getElementById('pagoMixtoEfectivo').value) || 0;
+
+    let yape = total - ef;
+    if (yape < 0) yape = 0;
+
+    document.getElementById('pagoMixtoYape').value = yape.toFixed(2);
 };
 
 window.closeModalConfirmacionPago = function () {
@@ -2087,8 +2147,8 @@ async function finalizarMesaConsumo(id) {
     }
 
     // ⭐ NUEVO: Confirmación con Modal de Pago
-    const metodoPago = await showModalConfirmacionPago(mesa.total, `Cierre de Mesa Consumo ${id}`);
-    if (!metodoPago) return;
+    const pagoInfo = await showModalConfirmacionPago(mesa.total, `Cierre de Mesa Consumo ${id}`);
+    if (!pagoInfo || !pagoInfo.metodo) return;
 
     let detalleConsumos = [];
     let totalCostoProductos = 0;
@@ -2120,7 +2180,9 @@ async function finalizarMesaConsumo(id) {
         tipoDetalle: `Mesa Consumo ${mesa.id}`,
         monto: mesa.total,
         ganancia: gananciaMesaConsumo, // ⭐ REGISTRAR GANANCIA
-        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
+        metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
+        montoEfectivo: pagoInfo.efectivo,
+        montoYape: pagoInfo.yape,
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -2141,7 +2203,7 @@ async function finalizarMesaConsumo(id) {
     mesa.total = 0;
     await guardarMesasConsumo();
 
-    alert(`✅ Mesa ${id} finalizada (${metodoPago}).\\nTotal cobrado: S/ ${totalCobrado.toFixed(2)}`);
+    alert(`✅ Mesa ${id} finalizada (${pagoInfo.metodo}).\\nTotal cobrado: S/ ${totalCobrado.toFixed(2)}`);
 
     actualizarMesasConsumo();
     actualizarTablaVentas();
@@ -3391,8 +3453,16 @@ function generarReporte() {
     const cantidadVentas = ventasActuales.length;
 
     // Desglose por método de pago
-    const totalEfectivo = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + v.monto, 0);
-    const totalYape = ventasActuales.filter(v => v.metodoPago === 'Yape').reduce((sum, v) => sum + v.monto, 0);
+    const totalEfectivo = ventasActuales.reduce((sum, v) => {
+        if (v.metodoPago === 'Mixto') return sum + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return sum + v.monto;
+        return sum;
+    }, 0);
+    const totalYape = ventasActuales.reduce((sum, v) => {
+        if (v.metodoPago === 'Mixto') return sum + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return sum + v.monto;
+        return sum;
+    }, 0);
 
     const ventasMesas = ventasActuales.filter(v => v.tipo === 'Mesa Billar').reduce((sum, v) => sum + v.monto, 0);
     const ventasProductos = ventasActuales.filter(v => v.tipo === 'Venta Directa').reduce((sum, v) => sum + v.monto, 0);
@@ -3603,8 +3673,16 @@ window.cerrarDia = async function () {
     const totalCierre = ventasActuales.reduce((sum, v) => sum + (v.monto || 0), 0);
 
     // ⭐ NUEVO: Desglose de pago para el periodo actual
-    const totalEfectivoPeriodo = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + (v.monto || 0), 0);
-    const totalYapePeriodo = ventasActuales.filter(v => v.metodoPago === 'Yape').reduce((sum, v) => sum + (v.monto || 0), 0);
+    const totalEfectivoPeriodo = ventasActuales.reduce((sum, v) => {
+        if (v.metodoPago === 'Mixto') return sum + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return sum + (v.monto || 0);
+        return sum;
+    }, 0);
+    const totalYapePeriodo = ventasActuales.reduce((sum, v) => {
+        if (v.metodoPago === 'Mixto') return sum + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return sum + (v.monto || 0);
+        return sum;
+    }, 0);
 
     const consumosDuenoActuales = ultimoCierre
         ? consumosDueno.filter(c => c.id > ultimoCierre)
@@ -3627,7 +3705,11 @@ window.cerrarDia = async function () {
     const utilidadNetaPeriodo = gananciaVentasPeriodo + totalIngresosExtra - totalEgresos - totalConsumosDuenoCosto;
 
     // --- DESGLOSE POR CAJAS PARA EL RESUMEN ---
-    const ventasEfectivoActual = ventasActuales.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((sum, v) => sum + (v.monto || 0), 0);
+    const ventasEfectivoActual = ventasActuales.reduce((sum, v) => {
+        if (v.metodoPago === 'Mixto') return sum + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return sum + (v.monto || 0);
+        return sum;
+    }, 0);
     const ingresosLocalActual = movimientosActuales.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
     const egresosLocalActual = movimientosActuales.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((sum, m) => sum + m.monto, 0);
     const transfLocalActual = movimientosActuales.filter(m => m.tipo === 'transferencia').reduce((sum, m) => sum + m.monto, 0);
@@ -4146,11 +4228,19 @@ window.descargarCierrePDF = function (cierreId) {
                     </div>
                     <div class="resumen-item" style="border-left: 4px solid #16a34a; background: #f0fdf4;">
                         <div style="font-size: 11px; color: #666;">💵 Cobrado en Efectivo</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #16a34a;">S/ ${(cierre.totalEfectivo !== undefined ? cierre.totalEfectivo : (cierre.ventas ? cierre.ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((s, v) => s + (v.monto || 0), 0) : 0)).toFixed(2)}</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #16a34a;">S/ ${(cierre.totalEfectivo !== undefined ? cierre.totalEfectivo : (cierre.ventas ? cierre.ventas.reduce((s, v) => {
+        if (v.metodoPago === 'Mixto') return s + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return s + (v.monto || 0);
+        return s;
+    }, 0) : 0)).toFixed(2)}</div>
                     </div>
                     <div class="resumen-item" style="border-left: 4px solid #7c3aed; background: #f5f3ff;">
                         <div style="font-size: 11px; color: #666;">📱 Cobrado en Yape/Plin</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #7c3aed;">S/ ${(cierre.totalYape !== undefined ? cierre.totalYape : (cierre.ventas ? cierre.ventas.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0) : 0)).toFixed(2)}</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #7c3aed;">S/ ${(cierre.totalYape !== undefined ? cierre.totalYape : (cierre.ventas ? cierre.ventas.reduce((s, v) => {
+        if (v.metodoPago === 'Mixto') return s + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return s + (v.monto || 0);
+        return s;
+    }, 0) : 0)).toFixed(2)}</div>
                     </div>
 
                 </div>
@@ -4231,7 +4321,7 @@ window.descargarCierrePDF = function (cierreId) {
                         <div class="venta-header">
                             <div>
                                 <div style="font-weight: bold; color: #333;">${v.fecha}</div>
-                                <div style="font-size: 12px; color: #666; margin-top: 3px;">Usuario: ${v.usuario}</div>
+                                <div style="font-size: 12px; color: #666; margin-top: 3px;">Usuario: ${v.usuario} | Método: ${v.metodoPago === 'Mixto' ? `Mixto (Ef: S/${(v.montoEfectivo || 0).toFixed(2)} / Yp: S/${(v.montoYape || 0).toFixed(2)})` : (v.metodoPago || 'Efectivo')}</div>
                             </div>
                             <div style="font-size: 20px; font-weight: bold; color: #2d7a4d;">S/ ${v.monto.toFixed(2)}</div>
                         </div>
@@ -4300,8 +4390,16 @@ window.actualizarDashboardFinanciero = function () {
     const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
 
     // --- DESGLOSE POR MÉTODO DE PAGO ---
-    const ventasEfectivoActual = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
-    const ventasYapeActual = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const ventasEfectivoActual = ventas.reduce((acc, v) => {
+        if (v.metodoPago === 'Mixto') return acc + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return acc + (v.monto || 0);
+        return acc;
+    }, 0);
+    const ventasYapeActual = ventas.reduce((acc, v) => {
+        if (v.metodoPago === 'Mixto') return acc + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return acc + (v.monto || 0);
+        return acc;
+    }, 0);
 
     // Histórico por método
     const ventasEfectivoHistorica = cierres.reduce((acc, c) => acc + (c.totalEfectivo || c.totalVentas || 0), 0);
@@ -4796,7 +4894,11 @@ window.guardarAjusteCaja = async function () {
 
 window.calcularBalances = function () {
     // 1. Ventas en Efectivo (siempre van a Local)
-    const ventasEfectivo = ventas.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const ventasEfectivo = ventas.reduce((acc, v) => {
+        if (v.metodoPago === 'Mixto') return acc + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return acc + (v.monto || 0);
+        return acc;
+    }, 0);
 
     // 2. Movimientos manuales
     const ingresosLocal = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
@@ -4819,7 +4921,11 @@ window.calcularBalances = function () {
     const balChica = ingresosChica + transferenciasEntrantes - egresosChica + ajustesChica;
 
     // 3. Balance Yape (Ventas - Transferencias + Ajustes)
-    const ventasYapeTotal = ventas.filter(v => v.metodoPago === 'Yape').reduce((acc, v) => acc + (v.monto || 0), 0);
+    const ventasYapeTotal = ventas.reduce((acc, v) => {
+        if (v.metodoPago === 'Mixto') return acc + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return acc + (v.monto || 0);
+        return acc;
+    }, 0);
     const transYapeTotal = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + (m.monto || 0), 0);
     const ajustesYape = movimientos.filter(m => m.caja === 'yape' && m.tipo === 'ajuste').reduce((acc, m) => {
         return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
@@ -5351,7 +5457,10 @@ window.generarReporteMensual = function () {
         datosMes[clave].ventas += monto;
         datosMes[clave].margen += (v.ganancia || 0);
         datosMes[clave].transacciones++;
-        if ((v.metodoPago || 'Efectivo') === 'Efectivo') {
+        if (v.metodoPago === 'Mixto') {
+            datosMes[clave].efectivo += (v.montoEfectivo || 0);
+            datosMes[clave].yape += (v.montoYape || 0);
+        } else if ((v.metodoPago || 'Efectivo') === 'Efectivo') {
             datosMes[clave].efectivo += monto;
         } else if (v.metodoPago === 'Yape') {
             datosMes[clave].yape += monto;
@@ -5614,8 +5723,16 @@ window.descargarReporteMensualPDF = function (anio, mes) {
 
     // 2. Cálculos base
     const totalVentas = ventasMes.reduce((s, v) => s + (v.monto || 0), 0);
-    const totalEfectivo = ventasMes.filter(v => (v.metodoPago || 'Efectivo') === 'Efectivo').reduce((s, v) => s + (v.monto || 0), 0);
-    const totalYape = ventasMes.filter(v => v.metodoPago === 'Yape').reduce((s, v) => s + (v.monto || 0), 0);
+    const totalEfectivo = ventasMes.reduce((s, v) => {
+        if (v.metodoPago === 'Mixto') return s + (v.montoEfectivo || 0);
+        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return s + (v.monto || 0);
+        return s;
+    }, 0);
+    const totalYape = ventasMes.reduce((s, v) => {
+        if (v.metodoPago === 'Mixto') return s + (v.montoYape || 0);
+        if (v.metodoPago === 'Yape') return s + (v.monto || 0);
+        return s;
+    }, 0);
     const totalGastos = movsMes.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((s, m) => s + (m.monto || 0), 0);
     const totalIngresos = movsMes.filter(m => m.tipo === 'ingreso').reduce((s, m) => s + (m.monto || 0), 0);
     const totalMargen = ventasMes.reduce((s, v) => s + (v.ganancia || 0), 0);
@@ -5702,9 +5819,13 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     // Bloque Detalle Ventas
     let htmlDetalleVentas = '<tr><td colspan="5" class="center">Sin ventas</td></tr>';
     if (ventasMes.length > 0) {
-        htmlDetalleVentas = [...ventasMes].reverse().map(v => `
-            <tr><td>${v.fecha || '—'}</td><td>${v.tipo || '—'}</td><td>${v.usuario || '—'}</td><td class="center"><span class="badge ${(v.metodoPago || 'Efectivo') === 'Efectivo' ? 'badge-green' : 'badge-purple'}">${v.metodoPago || 'Efectivo'}</span></td><td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td></tr>
-        `).join('');
+        htmlDetalleVentas = [...ventasMes].reverse().map(v => {
+            const metodoColor = v.metodoPago === 'Yape' ? 'badge-purple' : (v.metodoPago === 'Mixto' ? 'badge-info' : 'badge-green');
+            const metodoTXT = v.metodoPago === 'Mixto' ? `Ef: S/${(v.montoEfectivo || 0).toFixed(2)} / Yp: S/${(v.montoYape || 0).toFixed(2)}` : (v.metodoPago || 'Efectivo');
+            return `
+                <tr><td>${v.fecha || '—'}</td><td>${v.tipo || '—'}</td><td>${v.usuario || '—'}</td><td class="center"><span class="badge ${metodoColor}">${metodoTXT}</span></td><td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td></tr>
+            `;
+        }).join('');
     }
 
     // Bloque Consumos Dueño
