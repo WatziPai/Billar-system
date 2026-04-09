@@ -1064,18 +1064,40 @@
                     <label
                         style="display: block; text-align: left; margin-bottom: 12px; font-weight: 600; font-size: 14px; color: #374151;">Selecciona
                         Método de Pago:</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                         <label class="metodo-pago-opt">
-                            <input type="radio" name="metodoPagoConf" value="Efectivo" checked>
-                            <div class="opt-box">💵 Efectivo</div>
+                            <input type="radio" name="metodoPagoConf" value="Efectivo" checked
+                                onchange="togglePagoMixto()">
+                            <div class="opt-box" style="font-size: 13px;">💵 Efectivo</div>
                         </label>
                         <label class="metodo-pago-opt">
-                            <input type="radio" name="metodoPagoConf" value="Yape">
-                            <div class="opt-box">📱 Yape/Plin</div>
+                            <input type="radio" name="metodoPagoConf" value="Yape" onchange="togglePagoMixto()">
+                            <div class="opt-box" style="font-size: 13px;">📱 Yape/Plin</div>
+                        </label>
+                        <label class="metodo-pago-opt">
+                            <input type="radio" name="metodoPagoConf" value="Mixto" onchange="togglePagoMixto()">
+                            <div class="opt-box" style="font-size: 13px;">🔀 Mixto</div>
                         </label>
                     </div>
 
-                    <div style="display: flex; gap: 10px;">
+                    <div id="pagoMixtoInputs" class="hidden" style="margin-bottom: 25px; text-align: left;">
+                        <div style="display: flex; gap: 10px;">
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <label style="font-size: 12px;">💵 Efectivo S/</label>
+                                <input type="number" id="pagoMixtoEfectivo" step="0.01" min="0" placeholder="0.00"
+                                    oninput="calcularPagoMixtoYape()" style="font-weight: bold; color: #10b981;">
+                            </div>
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <label style="font-size: 12px;">📱 Yape S/</label>
+                                <input type="number" id="pagoMixtoYape" step="0.01" min="0" placeholder="0.00" readonly
+                                    style="background: #f3f4f6; font-weight: bold; color: #742284;">
+                            </div>
+                        </div>
+                        <small style="color: #666; font-size: 11px;">Ingresa el efectivo, el Yape se calcula
+                            automáticamente.</small>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; padding-top: 10px;">
                         <button class="btn btn-gray" onclick="closeModalConfirmacionPago()"
                             style="flex: 1;">Atrás</button>
                         <button id="btnConfirmarPagoFinal" class="btn btn-green"
