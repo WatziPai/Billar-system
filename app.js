@@ -2591,7 +2591,15 @@ window.procesarCobroParcial = async function () {
         return;
     }
 
-    if (!confirm(`¿Confirmas el cobro parcial de S/ ${totalCobrar.toFixed(2)}?`)) return;
+    // ⭐ NUEVO: Usar el Modal de Confirmación Universal
+    window.closeModalCobroParcial();
+    const pagoInfo = await showModalConfirmacionPago(totalCobrar, `Cobro Parcial de ${itemsACobrar.length} items`);
+
+    // Si cancela el modal de confirmación, reabrimos el modal de cobro parcial para que no pierda su progreso
+    if (!pagoInfo || !pagoInfo.metodo) {
+        window.showModalCobroParcial();
+        return;
+    }
 
     // Procesar cobro: Generar venta y descontar de la mesa
     let mesa;
@@ -2603,7 +2611,7 @@ window.procesarCobroParcial = async function () {
 
     if (!mesa) return;
 
-    const metodoPago = document.getElementById('metodoPagoParcial').value;
+
 
     // Generar descripción de items
     const descripcionItems = itemsACobrar.map(item => {
@@ -2627,7 +2635,9 @@ window.procesarCobroParcial = async function () {
         tipoDetalle: `Parcial (${descripcionItems}) - ${tipoMesaActual === 'billar' ? 'Mesa Billar' : 'Mesa Consumo'} ${mesa.id}`,
         monto: totalCobrar,
         ganancia: gananciaParcial,
-        metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
+        metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
+        montoEfectivo: pagoInfo.efectivo,
+        montoYape: pagoInfo.yape,
         fecha: new Date().toLocaleString(),
         usuario: usuarioActual.nombre,
         detalle: {
@@ -2673,7 +2683,7 @@ window.procesarCobroParcial = async function () {
     }
 
     // 3. Actualizar UI
-    alert(`✅ Cobro parcial realizado (${metodoPago}): S/ ${totalCobrar.toFixed(2)}\n\nItems cobrados: ${descripcionItems}`);
+    alert(`✅ Cobro parcial realizado (${pagoInfo.metodo}): S/ ${totalCobrar.toFixed(2)}\n\nItems cobrados: ${descripcionItems}`);
     closeModalCobroParcial();
     renderProductosConsumo();
     actualizarListaConsumos();
