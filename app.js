@@ -211,6 +211,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnAjusteChica', false);     // ❌ sin ajuste saldos
         toggleElement('btnAjusteLocal', false);
         toggleElement('btnAjusteYape', false);
+        toggleElement('btnLimpiarMovimientos', false);
     } else {
         toggleElement('btnUsuarios', false);
         toggleElement('btnAgregarMesa', false);
@@ -227,6 +228,7 @@ function mostrarPantallaPrincipal() {
         toggleElement('btnAjusteChica', false);
         toggleElement('btnAjusteLocal', false);
         toggleElement('btnAjusteYape', false);
+        toggleElement('btnLimpiarMovimientos', false);
     }
 
     try {
