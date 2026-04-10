@@ -606,6 +606,9 @@
                     <!-- Productos disponibles -->
                     <div>
                         <h3 style="margin: 0 0 15px 0;">Productos Disponibles</h3>
+                        <div style="margin-bottom: 15px;">
+                            <input type="text" id="buscarConsumoProducto" placeholder="🔍 Buscar producto..." oninput="renderProductosConsumo()" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;">
+                        </div>
                         <div id="productosConsumoGrid"
                             style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto;">
                             <!-- Productos se renderizarán aquí -->
@@ -670,6 +673,9 @@
         <div id="modalVentaProductos" class="modal">
             <div class="modal-content" style="max-width: 900px;">
                 <div class="modal-header">Vender Productos</div>
+                <div style="margin-bottom: 15px;">
+                    <input type="text" id="buscarVentaProducto" placeholder="🔍 Buscar producto..." oninput="renderProductosVenta()" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px;">
+                </div>
                 <div id="productosVentaContainer" class="productos-venta-grid"></div>
 
                 <div
