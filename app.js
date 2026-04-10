@@ -1093,6 +1093,8 @@ window.agregarVentaManual = async function () {
 
 window.showModalVentaProductos = function () {
     document.getElementById('modalVentaProductos').classList.add('show');
+    const inputBusqueda = document.getElementById('buscarVentaProducto');
+    if (inputBusqueda) inputBusqueda.value = '';
     renderProductosVenta();
 };
 
@@ -1102,6 +1104,8 @@ window.closeModalVentaProductos = function () {
 
 function renderProductosVenta() {
     const container = document.getElementById('productosVentaContainer');
+    const inputBusqueda = document.getElementById('buscarVentaProducto');
+    const termino = inputBusqueda ? inputBusqueda.value.toLowerCase().trim() : '';
 
     if (productos.length === 0) {
         container.innerHTML = '<p style="text-align: center; padding: 30px; color: #999;">No hay productos disponibles.</p>';
@@ -1109,7 +1113,16 @@ function renderProductosVenta() {
     }
 
     // 🍺 Ordenar productos con Licores primero
-    const productosOrdenados = ordenarProductosPorCategoria(productos);
+    let productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    if (termino) {
+        productosOrdenados = productosOrdenados.filter(p => p.nombre.toLowerCase().includes(termino));
+    }
+
+    if (productosOrdenados.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 30px; color: #999;">No se encontraron productos con esa búsqueda.</p>';
+        return;
+    }
 
     container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
@@ -2221,6 +2234,8 @@ window.abrirModalConsumo = function (mesaId, tipo) {
 
     document.getElementById('modalConsumo').classList.add('show');
     document.getElementById('consumoModalTitle').textContent = `Consumo - ${tipo === 'billar' ? 'Mesa de Billar' : 'Mesa de Consumo'} ${mesaId}`;
+    const inputBusqueda = document.getElementById('buscarConsumoProducto');
+    if (inputBusqueda) inputBusqueda.value = '';
     renderProductosConsumo();
     actualizarListaConsumos();
 };
@@ -2233,6 +2248,8 @@ window.closeModalConsumo = function () {
 
 function renderProductosConsumo() {
     const container = document.getElementById('productosConsumoGrid');
+    const inputBusqueda = document.getElementById('buscarConsumoProducto');
+    const termino = inputBusqueda ? inputBusqueda.value.toLowerCase().trim() : '';
 
     if (!container) {
         debugLog('error', '⚠️ Contenedor de productos de consumo no encontrado');
@@ -2245,7 +2262,16 @@ function renderProductosConsumo() {
     }
 
     // 🍺 Ordenar productos con Licores primero
-    const productosOrdenados = ordenarProductosPorCategoria(productos);
+    let productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    if (termino) {
+        productosOrdenados = productosOrdenados.filter(p => p.nombre.toLowerCase().includes(termino));
+    }
+
+    if (productosOrdenados.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No se encontraron productos con esa búsqueda.</p>';
+        return;
+    }
 
     container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
