@@ -2724,6 +2724,8 @@ window.procesarCobroParcial = async function () {
 // ========== CONSUMO DEL DUEÑO ==========
 window.showModalConsumoDueno = function () {
     document.getElementById('modalConsumoDueno').classList.add('show');
+    const inputBusqueda = document.getElementById('buscarConsumoDuenoProducto');
+    if (inputBusqueda) inputBusqueda.value = '';
     renderProductosConsumoDueno();
     actualizarCarritoConsumoDueno();
 };
@@ -2736,6 +2738,8 @@ let carritoConsumoDueno = [];
 
 function renderProductosConsumoDueno() {
     const container = document.getElementById('productosConsumoDuenoGrid');
+    const inputBusqueda = document.getElementById('buscarConsumoDuenoProducto');
+    const termino = inputBusqueda ? inputBusqueda.value.toLowerCase().trim() : '';
 
     if (!container) return;
 
@@ -2745,7 +2749,16 @@ function renderProductosConsumoDueno() {
     }
 
     // 🍺 Ordenar productos con Licores primero
-    const productosOrdenados = ordenarProductosPorCategoria(productos);
+    let productosOrdenados = ordenarProductosPorCategoria(productos);
+
+    if (termino) {
+        productosOrdenados = productosOrdenados.filter(p => p.nombre.toLowerCase().includes(termino));
+    }
+
+    if (productosOrdenados.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: #999; grid-column: 1/-1;">No se encontraron productos con esa búsqueda.</p>';
+        return;
+    }
 
     container.innerHTML = productosOrdenados.map(p => {
         const disponible = p.stock > 0;
