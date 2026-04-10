@@ -5007,7 +5007,18 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
         hoy.setHours(0, 0, 0, 0);
 
         movsFiltrados = movsFiltrados.filter(m => {
-            const fechaMov = new Date(m.fecha);
+            let fechaMov;
+            if (m.id && typeof m.id === 'number' && m.id > 1000000000000) {
+                fechaMov = new Date(m.id);
+            } else {
+                const partes = m.fecha.split(',')[0].trim().split('/');
+                if (partes.length === 3) {
+                    fechaMov = new Date(`${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`);
+                } else {
+                    fechaMov = new Date(m.fecha);
+                }
+            }
+            if (isNaN(fechaMov.getTime())) fechaMov = new Date();
             fechaMov.setHours(0, 0, 0, 0);
 
             if (filtroFecha === 'hoy') {
@@ -5030,8 +5041,8 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
     const egresosMes = movimientos.filter(m => {
         if (m.oculto) return false;
         if (m.tipo !== 'egreso' && m.tipo !== 'retiro' && m.tipo !== 'reposicion') return false;
-        const f = new Date(m.fecha);
-        return f.getMonth() === mesActual && f.getFullYear() === anioActual;
+        const keys = obtenerClavesMes(m.id || m.fecha);
+        return keys.mes === mesActual && keys.anio === anioActual;
     }).reduce((acc, m) => acc + m.monto, 0);
 
     // Actualizar UI de balances
