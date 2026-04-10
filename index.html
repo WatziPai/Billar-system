@@ -985,6 +985,9 @@
                     <!-- Productos disponibles -->
                     <div>
                         <h3 style="margin: 0 0 15px 0;">Productos Disponibles</h3>
+                        <div style="margin-bottom: 15px;">
+                            <input type="text" id="buscarConsumoDuenoProducto" placeholder="🔍 Buscar producto..." oninput="renderProductosConsumoDueno()" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px;">
+                        </div>
                         <div id="productosConsumoDuenoGrid"
                             style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto;">
                         </div>
