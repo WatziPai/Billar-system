@@ -325,7 +325,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
 
             try {
-                await new Promise(resolve => setTimeout(resolve, 800));
                 await cargarDatos();
 
                 const username = user.email.split('@')[0];
@@ -430,7 +429,37 @@ async function cargarDatos() {
     };
 
     try {
-        const usuariosData = await getData(COLLECTIONS.USUARIOS, DOC_IDS.TODOS);
+        const tiempoInicio = Date.now();
+
+        // ⚡ Todas las colecciones se cargan EN PARALELO (Promise.all)
+        const [
+            usuariosData,
+            config,
+            ventasData,
+            productosData,
+            erroresData,
+            cierresData,
+            consumosDuenoData,
+            lotesData,
+            mesasData,
+            mesasConsumoData,
+            movimientosData
+        ] = await Promise.all([
+            getData(COLLECTIONS.USUARIOS,      DOC_IDS.TODOS),
+            getData(COLLECTIONS.CONFIGURACION, DOC_IDS.GENERAL),
+            getData(COLLECTIONS.VENTAS,        DOC_IDS.TODAS),
+            getData(COLLECTIONS.PRODUCTOS,     DOC_IDS.TODOS),
+            getData(COLLECTIONS.ERRORES,       DOC_IDS.TODOS),
+            getData(COLLECTIONS.CIERRES,       DOC_IDS.HISTORIAL),
+            getData(COLLECTIONS.CONSUMOS,      DOC_IDS.DUENO),
+            getData(COLLECTIONS.LOTES,         DOC_IDS.TODOS),
+            getData(COLLECTIONS.MESAS,         DOC_IDS.BILLAR),
+            getData(COLLECTIONS.MESAS,         DOC_IDS.CONSUMO),
+            getData(COLLECTIONS.CAJA,          DOC_IDS.HISTORIAL)
+        ]);
+
+        // ===== Procesar resultados =====
+
         if (usuariosData && usuariosData.lista) {
             usuarios = usuariosData.lista;
         } else {
@@ -438,41 +467,27 @@ async function cargarDatos() {
             await guardarDatosGenerico(COLLECTIONS.USUARIOS, DOC_IDS.TODOS, { lista: usuarios });
         }
 
-        const config = await getData(COLLECTIONS.CONFIGURACION, DOC_IDS.GENERAL);
         if (config) {
             document.getElementById('tarifaHora').value = config.tarifaHora || 5.00;
             document.getElementById('tarifaExtra5Min').value = config.tarifaExtra5Min || 0.50;
         }
 
-        const ventasData = await getData(COLLECTIONS.VENTAS, DOC_IDS.TODAS);
-        ventas = ventasData?.lista || [];
-
-        const productosData = await getData(COLLECTIONS.PRODUCTOS, DOC_IDS.TODOS);
-        productos = productosData?.lista || [];
-
-        const erroresData = await getData(COLLECTIONS.ERRORES, DOC_IDS.TODOS);
+        ventas            = ventasData?.lista || [];
+        productos         = productosData?.lista || [];
         erroresReportados = erroresData?.lista || [];
-
-        const cierresData = await getData(COLLECTIONS.CIERRES, DOC_IDS.HISTORIAL);
-        cierres = cierresData?.lista || [];
+        cierres           = cierresData?.lista || [];
+        lotesAgotados     = lotesData?.lista || [];
+        movimientos       = movimientosData?.lista || [];
 
         if (cierres.length > 0) {
             ultimoCierre = cierres[cierres.length - 1].timestamp;
         }
 
-        const consumosDuenoData = await getData(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO);
         consumosDueno = (consumosDuenoData?.lista || []).map(c => ({
             ...c,
             total: c.total !== undefined ? c.total : (c.totalVenta || 0)
         }));
 
-        const lotesData = await getData(COLLECTIONS.LOTES, DOC_IDS.TODOS);
-        lotesAgotados = lotesData?.lista || [];
-
-        const cajaData = await getData(COLLECTIONS.CAJA, DOC_IDS.TODOS);
-        movimientos = cajaData?.lista || [];
-
-        const mesasData = await getData(COLLECTIONS.MESAS, DOC_IDS.BILLAR);
         if (mesasData && mesasData.lista) {
             mesas = mesasData.lista;
         } else {
@@ -485,16 +500,13 @@ async function cargarDatos() {
             await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.BILLAR, { lista: mesas });
         }
 
-        const mesasConsumoData = await getData(COLLECTIONS.MESAS, DOC_IDS.CONSUMO);
         mesasConsumo = mesasConsumoData?.lista || [
             { id: 1, ocupada: false, consumos: [], total: 0 },
             { id: 2, ocupada: false, consumos: [], total: 0 }
         ];
 
-        const movimientosData = await getData(COLLECTIONS.CAJA, DOC_IDS.HISTORIAL);
-        movimientos = movimientosData?.lista || [];
-
-        debugLog('firebase', '✅ Todos los datos cargados correctamente');
+        const tiempoTotal = Date.now() - tiempoInicio;
+        debugLog('firebase', `✅ Todos los datos cargados en paralelo en ${tiempoTotal}ms`);
 
     } catch (error) {
         console.error('Error cargando datos:', error);
