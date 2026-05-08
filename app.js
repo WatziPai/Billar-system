@@ -5160,7 +5160,7 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
     document.getElementById('cajaEgresos').textContent = `S/ ${egresosMes.toFixed(2)}`;
     document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
 
-    const movsParaRenderizar = [...movsFiltrados].reverse().slice(0, limiteMovimientos);
+    const movsParaRenderizar = [...movsFiltrados].slice(0, limiteMovimientos);
 
     if (movsParaRenderizar.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
