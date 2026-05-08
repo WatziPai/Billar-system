@@ -515,13 +515,55 @@ async function cargarDatos() {
 }
 
 // ========== FUNCIONES DE GUARDADO GENÉRICO ==========
-async function guardarDatosGenerico(coleccion, docId, data) {
+async function guardarDatosGenerico(coleccion, docId, data, omitSync = false) {
     try {
         if (USE_LOCAL_STORAGE) {
             localStorage.setItem(`billar_${coleccion}_${docId}`, JSON.stringify(data));
             debugLog('firebase', `💾 Datos guardados LOCALMENTE en ${coleccion}/${docId}`);
             return;
         }
+
+        // 🛡️ SINCRONIZACIÓN INTELIGENTE ANTES DE GUARDAR
+        // Previene el problema "a veces registro y al rato ya se borró"
+        if (!omitSync && data && Array.isArray(data.lista)) {
+            try {
+                const remoto = await window.firebaseDB.get(coleccion, docId);
+                if (remoto && Array.isArray(remoto.lista)) {
+                    const localMap = new Map();
+                    data.lista.forEach(item => {
+                        if (item && item.id) localMap.set(item.id, item);
+                    });
+
+                    let itemsAgregados = false;
+                    remoto.lista.forEach(item => {
+                        if (item && item.id && !localMap.has(item.id)) {
+                            data.lista.push(item);
+                            itemsAgregados = true;
+                        }
+                    });
+
+                    if (itemsAgregados) {
+                        // Re-ordenar según el tipo de colección
+                        if (coleccion === COLLECTIONS.CAJA || coleccion === COLLECTIONS.CONSUMOS) {
+                            data.lista.sort((a, b) => b.id - a.id); // Descendente
+                        } else if (coleccion === COLLECTIONS.VENTAS || coleccion === COLLECTIONS.CIERRES) {
+                            data.lista.sort((a, b) => a.id - b.id); // Ascendente
+                        }
+                        
+                        // Actualizar la variable global correspondiente para que la UI no pierda los datos
+                        if (coleccion === COLLECTIONS.VENTAS) ventas = data.lista;
+                        if (coleccion === COLLECTIONS.CAJA) movimientos = data.lista;
+                        if (coleccion === COLLECTIONS.PRODUCTOS) productos = data.lista;
+                        if (coleccion === COLLECTIONS.CONSUMOS) consumosDueno = data.lista;
+                        
+                        debugLog('firebase', `🔄 Datos sincronizados automáticamente antes de guardar en ${coleccion}/${docId}`);
+                    }
+                }
+            } catch (syncError) {
+                console.warn('⚠️ No se pudo sincronizar antes de guardar (posible error de red)', syncError);
+            }
+        }
+
         await window.firebaseDB.set(coleccion, docId, data);
         debugLog('firebase', `💾 Datos guardados en ${coleccion}/${docId}`);
     } catch (error) {
@@ -530,40 +572,40 @@ async function guardarDatosGenerico(coleccion, docId, data) {
     }
 }
 
-async function guardarUsuarios() {
-    await guardarDatosGenerico(COLLECTIONS.USUARIOS, DOC_IDS.TODOS, { lista: usuarios });
+async function guardarUsuarios(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.USUARIOS, DOC_IDS.TODOS, { lista: usuarios }, omitSync);
 }
 
-async function guardarVentas() {
-    await guardarDatosGenerico(COLLECTIONS.VENTAS, DOC_IDS.TODAS, { lista: ventas });
+async function guardarVentas(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.VENTAS, DOC_IDS.TODAS, { lista: ventas }, omitSync);
 }
 
-async function guardarProductos() {
-    await guardarDatosGenerico(COLLECTIONS.PRODUCTOS, DOC_IDS.TODOS, { lista: productos });
+async function guardarProductos(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.PRODUCTOS, DOC_IDS.TODOS, { lista: productos }, omitSync);
 }
 
-async function guardarMesas() {
-    await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.BILLAR, { lista: mesas });
+async function guardarMesas(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.BILLAR, { lista: mesas }, omitSync);
 }
 
-async function guardarMesasConsumo() {
-    await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.CONSUMO, { lista: mesasConsumo });
+async function guardarMesasConsumo(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.MESAS, DOC_IDS.CONSUMO, { lista: mesasConsumo }, omitSync);
 }
 
-async function guardarMovimientos() {
-    await guardarDatosGenerico(COLLECTIONS.CAJA, DOC_IDS.HISTORIAL, { lista: movimientos });
+async function guardarMovimientos(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.CAJA, DOC_IDS.HISTORIAL, { lista: movimientos }, omitSync);
 }
 
-async function guardarErrores() {
-    await guardarDatosGenerico(COLLECTIONS.ERRORES, DOC_IDS.TODOS, { lista: erroresReportados });
+async function guardarErrores(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.ERRORES, DOC_IDS.TODOS, { lista: erroresReportados }, omitSync);
 }
 
-async function guardarCierres() {
-    await guardarDatosGenerico(COLLECTIONS.CIERRES, DOC_IDS.HISTORIAL, { lista: cierres });
+async function guardarCierres(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.CIERRES, DOC_IDS.HISTORIAL, { lista: cierres }, omitSync);
 }
 
-async function guardarConsumosDueno() {
-    await guardarDatosGenerico(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO, { lista: consumosDueno });
+async function guardarConsumosDueno(omitSync = false) {
+    await guardarDatosGenerico(COLLECTIONS.CONSUMOS, DOC_IDS.DUENO, { lista: consumosDueno }, omitSync);
 }
 
 async function guardarConfiguracion() {
@@ -730,7 +772,7 @@ window.eliminarMesa = async function (id) {
         clearInterval(timers[id]);
         delete timers[id];
     }
-    await guardarMesas();
+    await guardarMesas(true);
     actualizarMesas();
     debugLog('timer', '🗑️ Mesa eliminada', { id });
 };
@@ -1233,7 +1275,7 @@ window.eliminarVenta = async function (id) {
     if (!confirm('¿Estás seguro de eliminar esta venta?')) return;
 
     ventas = ventas.filter(v => v.id !== id);
-    await guardarVentas();
+    await guardarVentas(true);
     actualizarTablaVentas();
     calcularTotal();
 };
@@ -1247,7 +1289,7 @@ function actualizarTablaVentas() {
         return;
     }
 
-    const ventasOrdenadas = [...ventas].reverse();
+    const ventasOrdenadas = [...ventas].reverse().slice(0, 50);
 
     tbody.innerHTML = ventasOrdenadas.map(v => {
         const metodo = v.metodoPago || 'Efectivo';
@@ -1655,7 +1697,7 @@ window.eliminarProducto = async function (id) {
     if (!confirm('¿Estás seguro de eliminar este producto?')) return;
 
     productos = productos.filter(p => p.id !== id);
-    await guardarProductos();
+    await guardarProductos(true);
     actualizarInventario();
 };
 
@@ -2087,7 +2129,7 @@ window.eliminarMesaConsumo = async function (id) {
     if (!confirm('¿Estás seguro de eliminar esta mesa?')) return;
 
     mesasConsumo = mesasConsumo.filter(m => m.id !== id);
-    await guardarMesasConsumo();
+    await guardarMesasConsumo(true);
     actualizarMesasConsumo();
     debugLog('sistema', '🗑️ Mesa de consumo eliminada', { id });
 };
@@ -2392,9 +2434,9 @@ window.eliminarConsumo = async function (productoId) {
 
     await guardarProductos();
     if (tipoMesaActual === 'billar') {
-        await guardarMesas();
+        await guardarMesas(true);
     } else {
-        await guardarMesasConsumo();
+        await guardarMesasConsumo(true);
         actualizarMesasConsumo();
     }
 
@@ -3188,8 +3230,8 @@ window.eliminarConsumoDueno = async function (consumoId) {
 
     consumosDueno = consumosDueno.filter(c => c.id !== consumoId);
 
-    await guardarConsumosDueno();
-    await guardarProductos();
+    await guardarConsumosDueno(true);
+    await guardarProductos(true);
 
     actualizarConsumoDueno();
     actualizarInventario();
@@ -3245,7 +3287,7 @@ window.eliminarError = async function (id) {
     if (!confirm('¿Estás seguro de eliminar este reporte?')) return;
 
     erroresReportados = erroresReportados.filter(e => e.id !== id);
-    await guardarErrores();
+    await guardarErrores(true);
     actualizarErrores();
 };
 
@@ -3450,7 +3492,7 @@ window.eliminarUsuario = async function (id) {
     if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
 
     usuarios = usuarios.filter(u => u.id !== id);
-    await guardarUsuarios();
+    await guardarUsuarios(true);
     actualizarUsuarios();
 };
 
@@ -4433,7 +4475,7 @@ window.eliminarCierre = async function (id) {
     if (!confirm('¿Estás seguro de eliminar este cierre?')) return;
 
     cierres = cierres.filter(c => c.id !== id);
-    await guardarCierres();
+    await guardarCierres(true);
     actualizarHistorialCierres();
     generarReporte();
 };
@@ -4447,63 +4489,79 @@ window.actualizarDashboardFinanciero = function () {
 
     debugLog('sistema', '📊 Generando Dashboard Financiero...');
 
-    // 1. Ganancia Bruta (Utilidad Bruta de Ventas: incluye productos y servicios/tiempo)
-    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
-    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
-    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
-
-    // --- DESGLOSE POR MÉTODO DE PAGO ---
-    const ventasEfectivoActual = ventas.reduce((acc, v) => {
-        if (v.metodoPago === 'Mixto') return acc + (v.montoEfectivo || 0);
-        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return acc + (v.monto || 0);
-        return acc;
-    }, 0);
-    const ventasYapeActual = ventas.reduce((acc, v) => {
-        if (v.metodoPago === 'Mixto') return acc + (v.montoYape || 0);
-        if (v.metodoPago === 'Yape') return acc + (v.monto || 0);
-        return acc;
-    }, 0);
-
-    // Histórico por método
-    const ventasEfectivoHistorica = cierres.reduce((acc, c) => acc + (c.totalEfectivo || c.totalVentas || 0), 0);
-    const ventasYapeHistorica = cierres.reduce((acc, c) => acc + (c.totalYape || 0), 0);
-
-    const totalEfectivo = ventasEfectivoActual + ventasEfectivoHistorica;
-
-    // Balance Yape (Ventas - Transferencias + Ajustes)
+    // 1. Cargar Balances (ya optimizado)
     const { balLocal, balChica, balYape } = calcularBalances();
-    const totalDashboardYape = balYape;
 
+    // 2. Procesar Ventas actuales (un solo paso)
+    let gananciaVentasActual = 0;
+    let ventasEfectivoActual = 0;
+    let ventasYapeActual = 0;
+
+    for (const v of ventas) {
+        gananciaVentasActual += (v.ganancia || 0);
+        if (v.metodoPago === 'Mixto') {
+            ventasEfectivoActual += (v.montoEfectivo || 0);
+            ventasYapeActual += (v.montoYape || 0);
+        } else if ((v.metodoPago || 'Efectivo') === 'Efectivo') {
+            ventasEfectivoActual += (v.monto || 0);
+        } else if (v.metodoPago === 'Yape') {
+            ventasYapeActual += (v.monto || 0);
+        }
+    }
+
+    // 3. Procesar Cierres Históricos (un solo paso)
+    let gananciaVentasHistorica = 0;
+    let ventasEfectivoHistorica = 0;
+    let ventasYapeHistorica = 0;
+    let totalIngresosExtraHistorico = 0;
+    let totalEgresosHistorico = 0;
+    let totalAjustesHistorico = 0;
+    let totalConsumoDuenoCostoHistorico = 0;
+
+    for (const c of cierres) {
+        gananciaVentasHistorica += (c.gananciaVentas || 0);
+        ventasEfectivoHistorica += (c.totalEfectivo || c.totalVentas || 0);
+        ventasYapeHistorica += (c.totalYape || 0);
+        totalIngresosExtraHistorico += (c.totalIngresosExtra || 0);
+        totalEgresosHistorico += (c.totalEgresos || 0);
+        totalAjustesHistorico += (c.totalAjustes || 0);
+        totalConsumoDuenoCostoHistorico += (c.totalConsumosDuenoCosto || 0);
+    }
+
+    // 4. Procesar Movimientos y Stock (un solo paso por productos)
     let inversionStockActual = 0;
     let totalVentaProductosActual = 0;
     let gananciaPotencialTotal = 0;
 
-    productos.forEach(p => {
+    for (const p of productos) {
         const costo = p.precioCosto || 0;
+        const stock = p.stock || 0;
         const margenPorUnidad = (p.precio || 0) - costo;
-        inversionStockActual += (p.stock || 0) * costo;
-        totalVentaProductosActual += (p.unidadesVendidas || 0) * p.precio;
-        gananciaPotencialTotal += (p.stock || 0) * margenPorUnidad;
-    });
+        inversionStockActual += stock * costo;
+        totalVentaProductosActual += (p.unidadesVendidas || 0) * (p.precio || 0);
+        gananciaPotencialTotal += stock * margenPorUnidad;
+    }
 
-    // 2. Gastos y Movimientos
-    const totalIngresosExtraActual = movimientos.filter(m => m.tipo === 'ingreso').reduce((acc, curr) => acc + curr.monto, 0);
-    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
-    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+    // 5. Gastos y Movimientos Actuales (un solo paso)
+    let totalIngresosExtraActual = 0;
+    let totalEgresosActual = 0;
+    let totalAjustesActual = 0;
 
-    const totalEgresosActual = movimientos.filter(m => m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion').reduce((acc, curr) => acc + curr.monto, 0);
-    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
-    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
-
-    const totalAjustesActual = movimientos.filter(m => m.tipo === 'ajuste').reduce((acc, m) => {
-        const factor = (m.ajusteTipo === 'positivo') ? 1 : -1;
-        return acc + (m.monto * factor);
-    }, 0);
-    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
-    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
+    for (const m of movimientos) {
+        const monto = m.monto || 0;
+        if (m.tipo === 'ingreso') totalIngresosExtraActual += monto;
+        else if (['egreso', 'retiro', 'reposicion'].includes(m.tipo)) totalEgresosActual += monto;
+        else if (m.tipo === 'ajuste') totalAjustesActual += (m.ajusteTipo === 'positivo' ? monto : -monto);
+    }
 
     const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
-    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
+
+    // Totales calculados
+    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
+    const totalEfectivo = ventasEfectivoActual + ventasEfectivoHistorica;
+    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
+    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
     const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
 
     // 3. Utilidad Neta Total
@@ -4797,6 +4855,12 @@ window.closeModalMovimiento = function () {
 };
 
 window.guardarMovimiento = async function () {
+    const btn = document.getElementById('btnGuardarMovimiento');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+    }
+
     const tipo = document.getElementById('movimientoTipo').value;
     const desc = document.getElementById('movimientoDescripcion').value.trim();
     const monto = parseFloat(document.getElementById('movimientoMonto').value);
@@ -4806,7 +4870,30 @@ window.guardarMovimiento = async function () {
     if (!desc || isNaN(monto) || monto <= 0) {
         errorDiv.textContent = 'Por favor completa todos los campos con valores válidos';
         errorDiv.classList.remove('hidden');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Guardar';
+        }
         return;
+    }
+
+    if (tipo === 'egreso' || tipo === 'retiro' || tipo === 'reposicion') {
+        const balances = calcularBalances();
+        let balanceDisponible = 0;
+        
+        if (caja === 'local') balanceDisponible = balances.balLocal;
+        else if (caja === 'chica') balanceDisponible = balances.balChica;
+        else if (caja === 'yape') balanceDisponible = balances.balYape;
+
+        if (monto > balanceDisponible) {
+            errorDiv.textContent = `No hay suficiente saldo en la caja seleccionada (Disponible: S/ ${balanceDisponible.toFixed(2)})`;
+            errorDiv.classList.remove('hidden');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Guardar';
+            }
+            return;
+        }
     }
 
     const nuevoMovimiento = {
@@ -4823,6 +4910,11 @@ window.guardarMovimiento = async function () {
     await guardarMovimientos();
     actualizarTablaMovimientos();
     closeModalMovimiento();
+
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+    }
 };
 
 // --- GESTIÓN DE TRANSFERENCIAS ---
@@ -4956,44 +5048,48 @@ window.guardarAjusteCaja = async function () {
 };
 
 window.calcularBalances = function () {
-    // 1. Ventas en Efectivo (siempre van a Local)
-    const ventasEfectivo = ventas.reduce((acc, v) => {
-        if (v.metodoPago === 'Mixto') return acc + (v.montoEfectivo || 0);
-        if ((v.metodoPago || 'Efectivo') === 'Efectivo') return acc + (v.monto || 0);
-        return acc;
-    }, 0);
+    let ventasEfectivo = 0;
+    let ventasYapeTotal = 0;
+    
+    // 1. Un solo paso por ventas
+    for (const v of ventas) {
+        if (v.metodoPago === 'Mixto') {
+            ventasEfectivo += (v.montoEfectivo || 0);
+            ventasYapeTotal += (v.montoYape || 0);
+        } else if ((v.metodoPago || 'Efectivo') === 'Efectivo') {
+            ventasEfectivo += (v.monto || 0);
+        } else if (v.metodoPago === 'Yape') {
+            ventasYapeTotal += (v.monto || 0);
+        }
+    }
 
-    // 2. Movimientos manuales
-    const ingresosLocal = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
-    const egresosLocal = movimientos.filter(m => m.caja === 'local' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
-    const transferenciasSalientes = movimientos.filter(m => m.tipo === 'transferencia').reduce((acc, m) => acc + m.monto, 0);
+    let ingresosLocal = 0, egresosLocal = 0, transferenciasSalientes = 0, ajustesLocal = 0;
+    let ingresosChica = 0, egresosChica = 0, ajustesChica = 0;
+    let transYapeTotal = 0, ajustesYape = 0, egresosYape = 0;
 
-    const ajustesLocal = movimientos.filter(m => m.caja === 'local' && m.tipo === 'ajuste').reduce((acc, m) => {
-        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
-    }, 0);
-
-    const ingresosChica = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ingreso').reduce((acc, m) => acc + m.monto, 0);
-    const egresosChica = movimientos.filter(m => m.caja === 'chica' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
-    const transferenciasEntrantes = transferenciasSalientes;
-
-    const ajustesChica = movimientos.filter(m => m.caja === 'chica' && m.tipo === 'ajuste').reduce((acc, m) => {
-        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
-    }, 0);
+    // 2. Un solo paso por movimientos
+    for (const m of movimientos) {
+        const monto = m.monto || 0;
+        
+        if (m.caja === 'local') {
+            if (m.tipo === 'ingreso') ingresosLocal += monto;
+            else if (['egreso', 'retiro', 'reposicion'].includes(m.tipo)) egresosLocal += monto;
+            else if (m.tipo === 'transferencia') transferenciasSalientes += monto;
+            else if (m.tipo === 'ajuste') ajustesLocal += (m.ajusteTipo === 'positivo' ? monto : -monto);
+        } else if (m.caja === 'chica') {
+            if (m.tipo === 'ingreso') ingresosChica += monto;
+            else if (['egreso', 'retiro', 'reposicion'].includes(m.tipo)) egresosChica += monto;
+            else if (m.tipo === 'ajuste') ajustesChica += (m.ajusteTipo === 'positivo' ? monto : -monto);
+        } else if (m.caja === 'yape') {
+            if (m.tipo === 'ajuste') ajustesYape += (m.ajusteTipo === 'positivo' ? monto : -monto);
+            else if (['egreso', 'retiro', 'reposicion'].includes(m.tipo)) egresosYape += monto;
+        }
+        
+        if (m.origenYape === true) transYapeTotal += monto;
+    }
 
     const balLocal = ventasEfectivo + ingresosLocal - egresosLocal - transferenciasSalientes + ajustesLocal;
-    const balChica = ingresosChica + transferenciasEntrantes - egresosChica + ajustesChica;
-
-    // 3. Balance Yape (Ventas - Transferencias + Ajustes)
-    const ventasYapeTotal = ventas.reduce((acc, v) => {
-        if (v.metodoPago === 'Mixto') return acc + (v.montoYape || 0);
-        if (v.metodoPago === 'Yape') return acc + (v.monto || 0);
-        return acc;
-    }, 0);
-    const transYapeTotal = movimientos.filter(m => m.origenYape === true).reduce((acc, m) => acc + (m.monto || 0), 0);
-    const ajustesYape = movimientos.filter(m => m.caja === 'yape' && m.tipo === 'ajuste').reduce((acc, m) => {
-        return acc + (m.ajusteTipo === 'positivo' ? m.monto : -m.monto);
-    }, 0);
-    const egresosYape = movimientos.filter(m => m.caja === 'yape' && (m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'reposicion')).reduce((acc, m) => acc + m.monto, 0);
+    const balChica = ingresosChica + transferenciasSalientes - egresosChica + ajustesChica;
     const balYape = ventasYapeTotal - transYapeTotal - egresosYape + ajustesYape;
 
     const totalEgresosTotal = egresosLocal + egresosChica + egresosYape;
@@ -5064,8 +5160,10 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
     document.getElementById('cajaEgresos').textContent = `S/ ${egresosMes.toFixed(2)}`;
     document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
 
-    // Renderizar tabla
-    tbody.innerHTML = movsFiltrados.map(m => {
+    // Renderizar tabla (limitado a los últimos 100 para velocidad)
+    const movsParaRenderizar = [...movsFiltrados].reverse().slice(0, 100);
+
+    tbody.innerHTML = movsParaRenderizar.map(m => {
         let colorBadge = '#eee';
         if (m.tipo === 'ingreso') colorBadge = '#d1fae5';
         else if (m.tipo === 'egreso') colorBadge = '#fee2e2';
@@ -5105,7 +5203,7 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
 window.eliminarMovimiento = async function (id) {
     if (!confirm('¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).\n\nSi solo quieres borrar el registro visualmente pero mantener el gasto, usa el otro botón (❌).')) return;
     movimientos = movimientos.filter(m => m.id !== id);
-    await guardarMovimientos();
+    await guardarMovimientos(true);
     actualizarTablaMovimientos();
     // Actualizar dashboard también
     if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
@@ -5138,40 +5236,7 @@ window.borrarRegistroSinEfecto = async function (id) {
     alert('✅ Registro borrado de la lista. El dinero en caja NO se ha movido.');
 };
 
-window.reiniciarTodoFinanciero = async function () {
-    if (!confirm('🚨 ¡CUIDADO! Esta acción borrará TODAS las ventas, gastos y cierres históricos para que el Panel empiece de nuevo en S/ 0.00.\n\n¿Estás seguro de querer borrar el historial financiero?')) return;
-    if (!confirm('⚠️ Confirmación FINAL: Se borrarán VENTAS, MOVIMIENTOS y CIERRES.\n\nTus productos y el inventario se mantendrán intactos.\n¿Proceder con el reinicio?')) return;
 
-    // Limpiar datos
-    ventas = [];
-    movimientos = [];
-    cierres = [];
-    consumosDueno = [];
-    lotesAgotados = [];
-    ultimoCierre = null;
-
-    // Resetear contadores de productos
-    productos.forEach(p => {
-        p.unidadesVendidas = 0;
-        p.gananciaAcumulada = 0;
-        p.unidadesConsumidasDueno = 0;
-        p.conteoAcumuladoLote = 0;
-        p.fechaUltimaReposicion = Date.now();
-    });
-
-    // Guardar todo
-    await Promise.all([
-        guardarVentas(),
-        guardarMovimientos(),
-        guardarCierres(),
-        guardarConsumoDueno(),
-        guardarLotesAgotados(),
-        guardarProductos()
-    ]);
-
-    alert('✅ Sistema financiero reiniciado correctamente.');
-    location.reload(); // Recargar para limpiar todo el estado
-};
 
 // ===========================================
 // ========== GESTIÓN DE VENTAS (ELIMINAR) ===
@@ -5240,7 +5305,7 @@ window.eliminarVentasPorRango = async function () {
         return;
     }
 
-    await guardarVentas();
+    await guardarVentas(true);
     actualizarTablaVentas();
     actualizarDashboardFinanciero();
     closeModalEliminarVentas();
@@ -5270,6 +5335,13 @@ window.guardarTransferenciaYape = async function () {
 
     if (isNaN(monto) || monto <= 0) {
         errorDiv.textContent = 'Ingresa un monto válido mayor a 0';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    const balances = calcularBalances();
+    if (monto > balances.balYape) {
+        errorDiv.textContent = `Saldo insuficiente en Yape (Disponible: S/ ${balances.balYape.toFixed(2)})`;
         errorDiv.classList.remove('hidden');
         return;
     }
@@ -5309,7 +5381,7 @@ window.limpiarHistorialMovimientos = async function () {
     if (!confirm(`🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros (gastos, retiros, ingresos, transferencias).\n\n✅ Las VENTAS no se tocan — tus reportes mensuales se conservan.\n⚠️ Los saldos de Caja Local, Chica y Yape volverán a calcularse solo desde las ventas.\n\n¿Continuar?`)) return;
 
     movimientos = [];
-    await guardarMovimientos();
+    await guardarMovimientos(true);
     actualizarTablaMovimientos();
     if (typeof actualizarDashboardFinanciero === 'function') actualizarDashboardFinanciero();
 
@@ -5342,14 +5414,14 @@ window.reiniciarTodoFinanciero = async function () {
         p.fechaUltimaReposicion = Date.now();
     });
 
-    // 3. Guardar todo
+    // 3. Guardar todo (con omitSync=true para el reinicio)
     await Promise.all([
-        guardarVentas(),
-        guardarMovimientos(),
-        guardarCierres(),
-        guardarConsumoDueno(),
+        guardarVentas(true),
+        guardarMovimientos(true),
+        guardarCierres(true),
+        guardarConsumosDueno(true),
         guardarLotesAgotados(),
-        guardarProductos()
+        guardarProductos(true)
     ]);
 
     // 4. Actualizar UI
