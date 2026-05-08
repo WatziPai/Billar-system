@@ -63,6 +63,10 @@ let movimientos = []; // Nuevos movimientos de caja (egresos/ingresos extra)
 let lotesAgotados = []; // Historial de lotes de productos agotados
 let ordenInventarioActual = 'default'; // 📦 Variable para el orden del inventario
 
+// === LÍMITES DE PAGINACIÓN ===
+let limiteVentas = 20;
+let limiteMovimientos = 20;
+
 // ========== CONFIGURACIÓN DE SEGURIDAD ==========
 const TIEMPO_EXPIRACION = 30 * 60 * 1000;
 let timerInactividad = null;
@@ -1289,9 +1293,10 @@ function actualizarTablaVentas() {
         return;
     }
 
-    const ventasOrdenadas = [...ventas].reverse().slice(0, 50);
+    const ventasOrdenadas = [...ventas].reverse();
+    const ventasParaMostrar = ventasOrdenadas.slice(0, limiteVentas);
 
-    tbody.innerHTML = ventasOrdenadas.map(v => {
+    tbody.innerHTML = ventasParaMostrar.map(v => {
         const metodo = v.metodoPago || 'Efectivo';
         const metodoColor = metodo === 'Yape' ? '#742284' : (metodo === 'Mixto' ? '#0ea5e9' : '#10b981');
         const metodoTexto = metodo === 'Mixto' ? `Ef: S/${(v.montoEfectivo || 0).toFixed(2)} | Yp: S/${(v.montoYape || 0).toFixed(2)}` : metodo;
@@ -1311,7 +1316,26 @@ function actualizarTablaVentas() {
             </tr>
         `;
     }).join('');
+
+    // Agregar botón "Ver más" si hay más ventas
+    if (ventas.length > limiteVentas) {
+        tbody.innerHTML += `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 15px;">
+                    <button onclick="cargarMasVentas()" style="background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px;">
+                        Ver más ventas (+20)
+                    </button>
+                    <p style="font-size: 11px; color: #666; margin-top: 5px;">Mostrando ${limiteVentas} de ${ventas.length} ventas</p>
+                </td>
+            </tr>
+        `;
+    }
 }
+
+window.cargarMasVentas = function() {
+    limiteVentas += 20;
+    actualizarTablaVentas();
+};
 
 function calcularTotal() {
     const ventasActuales = ultimoCierre
@@ -5022,16 +5046,12 @@ window.guardarAjusteCaja = async function () {
         return;
     }
 
-    // Registramos la diferencia como un movimiento de tipo "ajuste"
-    let cajaNombre;
-    if (cajaAjusteActual === 'local') cajaNombre = 'Local';
-    else if (cajaAjusteActual === 'chica') cajaNombre = 'Chica';
-    else cajaNombre = 'Yape';
+    let cajaNombre = cajaAjusteActual === 'local' ? 'Local' : (cajaAjusteActual === 'chica' ? 'Chica' : 'Yape');
 
     const nuevoMovimiento = {
         id: Date.now(),
         fecha: new Date().toLocaleString(),
-        descripcion: `Ajuste manual de Caja ${cajaNombre} `,
+        descripcion: `Ajuste manual de Caja ${cajaNombre}`,
         monto: Math.abs(diferencia),
         tipo: 'ajuste',
         ajusteTipo: diferencia > 0 ? 'positivo' : 'negativo',
@@ -5042,16 +5062,13 @@ window.guardarAjusteCaja = async function () {
     movimientos.unshift(nuevoMovimiento);
     await guardarMovimientos();
     actualizarTablaMovimientos();
-    actualizarDashboardFinanciero();
     closeModalAjusteCaja();
-    alert(`✅ Saldo de Caja ${cajaNombre} ajustado a S / ${nuevoMonto.toFixed(2)} `);
 };
 
 window.calcularBalances = function () {
     let ventasEfectivo = 0;
     let ventasYapeTotal = 0;
     
-    // 1. Un solo paso por ventas
     for (const v of ventas) {
         if (v.metodoPago === 'Mixto') {
             ventasEfectivo += (v.montoEfectivo || 0);
@@ -5067,7 +5084,6 @@ window.calcularBalances = function () {
     let ingresosChica = 0, egresosChica = 0, ajustesChica = 0;
     let transYapeTotal = 0, ajustesYape = 0, egresosYape = 0;
 
-    // 2. Un solo paso por movimientos
     for (const m of movimientos) {
         const monto = m.monto || 0;
         
@@ -5101,37 +5117,23 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
     const tbody = document.getElementById('tablaMovimientos');
     if (!tbody) return;
 
-    // Obtener movimientos (filtro básico)
-    let movsFiltrados = movimientos.filter(m => !m.oculto); // Filtrar ocultos
+    let movsFiltrados = movimientos.filter(m => !m.oculto);
 
-    // Filtro por tipo
     if (filtro !== 'todos') {
         movsFiltrados = movsFiltrados.filter(m => m.tipo === filtro);
     }
 
-    // Filtro por fecha
     if (filtroFecha !== 'todo') {
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
 
         movsFiltrados = movsFiltrados.filter(m => {
-            let fechaMov;
-            if (m.id && typeof m.id === 'number' && m.id > 1000000000000) {
-                fechaMov = new Date(m.id);
-            } else {
-                const partes = m.fecha.split(',')[0].trim().split('/');
-                if (partes.length === 3) {
-                    fechaMov = new Date(`${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`);
-                } else {
-                    fechaMov = new Date(m.fecha);
-                }
-            }
+            let fechaMov = new Date(m.fecha);
             if (isNaN(fechaMov.getTime())) fechaMov = new Date();
             fechaMov.setHours(0, 0, 0, 0);
 
-            if (filtroFecha === 'hoy') {
-                return fechaMov.getTime() === hoy.getTime();
-            } else if (filtroFecha === 'semana') {
+            if (filtroFecha === 'hoy') return fechaMov.getTime() === hoy.getTime();
+            if (filtroFecha === 'semana') {
                 const haceUnaSemana = new Date(hoy);
                 haceUnaSemana.setDate(hoy.getDate() - 7);
                 return fechaMov >= haceUnaSemana;
@@ -5140,28 +5142,30 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
         });
     }
 
-    const { balLocal, balChica, balYape, totalEgresosTotal } = calcularBalances();
-
-    // Calcular gastos SOLO del mes en curso para la pantalla
+    const { balLocal, balChica, balYape } = calcularBalances();
+    
     const ahora = new Date();
     const mesActual = ahora.getMonth();
     const anioActual = ahora.getFullYear();
     const egresosMes = movimientos.filter(m => {
         if (m.oculto) return false;
-        if (m.tipo !== 'egreso' && m.tipo !== 'retiro' && m.tipo !== 'reposicion') return false;
-        const keys = obtenerClavesMes(m.id || m.fecha);
-        return keys.mes === mesActual && keys.anio === anioActual;
+        if (!['egreso', 'retiro', 'reposicion'].includes(m.tipo)) return false;
+        const d = new Date(m.fecha);
+        return d.getMonth() === mesActual && d.getFullYear() === anioActual;
     }).reduce((acc, m) => acc + m.monto, 0);
 
-    // Actualizar UI de balances
     document.getElementById('balanceCajaLocal').textContent = `S/ ${balLocal.toFixed(2)}`;
     document.getElementById('balanceCajaChica').textContent = `S/ ${balChica.toFixed(2)}`;
     document.getElementById('balanceYape').textContent = `S/ ${balYape.toFixed(2)}`;
     document.getElementById('cajaEgresos').textContent = `S/ ${egresosMes.toFixed(2)}`;
     document.getElementById('cajaBalance').textContent = `S/ ${(balLocal + balChica + balYape).toFixed(2)}`;
 
-    // Renderizar tabla (limitado a los últimos 100 para velocidad)
-    const movsParaRenderizar = [...movsFiltrados].reverse().slice(0, 100);
+    const movsParaRenderizar = [...movsFiltrados].reverse().slice(0, limiteMovimientos);
+
+    if (movsParaRenderizar.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
+        return;
+    }
 
     tbody.innerHTML = movsParaRenderizar.map(m => {
         let colorBadge = '#eee';
@@ -5172,13 +5176,9 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
         else if (m.tipo === 'transferencia') colorBadge = '#dbeafe';
         else if (m.tipo === 'ajuste') colorBadge = '#fef3c7';
 
-        // Signo
         let signo = (m.tipo === 'ingreso') ? '+' : '-';
         if (m.tipo === 'transferencia') signo = '🔄';
         if (m.tipo === 'ajuste') signo = (m.ajusteTipo === 'positivo') ? '+' : '-';
-
-        let colorMonto = m.tipo === 'ingreso' ? '#10b981' : (m.tipo === 'transferencia' ? '#3b82f6' : '#ef4444');
-        if (m.tipo === 'ajuste') colorMonto = m.ajusteTipo === 'positivo' ? '#10b981' : '#ef4444';
 
         return `
         <tr>
@@ -5191,17 +5191,30 @@ window.actualizarTablaMovimientos = function (filtro = 'todos', filtroFecha = 't
             </td>
             <td style="text-align: center; display: flex; gap: 5px; justify-content: center;">
                 ${(usuarioActual.rol || '').toLowerCase() === 'admin' ? `
-                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación (Devolver dinero)" style="background: #ef4444; color: white;">🗑️</button>
-                <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial (Mantener saldo igual)" style="background: #6b7280; color: white;">❌</button>
-                ` : '<span style="color: #999; font-size: 12px;">—</span>'}
+                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación">🗑️</button>
+                <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial">❌</button>
+                ` : '—'}
             </td>
-        </tr >
-        `;
-    }).join('') || '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No hay movimientos registrados</td></tr>';
+        </tr>`;
+    }).join('');
+
+    if (movsFiltrados.length > limiteMovimientos) {
+        tbody.innerHTML += `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 15px;">
+                    <button onclick="cargarMasMovimientos()" style="background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                        Ver más movimientos (+20)
+                    </button>
+                </td>
+            </tr>`;
+    }
+window.cargarMasMovimientos = function() {
+    limiteMovimientos += 20;
+    actualizarTablaMovimientos();
 };
 
 window.eliminarMovimiento = async function (id) {
-    if (!confirm('¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).\n\nSi solo quieres borrar el registro visualmente pero mantener el gasto, usa el otro botón (❌).')) return;
+    if (!confirm('¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).')) return;
     movimientos = movimientos.filter(m => m.id !== id);
     await guardarMovimientos(true);
     actualizarTablaMovimientos();
@@ -6046,3 +6059,4 @@ window.descargarReporteMensualPDF = function (anio, mes) {
     </body></html>`);
     w.document.close();
 };
+}
