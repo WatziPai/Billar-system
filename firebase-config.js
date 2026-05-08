@@ -1,5 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import {
     getAuth,
     signInWithEmailAndPassword,
@@ -50,6 +50,24 @@ window.firebaseDB = {
             }
         } catch (error) {
             console.error(`❌ Error obteniendo ${collection}/${document}:`, error);
+            throw error;
+        }
+    },
+
+    listen: (collection, documentName, callback) => {
+        try {
+            const docRef = doc(db, collection, documentName);
+            return onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    callback(docSnap.data());
+                } else {
+                    callback(null);
+                }
+            }, (error) => {
+                console.error(`❌ Error escuchando ${collection}/${documentName}:`, error);
+            });
+        } catch (error) {
+            console.error(`❌ Error configurando listener para ${collection}/${documentName}:`, error);
             throw error;
         }
     },
