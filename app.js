@@ -1,5 +1,5 @@
 // ========== CONFIGURACIÓN DE DEBUGGING ==========
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 const USE_LOCAL_STORAGE = false; // 🧪 Cambia a true para probar sin tocar Firebase (usa localStorage)
 
 function debugLog(categoria, mensaje, datos = null) {
@@ -1031,14 +1031,16 @@ function actualizarMesas() {
     }
 
     // Gestión de timers
+    // Si la mesa está ocupada (incluso tras recargar la página), recalculamos
+    // el tiempo transcurrido desde mesa.inicio y arrancamos el setInterval
     if (mesa.ocupada && mesa.inicio) {
+      // Siempre recalcular el tiempo real desde el timestamp de inicio
+      mesa.tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
+      actualizarTimer(mesa.id);
+
       if (!timers[mesa.id]) {
-        mesa.tiempoTranscurrido = Math.floor((Date.now() - mesa.inicio) / 1000);
-        actualizarTimer(mesa.id);
+        // Timer no existe (primera carga o tras recargar): crear uno nuevo
         timers[mesa.id] = setInterval(() => actualizarTimer(mesa.id), 1000);
-      } else {
-        // Si ya existe el timer, nos aseguramos de actualizar la vista inmediatamente
-        actualizarTimer(mesa.id);
       }
     } else if (timers[mesa.id]) {
       clearInterval(timers[mesa.id]);
@@ -2133,21 +2135,25 @@ window.ajustarStock = async function () {
   }
 
   // ⭐ Lógica de Reposición (Admin)
-  // Si el stock estaba bajo o en 0, y agregamos stock, tratamos como nuevo lote
-  if (usuarioActual.rol === "admin" && ajuste > 0) {
+  // Solo preguntar si hay historial real (unidades vendidas > 0), para no molestar con productos nuevos
+  if (usuarioActual.rol === "admin" && ajuste > 0 && (productoEditando.unidadesVendidas || 0) > 0) {
     const confirmarReposicion = confirm(
-      `¿Deseas tratar este ingreso como una REPOSICIÓN DE STOCK?\n\nEsto archivará las estadísticas actuales (unidades vendidas: ${productoEditando.unidadesVendidas || 0}) y reiniciará el contador de ganancia para este nuevo lote.`,
+      `¿Deseas tratar este ingreso como una REPOSICIÓN DE STOCK?\n\nEsto archivará las estadísticas actuales (unidades vendidas: ${productoEditando.unidadesVendidas}) y reiniciará el contador de ganancia para este nuevo lote.`,
     );
 
     if (confirmarReposicion) {
       await generarReporteAgotamiento(productoEditando);
-      // Reset de lote
       productoEditando.stockInicial = nuevoStock;
       productoEditando.unidadesVendidas = 0;
       productoEditando.unidadesConsumidasDueno = 0;
       productoEditando.gananciaAcumulada = 0;
+      productoEditando.conteoAcumuladoLote = 0;
       productoEditando.fechaUltimaReposicion = Date.now();
     }
+  } else if (usuarioActual.rol === "admin" && ajuste > 0 && (productoEditando.unidadesVendidas || 0) === 0) {
+    // Sin historial: solo actualizar stockInicial silenciosamente
+    productoEditando.stockInicial = nuevoStock;
+    productoEditando.fechaUltimaReposicion = productoEditando.fechaUltimaReposicion || Date.now();
   }
 
   productoEditando.stock = nuevoStock;
@@ -2795,7 +2801,19 @@ window.eliminarConsumo = async function (productoId) {
 
   const producto = productos.find((p) => p.id === productoId);
   if (producto) {
+    // Devolver stock
     producto.stock += consumo.cantidad;
+
+    // Revertir ganancia acumulada y unidades vendidas
+    const margen = (producto.precio || 0) - (producto.precioCosto || 0);
+    const gananciaARevertir = margen * consumo.cantidad;
+    producto.unidadesVendidas = Math.max(0, (producto.unidadesVendidas || 0) - consumo.cantidad);
+    producto.gananciaAcumulada = Math.max(0, (producto.gananciaAcumulada || 0) - gananciaARevertir);
+
+    // Revertir conteo de lote si aplica
+    if (producto.tamanoLote && producto.tamanoLote > 0) {
+      producto.conteoAcumuladoLote = Math.max(0, (producto.conteoAcumuladoLote || 0) - consumo.cantidad);
+    }
   }
 
   mesa.consumos = mesa.consumos.filter((c) => c.id !== productoId);
@@ -2858,18 +2876,37 @@ window.editarConsumo = async function (productoId) {
     return;
   }
 
-  // Calcular diferencia de stock
+  // Calcular diferencia de stock (positivo = más unidades, negativo = menos)
   const diferencia = qty - consumo.cantidad;
 
-  // Verificar que hay suficiente stock disponible
+  // Verificar que hay suficiente stock disponible si se aumenta
   if (diferencia > 0 && producto && producto.stock < diferencia) {
     mostrarError(`No hay suficiente stock. Disponible: ${producto.stock}`);
     return;
   }
 
-  // Actualizar stock del producto
+  // Actualizar stock y métricas del producto
   if (producto) {
-    producto.stock -= diferencia; // Si diferencia es negativa, aumentará el stock
+    producto.stock -= diferencia; // Si diferencia es negativa, devuelve stock
+
+    // Ajustar ganancia y unidades vendidas según la diferencia
+    const margen = (producto.precio || 0) - (producto.precioCosto || 0);
+    if (diferencia > 0) {
+      // Se agregaron más unidades: sumar ganancia
+      producto.unidadesVendidas = (producto.unidadesVendidas || 0) + diferencia;
+      producto.gananciaAcumulada = (producto.gananciaAcumulada || 0) + margen * diferencia;
+      if (producto.tamanoLote && producto.tamanoLote > 0) {
+        producto.conteoAcumuladoLote = (producto.conteoAcumuladoLote || 0) + diferencia;
+      }
+    } else if (diferencia < 0) {
+      // Se redujeron unidades: revertir ganancia
+      const reduccion = Math.abs(diferencia);
+      producto.unidadesVendidas = Math.max(0, (producto.unidadesVendidas || 0) - reduccion);
+      producto.gananciaAcumulada = Math.max(0, (producto.gananciaAcumulada || 0) - margen * reduccion);
+      if (producto.tamanoLote && producto.tamanoLote > 0) {
+        producto.conteoAcumuladoLote = Math.max(0, (producto.conteoAcumuladoLote || 0) - reduccion);
+      }
+    }
   }
 
   // Actualizar cantidad del consumo
@@ -3917,12 +3954,21 @@ window.guardarUsuario = async function () {
       usuarioEditando.rol = rol;
 
       if (password) {
-        await window.firebaseAuth.updatePassword(usuarioEditando.uid, password);
-        usuarioEditando.password = password;
-        debugLog(
-          "seguridad",
-          "✅ Contraseña de usuario actualizada en Firebase Auth",
-        );
+        // updatePassword requiere el objeto User actual de Firebase Auth.
+        // Solo el usuario que tiene la sesión activa puede cambiar su propia contraseña.
+        // Para cambiar la de otro usuario, Firebase Admin SDK (backend) es necesario.
+        // Aquí cambiamos la del usuario autenticado actualmente (el admin).
+        const currentUser = window.firebaseAuth.getCurrentUser();
+        if (currentUser && currentUser.uid === usuarioEditando.uid) {
+          await window.firebaseAuth.updatePassword(currentUser, password);
+          debugLog("seguridad", "✅ Contraseña actualizada correctamente");
+        } else {
+          // Para otros usuarios, el admin debe usar la consola de Firebase
+          // o un backend con Admin SDK. Avisamos al admin.
+          errorDiv.textContent = "⚠️ Solo puedes cambiar tu propia contraseña. Para cambiar la de otro usuario, usa la consola de Firebase.";
+          errorDiv.classList.remove("hidden");
+          // Guardamos igualmente los otros datos (nombre, rol) sin tocar contraseña
+        }
       }
     } else {
       const userCredential = await window.firebaseAuth.createUser(
@@ -3932,11 +3978,11 @@ window.guardarUsuario = async function () {
 
       debugLog("seguridad", "✅ Cuenta de Firebase Auth creada", { email });
 
+      // NO guardar la contraseña en Firestore — Firebase Auth ya la gestiona
       usuarios.push({
         id: Date.now(),
         uid: userCredential.user.uid,
         username,
-        password,
         nombre,
         rol,
       });
@@ -5835,12 +5881,24 @@ window.actualizarTablaMovimientos = function (
             <td style="font-weight: bold; color: ${m.tipo === "ingreso" ? "#10b981" : m.tipo === "transferencia" ? "#3b82f6" : "#ef4444"}">
                 ${m.tipo === "transferencia" ? "" : signo} S/ ${m.monto.toFixed(2)}
             </td>
-            <td style="text-align: center; display: flex; gap: 5px; justify-content: center;">
+            <td style="text-align: center;">
                 ${
                   (usuarioActual.rol || "").toLowerCase() === "admin"
                     ? `
-                <button class="delete-btn" onclick="eliminarMovimiento(${m.id})" title="Deshacer operación">🗑️</button>
-                <button class="delete-btn" onclick="borrarRegistroSinEfecto(${m.id})" title="Borrar del historial">❌</button>
+                <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
+                  <button
+                    onclick="eliminarMovimiento(${m.id})"
+                    title="DESHACER: Anula la operación y devuelve el dinero al saldo"
+                    style="background: #dc2626; color: white; border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                    🔙 Deshacer
+                  </button>
+                  <button
+                    onclick="borrarRegistroSinEfecto(${m.id})"
+                    title="OCULTAR: Solo borra de la lista, el saldo NO cambia"
+                    style="background: #6b7280; color: white; border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                    🗣️ Ocultar
+                  </button>
+                </div>
                 `
                     : "—"
                 }
@@ -5859,446 +5917,343 @@ window.actualizarTablaMovimientos = function (
                 </td>
             </tr>`;
   }
-  window.cargarMasMovimientos = function () {
-    limiteMovimientos += 20;
-    actualizarTablaMovimientos();
-  };
+};
 
-  window.eliminarMovimiento = async function (id) {
-    if (
-      !confirm(
-        "¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).",
-      )
+// ===========================================
+// ========== FUNCIONES DE CAJA (GLOBALES) ===
+// ===========================================
+
+window.cargarMasMovimientos = function () {
+  limiteMovimientos += 20;
+  actualizarTablaMovimientos();
+};
+
+window.eliminarMovimiento = async function (id) {
+  if (
+    !confirm(
+      "¿Deseas DESHACER esta operación?\n\n🗑️ El dinero volverá al saldo (se anulará el gasto/ingreso).",
     )
-      return;
-    movimientos = movimientos.filter((m) => m.id !== id);
-    await guardarMovimientos(true);
-    actualizarTablaMovimientos();
-    // Actualizar dashboard también
-    if (typeof actualizarDashboardFinanciero === "function")
-      actualizarDashboardFinanciero();
-  };
-
-  window.borrarRegistroSinEfecto = async function (id) {
-    if (
-      !confirm(
-        "¿Borrar registro del historial?\n\n❌ El registro desaparecerá de la lista.\n✅ PERO el efecto en la caja (dinero) se mantendrá igual.\n\nÚsalo para limpiar la lista sin alterar los saldos reales.",
-      )
-    )
-      return;
-
-    const index = movimientos.findIndex((m) => m.id === id);
-    if (index === -1) {
-      alert("❌ Error: No se encontró el registro.");
-      return;
-    }
-
-    const mov = movimientos[index];
-    let esNegativo = ["egreso", "retiro", "reposicion"].includes(mov.tipo);
-    if (mov.tipo === "ajuste") esNegativo = mov.ajusteTipo === "negativo";
-
-    // Convertir a ajuste oculto
-    movimientos[index].tipo = "ajuste";
-    movimientos[index].ajusteTipo = esNegativo ? "negativo" : "positivo";
-    movimientos[index].oculto = true;
-
-    await guardarMovimientos();
-
-    // Notificar y refrescar
-    if (typeof actualizarDashboardFinanciero === "function")
-      actualizarDashboardFinanciero();
-    actualizarTablaMovimientos();
-
-    alert(
-      "✅ Registro borrado de la lista. El dinero en caja NO se ha movido.",
-    );
-  };
-
-  // ===========================================
-  // ========== GESTIÓN DE VENTAS (ELIMINAR) ===
-  // ===========================================
-
-  // ===========================================
-  // ========== GESTIÓN DE VENTAS (ELIMINAR) ===
-  // ===========================================
-
-  window.showModalEliminarVentas = function () {
-    if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
-      mostrarError("Solo los administradores pueden eliminar ventas");
-      return;
-    }
-    document.getElementById("modalEliminarVentas").classList.add("show");
-    document.getElementById("fechaInicioEliminar").value = "";
-    document.getElementById("fechaFinEliminar").value = "";
-    document.getElementById("eliminarVentasError").classList.add("hidden");
-  };
-
-  window.closeModalEliminarVentas = function () {
-    document.getElementById("modalEliminarVentas").classList.remove("show");
-  };
-
-  window.eliminarVentasPorRango = async function () {
-    const fechaInicioVal = document.getElementById("fechaInicioEliminar").value;
-    const fechaFinVal = document.getElementById("fechaFinEliminar").value;
-    const errorDiv = document.getElementById("eliminarVentasError");
-
-    if (!fechaInicioVal || !fechaFinVal) {
-      errorDiv.textContent = "Por favor selecciona ambas fechas";
-      errorDiv.classList.remove("hidden");
-      return;
-    }
-
-    const fechaInicio = new Date(fechaInicioVal);
-    fechaInicio.setHours(0, 0, 0, 0);
-
-    const fechaFin = new Date(fechaFinVal);
-    fechaFin.setHours(23, 59, 59, 999);
-
-    if (fechaInicio > fechaFin) {
-      errorDiv.textContent =
-        "La fecha de inicio debe ser anterior o igual a la fecha fin";
-      errorDiv.classList.remove("hidden");
-      return;
-    }
-
-    if (
-      !confirm(
-        `🛑 ¿Estás seguro de eliminar las ventas desde ${fechaInicio.toLocaleDateString()} hasta ${fechaFin.toLocaleDateString()}?\n\nEsta acción NO se puede deshacer.`,
-      )
-    )
-      return;
-
-    if (
-      !confirm(
-        "⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del rango seleccionado.",
-      )
-    )
-      return;
-
-    const ventasAnteriores = ventas.length;
-
-    // Filtrar para MANTENER ventas que NO están en el rango
-    ventas = ventas.filter((v) => {
-      // v.id es el timestamp de creación
-      const fechaVenta = new Date(v.id);
-      return fechaVenta < fechaInicio || fechaVenta > fechaFin;
-    });
-
-    const ventasEliminadas = ventasAnteriores - ventas.length;
-
-    if (ventasEliminadas === 0) {
-      errorDiv.textContent =
-        "No se encontraron ventas en el rango seleccionado.";
-      errorDiv.classList.remove("hidden");
-      return;
-    }
-
-    await guardarVentas(true);
-    actualizarTablaVentas();
+  )
+    return;
+  movimientos = movimientos.filter((m) => m.id !== id);
+  await guardarMovimientos(true);
+  actualizarTablaMovimientos();
+  if (typeof actualizarDashboardFinanciero === "function")
     actualizarDashboardFinanciero();
-    closeModalEliminarVentas();
+};
 
-    alert(`✅ Se eliminaron ${ventasEliminadas} ventas correctamente.`);
+window.borrarRegistroSinEfecto = async function (id) {
+  if (
+    !confirm(
+      "¿Borrar registro del historial?\n\n❌ El registro desaparecerá de la lista.\n✅ PERO el efecto en la caja (dinero) se mantendrá igual.\n\nÚsalo para limpiar la lista sin alterar los saldos reales.",
+    )
+  )
+    return;
+
+  const index = movimientos.findIndex((m) => m.id === id);
+  if (index === -1) {
+    alert("❌ Error: No se encontró el registro.");
+    return;
+  }
+
+  const mov = movimientos[index];
+  // Incluir transferencia como negativo para que el ajuste oculto la neutralice correctamente
+  let esNegativo = ["egreso", "retiro", "reposicion", "transferencia"].includes(mov.tipo);
+  if (mov.tipo === "ajuste") esNegativo = mov.ajusteTipo === "negativo";
+
+  movimientos[index].tipo = "ajuste";
+  movimientos[index].ajusteTipo = esNegativo ? "negativo" : "positivo";
+  movimientos[index].oculto = true;
+
+  await guardarMovimientos();
+  if (typeof actualizarDashboardFinanciero === "function")
+    actualizarDashboardFinanciero();
+  actualizarTablaMovimientos();
+  alert("✅ Registro borrado de la lista. El dinero en caja NO se ha movido.");
+};
+
+// ===========================================
+// ========== GESTIÓN DE VENTAS (ELIMINAR) ===
+// ===========================================
+
+window.showModalEliminarVentas = function () {
+  if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
+    mostrarError("Solo los administradores pueden eliminar ventas");
+    return;
+  }
+  document.getElementById("modalEliminarVentas").classList.add("show");
+  document.getElementById("fechaInicioEliminar").value = "";
+  document.getElementById("fechaFinEliminar").value = "";
+  document.getElementById("eliminarVentasError").classList.add("hidden");
+};
+
+window.closeModalEliminarVentas = function () {
+  document.getElementById("modalEliminarVentas").classList.remove("show");
+};
+
+window.eliminarVentasPorRango = async function () {
+  const fechaInicioVal = document.getElementById("fechaInicioEliminar").value;
+  const fechaFinVal = document.getElementById("fechaFinEliminar").value;
+  const errorDiv = document.getElementById("eliminarVentasError");
+
+  if (!fechaInicioVal || !fechaFinVal) {
+    errorDiv.textContent = "Por favor selecciona ambas fechas";
+    errorDiv.classList.remove("hidden");
+    return;
+  }
+
+  const fechaInicio = new Date(fechaInicioVal);
+  fechaInicio.setHours(0, 0, 0, 0);
+
+  const fechaFin = new Date(fechaFinVal);
+  fechaFin.setHours(23, 59, 59, 999);
+
+  if (fechaInicio > fechaFin) {
+    errorDiv.textContent = "La fecha de inicio debe ser anterior o igual a la fecha fin";
+    errorDiv.classList.remove("hidden");
+    return;
+  }
+
+  if (!confirm(`🛑 ¿Estás seguro de eliminar las ventas desde ${fechaInicio.toLocaleDateString()} hasta ${fechaFin.toLocaleDateString()}?\n\nEsta acción NO se puede deshacer.`))
+    return;
+
+  if (!confirm("⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del rango seleccionado."))
+    return;
+
+  const ventasAnteriores = ventas.length;
+  ventas = ventas.filter((v) => {
+    const fechaVenta = new Date(v.id);
+    return fechaVenta < fechaInicio || fechaVenta > fechaFin;
+  });
+
+  const ventasEliminadas = ventasAnteriores - ventas.length;
+  if (ventasEliminadas === 0) {
+    errorDiv.textContent = "No se encontraron ventas en el rango seleccionado.";
+    errorDiv.classList.remove("hidden");
+    return;
+  }
+
+  await guardarVentas(true);
+  actualizarTablaVentas();
+  actualizarDashboardFinanciero();
+  closeModalEliminarVentas();
+  alert(`✅ Se eliminaron ${ventasEliminadas} ventas correctamente.`);
+};
+
+// ===========================================
+// ========== TRANSFERENCIA YAPE =============
+// ===========================================
+
+window.showModalTransferenciaYape = function () {
+  document.getElementById("modalTransferenciaYape").classList.add("show");
+  document.getElementById("transferenciaYapeMonto").value = "";
+  document.getElementById("transferenciaYapeDestino").value = "local";
+  document.getElementById("transferenciaYapeError").classList.add("hidden");
+};
+
+window.closeModalTransferenciaYape = function () {
+  document.getElementById("modalTransferenciaYape").classList.remove("show");
+};
+
+window.guardarTransferenciaYape = async function () {
+  const monto = parseFloat(document.getElementById("transferenciaYapeMonto").value);
+  const destino = document.getElementById("transferenciaYapeDestino").value;
+  const errorDiv = document.getElementById("transferenciaYapeError");
+
+  if (isNaN(monto) || monto <= 0) {
+    errorDiv.textContent = "Ingresa un monto válido mayor a 0";
+    errorDiv.classList.remove("hidden");
+    return;
+  }
+
+  const balances = calcularBalances();
+  if (monto > balances.balYape) {
+    errorDiv.textContent = `Saldo insuficiente en Yape (Disponible: S/ ${balances.balYape.toFixed(2)})`;
+    errorDiv.classList.remove("hidden");
+    return;
+  }
+
+  const nuevoMovimiento = {
+    id: Date.now(),
+    fecha: new Date().toLocaleString(),
+    descripcion: "Transferencia desde Yape",
+    monto,
+    tipo: "ingreso",
+    caja: destino,
+    origenYape: true,
+    usuario: usuarioActual.nombre,
   };
 
-  // ===========================================
-  // ========== TRANSFERENCIA YAPE =============
-  // ===========================================
+  movimientos.unshift(nuevoMovimiento);
+  await guardarMovimientos();
+  actualizarTablaMovimientos();
+  closeModalTransferenciaYape();
+  alert(`✅ Transferencia de Yape a Caja ${destino === "local" ? "Local" : "Chica"} registrada por S/ ${monto.toFixed(2)}`);
+};
 
-  window.showModalTransferenciaYape = function () {
-    document.getElementById("modalTransferenciaYape").classList.add("show");
-    document.getElementById("transferenciaYapeMonto").value = "";
-    document.getElementById("transferenciaYapeDestino").value = "local"; // Default
-    document.getElementById("transferenciaYapeError").classList.add("hidden");
-  };
+// ========== LIMPIAR HISTORIAL DE MOVIMIENTOS ==========
+window.limpiarHistorialMovimientos = async function () {
+  if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
+    mostrarError("Solo el administrador puede limpiar el historial de movimientos");
+    return;
+  }
 
-  window.closeModalTransferenciaYape = function () {
-    document.getElementById("modalTransferenciaYape").classList.remove("show");
-  };
+  const total = movimientos.length;
+  if (total === 0) {
+    alert("ℹ️ El historial de movimientos ya está vacío.");
+    return;
+  }
 
-  window.guardarTransferenciaYape = async function () {
-    const monto = parseFloat(
-      document.getElementById("transferenciaYapeMonto").value,
-    );
-    const destino = document.getElementById("transferenciaYapeDestino").value;
-    const errorDiv = document.getElementById("transferenciaYapeError");
+  if (!confirm(`🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros.\n\n✅ Las VENTAS no se tocan.\n⚠️ Los saldos volverán a calcularse solo desde las ventas.\n\n¿Continuar?`))
+    return;
 
-    if (isNaN(monto) || monto <= 0) {
-      errorDiv.textContent = "Ingresa un monto válido mayor a 0";
-      errorDiv.classList.remove("hidden");
+  movimientos = [];
+  await guardarMovimientos(true);
+  actualizarTablaMovimientos();
+  if (typeof actualizarDashboardFinanciero === "function")
+    actualizarDashboardFinanciero();
+  alert("✅ Historial limpiado. Las ventas y reportes están intactos.");
+};
+
+// ========== REINICIO FINANCIERO TOTAL ==========
+window.reiniciarTodoFinanciero = async function () {
+  if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
+    mostrarError("Solo el administrador puede realizar el reinicio financiero");
+    return;
+  }
+  if (!confirm("🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?"))
+    return;
+  if (!confirm("⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?"))
+    return;
+
+  ventas = [];
+  movimientos = [];
+  cierres = [];
+  consumosDueno = [];
+  lotesAgotados = [];
+  ultimoCierre = null;
+
+  productos.forEach((p) => {
+    p.unidadesVendidas = 0;
+    p.gananciaAcumulada = 0;
+    p.unidadesConsumidasDueno = 0;
+    p.conteoAcumuladoLote = 0;
+    p.fechaUltimaReposicion = Date.now();
+  });
+
+  await Promise.all([
+    guardarVentas(true),
+    guardarMovimientos(true),
+    guardarCierres(true),
+    guardarConsumosDueno(true),
+    guardarLotesAgotados(),
+    guardarProductos(true),
+  ]);
+
+  actualizarInventario();
+  actualizarTablaVentas();
+  actualizarTablaMovimientos();
+  actualizarDashboardFinanciero();
+  actualizarHistorialCierres();
+
+  alert("✅ Sistema financiero reiniciado. Ahora todo comienza desde S/ 0.00.");
+  location.reload();
+};
+
+window.sincronizarUtilidadConCaja = async function () {
+  const choice = prompt(
+    "¿Qué deseas sincronizar?\n\n1 - Sincronizar PANEL (Utilidad vs cajas físicas)\n2 - Sincronizar YAPE (Saldo sistema vs celular)",
+    "1",
+  );
+
+  if (choice === "1") {
+    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
+    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
+    const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
+    const totalIngresosExtraActual = movimientos.filter((m) => m.tipo === "ingreso").reduce((acc, curr) => acc + curr.monto, 0);
+    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
+    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
+    const totalEgresosActual = movimientos.filter((m) => ["egreso","retiro","reposicion"].includes(m.tipo)).reduce((acc, curr) => acc + curr.monto, 0);
+    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
+    const totalEgresos = totalEgresosActual + totalEgresosHistorico;
+    const totalAjustesActual = movimientos.filter((m) => m.tipo === "ajuste").reduce((acc, m) => acc + m.monto * (m.ajusteTipo === "positivo" ? 1 : -1), 0);
+    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
+    const totalAjustes = totalAjustesActual + totalAjustesHistorico;
+    const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
+    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
+    const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
+    const utilidadNetaActual = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
+    const { balLocal, balChica } = calcularBalances();
+    const balanceFisicoReal = balLocal + balChica;
+    const diferencia = balanceFisicoReal - utilidadNetaActual;
+
+    if (Math.abs(diferencia) < 0.01) {
+      alert("✅ Tu Panel ya está sincronizado con las cajas físicas.");
       return;
     }
 
-    const balances = calcularBalances();
-    if (monto > balances.balYape) {
-      errorDiv.textContent = `Saldo insuficiente en Yape (Disponible: S/ ${balances.balYape.toFixed(2)})`;
-      errorDiv.classList.remove("hidden");
-      return;
-    }
+    const msg = diferencia > 0
+      ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`
+      : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`;
 
-    // Registramos el ingreso en la caja seleccionada
-    const nuevoMovimiento = {
+    if (!confirm(msg)) return;
+
+    movimientos.unshift({
       id: Date.now(),
       fecha: new Date().toLocaleString(),
-      descripcion: "Transferencia desde Yape",
-      monto: monto,
-      tipo: "ingreso", // Es un ingreso para la caja física
-      caja: destino,
-      origenYape: true, // ⭐ NUEVO: Flag para restar del balance Yape
+      descripcion: "Sincronización Panel vs Cajas Físicas",
+      monto: Math.abs(diferencia),
+      tipo: "ajuste",
+      ajusteTipo: diferencia > 0 ? "positivo" : "negativo",
+      oculto: true,
       usuario: usuarioActual.nombre,
-    };
-
-    movimientos.unshift(nuevoMovimiento);
-    await guardarMovimientos();
-    actualizarTablaMovimientos();
-    closeModalTransferenciaYape();
-    alert(
-      `✅ Transferencia de Yape a Caja ${destino === "local" ? "Local" : "Chica"} registrada por S / ${monto.toFixed(2)} `,
-    );
-  };
-
-  // ========== LIMPIAR HISTORIAL DE MOVIMIENTOS ==========
-  window.limpiarHistorialMovimientos = async function () {
-    if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
-      mostrarError(
-        "Solo el administrador puede limpiar el historial de movimientos",
-      );
-      return;
-    }
-
-    const total = movimientos.length;
-    if (total === 0) {
-      alert("ℹ️ El historial de movimientos ya está vacío.");
-      return;
-    }
-
-    if (
-      !confirm(
-        `🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros (gastos, retiros, ingresos, transferencias).\n\n✅ Las VENTAS no se tocan — tus reportes mensuales se conservan.\n⚠️ Los saldos de Caja Local, Chica y Yape volverán a calcularse solo desde las ventas.\n\n¿Continuar?`,
-      )
-    )
-      return;
-
-    movimientos = [];
-    await guardarMovimientos(true);
-    actualizarTablaMovimientos();
-    if (typeof actualizarDashboardFinanciero === "function")
-      actualizarDashboardFinanciero();
-
-    alert(
-      "✅ Historial de movimientos limpiado. Las ventas y reportes están intactos.",
-    );
-  };
-
-  // ========== REINICIO FINANCIERO TOTAL ==========
-  window.reiniciarTodoFinanciero = async function () {
-    if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
-      mostrarError(
-        "Solo el administrador puede realizar el reinicio financiero",
-      );
-      return;
-    }
-    if (
-      !confirm(
-        "🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?",
-      )
-    )
-      return;
-    if (
-      !confirm(
-        "⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?",
-      )
-    )
-      return;
-
-    // 1. Limpiar arrays globales
-    ventas = [];
-    movimientos = [];
-    cierres = [];
-    consumosDueno = [];
-    lotesAgotados = [];
-    ultimoCierre = null;
-
-    // 2. Resetear productos
-    productos.forEach((p) => {
-      p.unidadesVendidas = 0;
-      p.gananciaAcumulada = 0;
-      p.unidadesConsumidasDueno = 0;
-      p.conteoAcumuladoLote = 0;
-      p.fechaUltimaReposicion = Date.now();
     });
 
-    // 3. Guardar todo (con omitSync=true para el reinicio)
-    await Promise.all([
-      guardarVentas(true),
-      guardarMovimientos(true),
-      guardarCierres(true),
-      guardarConsumosDueno(true),
-      guardarLotesAgotados(),
-      guardarProductos(true),
-    ]);
-
-    // 4. Actualizar UI
-    actualizarInventario();
-    actualizarTablaVentas();
+    await guardarMovimientos();
     actualizarTablaMovimientos();
     actualizarDashboardFinanciero();
-    actualizarHistorialCierres();
+    alert("✅ Panel sincronizado.");
 
-    alert(
-      "✅ Sistema financiero reiniciado. Ahora todo comienza desde S/ 0.00.",
+  } else if (choice === "2") {
+    const { balYape } = calcularBalances();
+    const realStr = prompt(
+      `Saldo actual en YAPE (Sistema): S/ ${balYape.toFixed(2)}\n\nIngresa el saldo REAL que ves hoy en tu Yape del celular:`,
+      balYape.toFixed(2),
     );
-    location.reload(); // Recargar para asegurar limpieza total de modales y estados
-  };
+    const real = parseFloat(realStr);
+    if (isNaN(real)) return;
 
-  window.sincronizarUtilidadConCaja = async function () {
-    const choice = prompt(
-      "¿Qué deseas sincronizar?\n\n1 - Sincronizar PANEL (Hacer que la Utilidad coincida con el dinero en cajas física)\n2 - Sincronizar YAPE (Hacer que el saldo del sistema coincida con tu Yape real)",
-      "1",
-    );
-
-    if (choice === "1") {
-      const gananciaVentasActual = ventas.reduce(
-        (acc, v) => acc + (v.ganancia || 0),
-        0,
-      );
-      const gananciaVentasHistorica = cierres.reduce(
-        (acc, c) => acc + (c.gananciaVentas || 0),
-        0,
-      );
-      const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
-
-      const totalIngresosExtraActual = movimientos
-        .filter((m) => m.tipo === "ingreso")
-        .reduce((acc, curr) => acc + curr.monto, 0);
-      const totalIngresosExtraHistorico = cierres.reduce(
-        (acc, c) => acc + (c.totalIngresosExtra || 0),
-        0,
-      );
-      const totalIngresosExtra =
-        totalIngresosExtraActual + totalIngresosExtraHistorico;
-
-      const totalEgresosActual = movimientos
-        .filter(
-          (m) =>
-            m.tipo === "egreso" ||
-            m.tipo === "retiro" ||
-            m.tipo === "reposicion",
-        )
-        .reduce((acc, curr) => acc + curr.monto, 0);
-      const totalEgresosHistorico = cierres.reduce(
-        (acc, c) => acc + (c.totalEgresos || 0),
-        0,
-      );
-      const totalEgresos = totalEgresosActual + totalEgresosHistorico;
-
-      const totalAjustesActual = movimientos
-        .filter((m) => m.tipo === "ajuste")
-        .reduce((acc, m) => {
-          const factor = m.ajusteTipo === "positivo" ? 1 : -1;
-          return acc + m.monto * factor;
-        }, 0);
-      const totalAjustesHistorico = cierres.reduce(
-        (acc, c) => acc + (c.totalAjustes || 0),
-        0,
-      );
-      const totalAjustes = totalAjustesActual + totalAjustesHistorico;
-
-      const totalConsumoDuenoCostoActual = consumosDueno.reduce(
-        (acc, c) => acc + (c.totalCosto || 0),
-        0,
-      );
-      const totalConsumoDuenoCostoHistorico = cierres.reduce(
-        (acc, c) => acc + (c.totalConsumosDuenoCosto || 0),
-        0,
-      );
-      const totalConsumoDuenoCosto =
-        totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
-
-      const utilidadNetaActual =
-        gananciaBrutaTotal +
-        totalIngresosExtra -
-        totalEgresos +
-        totalAjustes -
-        totalConsumoDuenoCosto;
-
-      const { balLocal, balChica } = calcularBalances();
-      const balanceFisicoReal = balLocal + balChica;
-
-      const diferencia = balanceFisicoReal - utilidadNetaActual;
-
-      if (Math.abs(diferencia) < 0.01) {
-        alert("✅ Tu Panel ya está sincronizado con las cajas físicas.");
-        return;
-      }
-
-      const msg =
-        diferencia > 0
-          ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`
-          : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`;
-
-      if (!confirm(msg)) return;
-
-      movimientos.unshift({
-        id: Date.now(),
-        fecha: new Date().toLocaleString(),
-        descripcion: "Sincronización Panel vs Cajas Físicas",
-        monto: Math.abs(diferencia),
-        tipo: "ajuste",
-        ajusteTipo: diferencia > 0 ? "positivo" : "negativo",
-        oculto: true,
-        usuario: usuarioActual.nombre,
-      });
-
-      await guardarMovimientos();
-      actualizarTablaMovimientos();
-      actualizarDashboardFinanciero();
-      alert("✅ Panel sincronizado.");
-    } else if (choice === "2") {
-      const { balYape } = calcularBalances();
-      const realStr = prompt(
-        `Saldo actual en YAPE (Sistema): S/ ${balYape.toFixed(2)}\n\nIngresa el saldo REAL que ves hoy en tu Yape del celular:`,
-        balYape.toFixed(2),
-      );
-      const real = parseFloat(realStr);
-
-      if (isNaN(real)) return;
-
-      const diff = real - balYape;
-      if (Math.abs(diff) < 0.01) {
-        alert("✅ El saldo Yape ya coincide.");
-        return;
-      }
-
-      if (
-        !confirm(
-          `Se creará un ajuste de S/ ${Math.abs(diff).toFixed(2)} (${diff > 0 ? "Positivo" : "Negativo"}) para que el sistema coincida con tu Yape.\n\n¿Proceder?`,
-        )
-      )
-        return;
-
-      movimientos.unshift({
-        id: Date.now(),
-        fecha: new Date().toLocaleString(),
-        descripcion: "Ajuste manual de Sincronización Yape",
-        monto: Math.abs(diff),
-        tipo: "ajuste",
-        ajusteTipo: diff > 0 ? "positivo" : "negativo",
-        caja: "yape",
-        oculto: true,
-        usuario: usuarioActual.nombre,
-      });
-
-      await guardarMovimientos();
-      actualizarTablaMovimientos();
-      actualizarDashboardFinanciero();
-      alert("✅ Saldo Yape sincronizado con tu celular.");
+    const diff = real - balYape;
+    if (Math.abs(diff) < 0.01) {
+      alert("✅ El saldo Yape ya coincide.");
+      return;
     }
-  };
 
-  // ===========================================
-  // ========== REPORTE MENSUAL ================
-  // ===========================================
+    if (!confirm(`Se creará un ajuste de S/ ${Math.abs(diff).toFixed(2)} (${diff > 0 ? "Positivo" : "Negativo"}) para que el sistema coincida con tu Yape.\n\n¿Proceder?`))
+      return;
+
+    movimientos.unshift({
+      id: Date.now(),
+      fecha: new Date().toLocaleString(),
+      descripcion: "Ajuste manual de Sincronización Yape",
+      monto: Math.abs(diff),
+      tipo: "ajuste",
+      ajusteTipo: diff > 0 ? "positivo" : "negativo",
+      caja: "yape",
+      oculto: true,
+      usuario: usuarioActual.nombre,
+    });
+
+    await guardarMovimientos();
+    actualizarTablaMovimientos();
+    actualizarDashboardFinanciero();
+    alert("✅ Saldo Yape sincronizado con tu celular.");
+  }
+};
+
+// ===========================================
+// ========== REPORTE MENSUAL ================
+// ===========================================
 
   const NOMBRES_MESES = [
     "Enero",
@@ -6905,4 +6860,4 @@ window.actualizarTablaMovimientos = function (
     </body></html>`);
     w.document.close();
   };
-};
+
