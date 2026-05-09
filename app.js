@@ -1226,7 +1226,7 @@ async function finalizarMesa(id) {
     metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
     montoEfectivo: pagoInfo.efectivo,
     montoYape: pagoInfo.yape,
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
     detalle: {
       mesaId: mesa.id,
@@ -1318,7 +1318,7 @@ window.agregarVentaManual = async function () {
     monto: monto,
     ganancia: monto, // ⭐ Las ventas manuales se consideran 100% utilidad (servicios/varios)
     metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
   };
 
@@ -1435,7 +1435,7 @@ window.agregarVentaProducto = async function (productoId) {
     tipoDetalle: `${producto.nombre} x${cantidad}`,
     monto: montoTotal,
     metodoPago: metodoPago, // ⭐ REGISTRAR MÉTODO
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
     detalle: {
       consumos: [
@@ -2623,7 +2623,7 @@ async function finalizarMesaConsumo(id) {
     metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
     montoEfectivo: pagoInfo.efectivo,
     montoYape: pagoInfo.yape,
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
     detalle: {
       mesaId: mesa.id,
@@ -3184,7 +3184,7 @@ window.procesarCobroParcial = async function () {
     metodoPago: pagoInfo.metodo, // ⭐ REGISTRAR MÉTODO
     montoEfectivo: pagoInfo.efectivo,
     montoYape: pagoInfo.yape,
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
     detalle: {
       mesaId: mesa.id,
@@ -3787,7 +3787,7 @@ window.reportarError = async function () {
   const error = {
     id: Date.now(),
     descripcion,
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     usuario: usuarioActual.nombre,
     estado: "pendiente",
   };
@@ -5604,7 +5604,7 @@ window.guardarMovimiento = async function () {
 
   const nuevoMovimiento = {
     id: Date.now(),
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     descripcion: desc,
     monto: monto,
     tipo: tipo,
@@ -5655,7 +5655,7 @@ window.guardarTransferencia = async function () {
   // Registrar como un movimiento especial
   const nuevaTransferencia = {
     id: Date.now(),
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     descripcion: "Transferencia a Caja Chica",
     monto: monto,
     tipo: "transferencia",
@@ -5741,7 +5741,7 @@ window.guardarAjusteCaja = async function () {
 
   const nuevoMovimiento = {
     id: Date.now(),
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     descripcion: `Ajuste manual de Caja ${cajaNombre}`,
     monto: Math.abs(diferencia),
     tipo: "ajuste",
@@ -5841,8 +5841,11 @@ window.actualizarTablaMovimientos = function (
     hoy.setHours(0, 0, 0, 0);
 
     movsFiltrados = movsFiltrados.filter((m) => {
-      let fechaMov = new Date(m.fecha);
-      if (isNaN(fechaMov.getTime())) fechaMov = new Date();
+      const { anio, mes } = obtenerClavesMes(m.fecha || m.id);
+      const partes = (m.fecha || "").split(",")[0].split("/");
+      const dia = partes.length === 3 ? parseInt(partes[0]) : 1;
+      
+      let fechaMov = new Date(anio, mes, dia);
       fechaMov.setHours(0, 0, 0, 0);
 
       if (filtroFecha === "hoy") return fechaMov.getTime() === hoy.getTime();
@@ -5864,10 +5867,10 @@ window.actualizarTablaMovimientos = function (
     .filter((m) => {
       if (m.oculto) return false;
       if (!["egreso", "retiro", "reposicion"].includes(m.tipo)) return false;
-      const d = new Date(m.fecha);
-      return d.getMonth() === mesActual && d.getFullYear() === anioActual;
+      const { anio, mes } = obtenerClavesMes(m.fecha || m.id);
+      return mes === mesActual && anio === anioActual;
     })
-    .reduce((acc, m) => acc + m.monto, 0);
+    .reduce((acc, m) => acc + (m.monto || 0), 0);
 
   document.getElementById("balanceCajaLocal").textContent =
     `S/ ${balLocal.toFixed(2)}`;
@@ -6118,7 +6121,7 @@ window.guardarTransferenciaYape = async function () {
 
   const nuevoMovimiento = {
     id: Date.now(),
-    fecha: new Date().toLocaleString(),
+    fecha: new Date().toLocaleString("es-PE"),
     descripcion: "Transferencia desde Yape",
     monto,
     tipo: "ingreso",
@@ -6297,7 +6300,7 @@ window.sincronizarUtilidadConCaja = async function () {
 
     movimientos.unshift({
       id: Date.now(),
-      fecha: new Date().toLocaleString(),
+      fecha: new Date().toLocaleString("es-PE"),
       descripcion: "Sincronización Panel vs Cajas Físicas",
       monto: Math.abs(diferencia),
       tipo: "ajuste",
@@ -6334,7 +6337,7 @@ window.sincronizarUtilidadConCaja = async function () {
 
     movimientos.unshift({
       id: Date.now(),
-      fecha: new Date().toLocaleString(),
+      fecha: new Date().toLocaleString("es-PE"),
       descripcion: "Ajuste manual de Sincronización Yape",
       monto: Math.abs(diff),
       tipo: "ajuste",
