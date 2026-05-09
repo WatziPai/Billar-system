@@ -2136,7 +2136,11 @@ window.ajustarStock = async function () {
 
   // ⭐ Lógica de Reposición (Admin)
   // Solo preguntar si hay historial real (unidades vendidas > 0), para no molestar con productos nuevos
-  if (usuarioActual.rol === "admin" && ajuste > 0 && (productoEditando.unidadesVendidas || 0) > 0) {
+  if (
+    usuarioActual.rol === "admin" &&
+    ajuste > 0 &&
+    (productoEditando.unidadesVendidas || 0) > 0
+  ) {
     const confirmarReposicion = confirm(
       `¿Deseas tratar este ingreso como una REPOSICIÓN DE STOCK?\n\nEsto archivará las estadísticas actuales (unidades vendidas: ${productoEditando.unidadesVendidas}) y reiniciará el contador de ganancia para este nuevo lote.`,
     );
@@ -2150,10 +2154,15 @@ window.ajustarStock = async function () {
       productoEditando.conteoAcumuladoLote = 0;
       productoEditando.fechaUltimaReposicion = Date.now();
     }
-  } else if (usuarioActual.rol === "admin" && ajuste > 0 && (productoEditando.unidadesVendidas || 0) === 0) {
+  } else if (
+    usuarioActual.rol === "admin" &&
+    ajuste > 0 &&
+    (productoEditando.unidadesVendidas || 0) === 0
+  ) {
     // Sin historial: solo actualizar stockInicial silenciosamente
     productoEditando.stockInicial = nuevoStock;
-    productoEditando.fechaUltimaReposicion = productoEditando.fechaUltimaReposicion || Date.now();
+    productoEditando.fechaUltimaReposicion =
+      productoEditando.fechaUltimaReposicion || Date.now();
   }
 
   productoEditando.stock = nuevoStock;
@@ -2807,12 +2816,21 @@ window.eliminarConsumo = async function (productoId) {
     // Revertir ganancia acumulada y unidades vendidas
     const margen = (producto.precio || 0) - (producto.precioCosto || 0);
     const gananciaARevertir = margen * consumo.cantidad;
-    producto.unidadesVendidas = Math.max(0, (producto.unidadesVendidas || 0) - consumo.cantidad);
-    producto.gananciaAcumulada = Math.max(0, (producto.gananciaAcumulada || 0) - gananciaARevertir);
+    producto.unidadesVendidas = Math.max(
+      0,
+      (producto.unidadesVendidas || 0) - consumo.cantidad,
+    );
+    producto.gananciaAcumulada = Math.max(
+      0,
+      (producto.gananciaAcumulada || 0) - gananciaARevertir,
+    );
 
     // Revertir conteo de lote si aplica
     if (producto.tamanoLote && producto.tamanoLote > 0) {
-      producto.conteoAcumuladoLote = Math.max(0, (producto.conteoAcumuladoLote || 0) - consumo.cantidad);
+      producto.conteoAcumuladoLote = Math.max(
+        0,
+        (producto.conteoAcumuladoLote || 0) - consumo.cantidad,
+      );
     }
   }
 
@@ -2894,17 +2912,28 @@ window.editarConsumo = async function (productoId) {
     if (diferencia > 0) {
       // Se agregaron más unidades: sumar ganancia
       producto.unidadesVendidas = (producto.unidadesVendidas || 0) + diferencia;
-      producto.gananciaAcumulada = (producto.gananciaAcumulada || 0) + margen * diferencia;
+      producto.gananciaAcumulada =
+        (producto.gananciaAcumulada || 0) + margen * diferencia;
       if (producto.tamanoLote && producto.tamanoLote > 0) {
-        producto.conteoAcumuladoLote = (producto.conteoAcumuladoLote || 0) + diferencia;
+        producto.conteoAcumuladoLote =
+          (producto.conteoAcumuladoLote || 0) + diferencia;
       }
     } else if (diferencia < 0) {
       // Se redujeron unidades: revertir ganancia
       const reduccion = Math.abs(diferencia);
-      producto.unidadesVendidas = Math.max(0, (producto.unidadesVendidas || 0) - reduccion);
-      producto.gananciaAcumulada = Math.max(0, (producto.gananciaAcumulada || 0) - margen * reduccion);
+      producto.unidadesVendidas = Math.max(
+        0,
+        (producto.unidadesVendidas || 0) - reduccion,
+      );
+      producto.gananciaAcumulada = Math.max(
+        0,
+        (producto.gananciaAcumulada || 0) - margen * reduccion,
+      );
       if (producto.tamanoLote && producto.tamanoLote > 0) {
-        producto.conteoAcumuladoLote = Math.max(0, (producto.conteoAcumuladoLote || 0) - reduccion);
+        producto.conteoAcumuladoLote = Math.max(
+          0,
+          (producto.conteoAcumuladoLote || 0) - reduccion,
+        );
       }
     }
   }
@@ -3965,7 +3994,8 @@ window.guardarUsuario = async function () {
         } else {
           // Para otros usuarios, el admin debe usar la consola de Firebase
           // o un backend con Admin SDK. Avisamos al admin.
-          errorDiv.textContent = "⚠️ Solo puedes cambiar tu propia contraseña. Para cambiar la de otro usuario, usa la consola de Firebase.";
+          errorDiv.textContent =
+            "⚠️ Solo puedes cambiar tu propia contraseña. Para cambiar la de otro usuario, usa la consola de Firebase.";
           errorDiv.classList.remove("hidden");
           // Guardamos igualmente los otros datos (nombre, rol) sin tocar contraseña
         }
@@ -5958,7 +5988,9 @@ window.borrarRegistroSinEfecto = async function (id) {
 
   const mov = movimientos[index];
   // Incluir transferencia como negativo para que el ajuste oculto la neutralice correctamente
-  let esNegativo = ["egreso", "retiro", "reposicion", "transferencia"].includes(mov.tipo);
+  let esNegativo = ["egreso", "retiro", "reposicion", "transferencia"].includes(
+    mov.tipo,
+  );
   if (mov.tipo === "ajuste") esNegativo = mov.ajusteTipo === "negativo";
 
   movimientos[index].tipo = "ajuste";
@@ -6009,15 +6041,24 @@ window.eliminarVentasPorRango = async function () {
   fechaFin.setHours(23, 59, 59, 999);
 
   if (fechaInicio > fechaFin) {
-    errorDiv.textContent = "La fecha de inicio debe ser anterior o igual a la fecha fin";
+    errorDiv.textContent =
+      "La fecha de inicio debe ser anterior o igual a la fecha fin";
     errorDiv.classList.remove("hidden");
     return;
   }
 
-  if (!confirm(`🛑 ¿Estás seguro de eliminar las ventas desde ${fechaInicio.toLocaleDateString()} hasta ${fechaFin.toLocaleDateString()}?\n\nEsta acción NO se puede deshacer.`))
+  if (
+    !confirm(
+      `🛑 ¿Estás seguro de eliminar las ventas desde ${fechaInicio.toLocaleDateString()} hasta ${fechaFin.toLocaleDateString()}?\n\nEsta acción NO se puede deshacer.`,
+    )
+  )
     return;
 
-  if (!confirm("⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del rango seleccionado."))
+  if (
+    !confirm(
+      "⚠️ CONFIRMACIÓN FINAL: Se borrarán permanentemente los registros de ventas del rango seleccionado.",
+    )
+  )
     return;
 
   const ventasAnteriores = ventas.length;
@@ -6056,7 +6097,9 @@ window.closeModalTransferenciaYape = function () {
 };
 
 window.guardarTransferenciaYape = async function () {
-  const monto = parseFloat(document.getElementById("transferenciaYapeMonto").value);
+  const monto = parseFloat(
+    document.getElementById("transferenciaYapeMonto").value,
+  );
   const destino = document.getElementById("transferenciaYapeDestino").value;
   const errorDiv = document.getElementById("transferenciaYapeError");
 
@@ -6088,13 +6131,17 @@ window.guardarTransferenciaYape = async function () {
   await guardarMovimientos();
   actualizarTablaMovimientos();
   closeModalTransferenciaYape();
-  alert(`✅ Transferencia de Yape a Caja ${destino === "local" ? "Local" : "Chica"} registrada por S/ ${monto.toFixed(2)}`);
+  alert(
+    `✅ Transferencia de Yape a Caja ${destino === "local" ? "Local" : "Chica"} registrada por S/ ${monto.toFixed(2)}`,
+  );
 };
 
 // ========== LIMPIAR HISTORIAL DE MOVIMIENTOS ==========
 window.limpiarHistorialMovimientos = async function () {
   if ((usuarioActual.rol || "").toLowerCase() !== "admin") {
-    mostrarError("Solo el administrador puede limpiar el historial de movimientos");
+    mostrarError(
+      "Solo el administrador puede limpiar el historial de movimientos",
+    );
     return;
   }
 
@@ -6104,7 +6151,11 @@ window.limpiarHistorialMovimientos = async function () {
     return;
   }
 
-  if (!confirm(`🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros.\n\n✅ Las VENTAS no se tocan.\n⚠️ Los saldos volverán a calcularse solo desde las ventas.\n\n¿Continuar?`))
+  if (
+    !confirm(
+      `🧹 ¿Limpiar el historial de movimientos de caja?\n\nSe borrarán ${total} registros.\n\n✅ Las VENTAS no se tocan.\n⚠️ Los saldos volverán a calcularse solo desde las ventas.\n\n¿Continuar?`,
+    )
+  )
     return;
 
   movimientos = [];
@@ -6121,9 +6172,17 @@ window.reiniciarTodoFinanciero = async function () {
     mostrarError("Solo el administrador puede realizar el reinicio financiero");
     return;
   }
-  if (!confirm("🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?"))
+  if (
+    !confirm(
+      "🚨 ¡ATENCIÓN! Estás a punto de borrar TODO el historial financiero.\n\nEsto incluye:\n- Todas las ventas pasadas.\n- Todos los movimientos de caja.\n- Todos los cierres de día.\n\n¿Estás SEGURO de querer empezar desde cero?",
+    )
+  )
     return;
-  if (!confirm("⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?"))
+  if (
+    !confirm(
+      "⚠️ Confirmación FINAL:\n\nLos productos NO se borrarán, pero su historial de ventas se reseteará.\n¿Continuar con el reinicio?",
+    )
+  )
     return;
 
   ventas = [];
@@ -6167,22 +6226,59 @@ window.sincronizarUtilidadConCaja = async function () {
   );
 
   if (choice === "1") {
-    const gananciaVentasActual = ventas.reduce((acc, v) => acc + (v.ganancia || 0), 0);
-    const gananciaVentasHistorica = cierres.reduce((acc, c) => acc + (c.gananciaVentas || 0), 0);
+    const gananciaVentasActual = ventas.reduce(
+      (acc, v) => acc + (v.ganancia || 0),
+      0,
+    );
+    const gananciaVentasHistorica = cierres.reduce(
+      (acc, c) => acc + (c.gananciaVentas || 0),
+      0,
+    );
     const gananciaBrutaTotal = gananciaVentasActual + gananciaVentasHistorica;
-    const totalIngresosExtraActual = movimientos.filter((m) => m.tipo === "ingreso").reduce((acc, curr) => acc + curr.monto, 0);
-    const totalIngresosExtraHistorico = cierres.reduce((acc, c) => acc + (c.totalIngresosExtra || 0), 0);
-    const totalIngresosExtra = totalIngresosExtraActual + totalIngresosExtraHistorico;
-    const totalEgresosActual = movimientos.filter((m) => ["egreso","retiro","reposicion"].includes(m.tipo)).reduce((acc, curr) => acc + curr.monto, 0);
-    const totalEgresosHistorico = cierres.reduce((acc, c) => acc + (c.totalEgresos || 0), 0);
+    const totalIngresosExtraActual = movimientos
+      .filter((m) => m.tipo === "ingreso")
+      .reduce((acc, curr) => acc + curr.monto, 0);
+    const totalIngresosExtraHistorico = cierres.reduce(
+      (acc, c) => acc + (c.totalIngresosExtra || 0),
+      0,
+    );
+    const totalIngresosExtra =
+      totalIngresosExtraActual + totalIngresosExtraHistorico;
+    const totalEgresosActual = movimientos
+      .filter((m) => ["egreso", "retiro", "reposicion"].includes(m.tipo))
+      .reduce((acc, curr) => acc + curr.monto, 0);
+    const totalEgresosHistorico = cierres.reduce(
+      (acc, c) => acc + (c.totalEgresos || 0),
+      0,
+    );
     const totalEgresos = totalEgresosActual + totalEgresosHistorico;
-    const totalAjustesActual = movimientos.filter((m) => m.tipo === "ajuste").reduce((acc, m) => acc + m.monto * (m.ajusteTipo === "positivo" ? 1 : -1), 0);
-    const totalAjustesHistorico = cierres.reduce((acc, c) => acc + (c.totalAjustes || 0), 0);
+    const totalAjustesActual = movimientos
+      .filter((m) => m.tipo === "ajuste")
+      .reduce(
+        (acc, m) => acc + m.monto * (m.ajusteTipo === "positivo" ? 1 : -1),
+        0,
+      );
+    const totalAjustesHistorico = cierres.reduce(
+      (acc, c) => acc + (c.totalAjustes || 0),
+      0,
+    );
     const totalAjustes = totalAjustesActual + totalAjustesHistorico;
-    const totalConsumoDuenoCostoActual = consumosDueno.reduce((acc, c) => acc + (c.totalCosto || 0), 0);
-    const totalConsumoDuenoCostoHistorico = cierres.reduce((acc, c) => acc + (c.totalConsumosDuenoCosto || 0), 0);
-    const totalConsumoDuenoCosto = totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
-    const utilidadNetaActual = gananciaBrutaTotal + totalIngresosExtra - totalEgresos + totalAjustes - totalConsumoDuenoCosto;
+    const totalConsumoDuenoCostoActual = consumosDueno.reduce(
+      (acc, c) => acc + (c.totalCosto || 0),
+      0,
+    );
+    const totalConsumoDuenoCostoHistorico = cierres.reduce(
+      (acc, c) => acc + (c.totalConsumosDuenoCosto || 0),
+      0,
+    );
+    const totalConsumoDuenoCosto =
+      totalConsumoDuenoCostoActual + totalConsumoDuenoCostoHistorico;
+    const utilidadNetaActual =
+      gananciaBrutaTotal +
+      totalIngresosExtra -
+      totalEgresos +
+      totalAjustes -
+      totalConsumoDuenoCosto;
     const { balLocal, balChica } = calcularBalances();
     const balanceFisicoReal = balLocal + balChica;
     const diferencia = balanceFisicoReal - utilidadNetaActual;
@@ -6192,9 +6288,10 @@ window.sincronizarUtilidadConCaja = async function () {
       return;
     }
 
-    const msg = diferencia > 0
-      ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`
-      : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`;
+    const msg =
+      diferencia > 0
+        ? `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MENOS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`
+        : `El Panel muestra S/ ${Math.abs(diferencia).toFixed(2)} MÁS de lo que hay en cajas.\n¿Deseas crear un ajuste para cuadrar?`;
 
     if (!confirm(msg)) return;
 
@@ -6213,7 +6310,6 @@ window.sincronizarUtilidadConCaja = async function () {
     actualizarTablaMovimientos();
     actualizarDashboardFinanciero();
     alert("✅ Panel sincronizado.");
-
   } else if (choice === "2") {
     const { balYape } = calcularBalances();
     const realStr = prompt(
@@ -6229,7 +6325,11 @@ window.sincronizarUtilidadConCaja = async function () {
       return;
     }
 
-    if (!confirm(`Se creará un ajuste de S/ ${Math.abs(diff).toFixed(2)} (${diff > 0 ? "Positivo" : "Negativo"}) para que el sistema coincida con tu Yape.\n\n¿Proceder?`))
+    if (
+      !confirm(
+        `Se creará un ajuste de S/ ${Math.abs(diff).toFixed(2)} (${diff > 0 ? "Positivo" : "Negativo"}) para que el sistema coincida con tu Yape.\n\n¿Proceder?`,
+      )
+    )
       return;
 
     movimientos.unshift({
@@ -6255,181 +6355,177 @@ window.sincronizarUtilidadConCaja = async function () {
 // ========== REPORTE MENSUAL ================
 // ===========================================
 
-  const NOMBRES_MESES = [
-    "Enero",
-    "Febrero",
-    "Marzo",
-    "Abril",
-    "Mayo",
-    "Junio",
-    "Julio",
-    "Agosto",
-    "Septiembre",
-    "Octubre",
-    "Noviembre",
-    "Diciembre",
-  ];
+const NOMBRES_MESES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
 
-  function obtenerClavesMes(ts) {
-    // Devuelve { anio, mes } desde un timestamp o string de fecha
-    let d;
-    if (typeof ts === "number") {
-      d = new Date(ts);
-    } else if (typeof ts === "string") {
-      // Intentar parsear "DD/MM/YYYY, HH:MM:SS" (formato peruano)
-      const partes = ts.split(",")[0].trim().split("/");
-      if (partes.length === 3) {
-        d = new Date(
-          `${partes[2]}-${partes[1].padStart(2, "0")}-${partes[0].padStart(2, "0")}`,
-        );
-      } else {
-        d = new Date(ts);
-      }
+function obtenerClavesMes(ts) {
+  // Devuelve { anio, mes } desde un timestamp o string de fecha
+  let d;
+  if (typeof ts === "number") {
+    d = new Date(ts);
+  } else if (typeof ts === "string") {
+    // Intentar parsear "DD/MM/YYYY, HH:MM:SS" (formato peruano)
+    const partes = ts.split(",")[0].trim().split("/");
+    if (partes.length === 3) {
+      d = new Date(
+        `${partes[2]}-${partes[1].padStart(2, "0")}-${partes[0].padStart(2, "0")}`,
+      );
     } else {
-      d = new Date();
+      d = new Date(ts);
     }
-    if (isNaN(d.getTime())) d = new Date();
-    return { anio: d.getFullYear(), mes: d.getMonth() }; // mes 0-11
+  } else {
+    d = new Date();
+  }
+  if (isNaN(d.getTime())) d = new Date();
+  return { anio: d.getFullYear(), mes: d.getMonth() }; // mes 0-11
+}
+
+window.generarReporteMensual = function () {
+  // ---- Recolectar todos los años disponibles ----
+  const todasFechas = [
+    ...ventas.map((v) => obtenerClavesMes(v.fecha || v.id)),
+    ...movimientos.map((m) => obtenerClavesMes(m.fecha || m.id)),
+  ];
+  const aniosSet = new Set(todasFechas.map((f) => f.anio));
+  const anioActual = new Date().getFullYear();
+  aniosSet.add(anioActual); // siempre incluir el año actual
+
+  // ---- Selector de año ----
+  const selectAnio = document.getElementById("filtroAnioMensual");
+  if (selectAnio) {
+    const anioSeleccionado = parseInt(selectAnio.value) || anioActual;
+    selectAnio.innerHTML = [...aniosSet]
+      .sort((a, b) => b - a)
+      .map(
+        (a) =>
+          `<option value="${a}" ${a === anioSeleccionado ? "selected" : ""}>${a}</option>`,
+      )
+      .join("");
   }
 
-  window.generarReporteMensual = function () {
-    // ---- Recolectar todos los años disponibles ----
-    const todasFechas = [
-      ...ventas.map((v) => obtenerClavesMes(v.fecha || v.id)),
-      ...movimientos.map((m) => obtenerClavesMes(m.fecha || m.id)),
-    ];
-    const aniosSet = new Set(todasFechas.map((f) => f.anio));
-    const anioActual = new Date().getFullYear();
-    aniosSet.add(anioActual); // siempre incluir el año actual
+  const anioFiltro = parseInt(selectAnio?.value) || anioActual;
 
-    // ---- Selector de año ----
-    const selectAnio = document.getElementById("filtroAnioMensual");
-    if (selectAnio) {
-      const anioSeleccionado = parseInt(selectAnio.value) || anioActual;
-      selectAnio.innerHTML = [...aniosSet]
-        .sort((a, b) => b - a)
-        .map(
-          (a) =>
-            `<option value="${a}" ${a === anioSeleccionado ? "selected" : ""}>${a}</option>`,
-        )
-        .join("");
-    }
-
-    const anioFiltro = parseInt(selectAnio?.value) || anioActual;
-
-    // ---- Agrupar ventas por mes ----
-    const datosMes = {}; // clave: "anio-mes"
-    for (let m = 0; m < 12; m++) {
-      const clave = `${anioFiltro}-${m}`;
-      datosMes[clave] = {
-        mes: m,
-        anio: anioFiltro,
-        ventas: 0,
-        efectivo: 0,
-        yape: 0,
-        gastos: 0,
-        ingresos: 0,
-        margen: 0,
-        transacciones: 0,
-        consumoDueno: 0,
-        horasBillar: 0, // Suma de minutos totales
-        montoBillar: 0, // Dinero percibido por tiempo de juego
-        productos: {}, // { "Nombre": { cant: 0, total: 0 } }
-      };
-    }
-
-    ventas.forEach((v) => {
-      const { anio, mes } = obtenerClavesMes(v.fecha || v.id);
-      if (anio !== anioFiltro) return;
-      const clave = `${anio}-${mes}`;
-      if (!datosMes[clave]) return;
-      const monto = v.monto || 0;
-      datosMes[clave].ventas += monto;
-      datosMes[clave].margen += v.ganancia || 0;
-      datosMes[clave].transacciones++;
-      if (v.metodoPago === "Mixto") {
-        datosMes[clave].efectivo += v.montoEfectivo || 0;
-        datosMes[clave].yape += v.montoYape || 0;
-      } else if ((v.metodoPago || "Efectivo") === "Efectivo") {
-        datosMes[clave].efectivo += monto;
-      } else if (v.metodoPago === "Yape") {
-        datosMes[clave].yape += monto;
-      }
-
-      // --- Sumar horas de billar ---
-      if (v.tipo === "Mesa Billar" && v.detalle) {
-        if (v.detalle.tiempoMinutos)
-          datosMes[clave].horasBillar += v.detalle.tiempoMinutos;
-        if (v.detalle.costoTiempo)
-          datosMes[clave].montoBillar += v.detalle.costoTiempo;
-      }
-
-      // --- Agrear desglose de productos ---
-      if (v.detalle && v.detalle.consumos) {
-        v.detalle.consumos.forEach((c) => {
-          const nombre = c.producto || "Desconocido";
-          if (!datosMes[clave].productos[nombre]) {
-            datosMes[clave].productos[nombre] = { cant: 0, total: 0 };
-          }
-          datosMes[clave].productos[nombre].cant += c.cantidad || 0;
-          datosMes[clave].productos[nombre].total += c.subtotal || 0;
-        });
-      }
-    });
-
-    movimientos.forEach((m) => {
-      const { anio, mes } = obtenerClavesMes(m.fecha || m.id);
-      if (anio !== anioFiltro) return;
-      const clave = `${anio}-${mes}`;
-      if (!datosMes[clave]) return;
-      if (
-        m.tipo === "egreso" ||
-        m.tipo === "retiro" ||
-        m.tipo === "reposicion"
-      ) {
-        datosMes[clave].gastos += m.monto || 0;
-      } else if (m.tipo === "ingreso") {
-        datosMes[clave].ingresos += m.monto || 0;
-      }
-    });
-
-    consumosDueno.forEach((c) => {
-      const { anio, mes } = obtenerClavesMes(c.fecha || c.id);
-      if (anio !== anioFiltro) return;
-      const clave = `${anio}-${mes}`;
-      if (!datosMes[clave]) return;
-      datosMes[clave].consumoDueno += c.totalCosto || 0;
-    });
-
-    const meses = Object.values(datosMes);
-
-    // ---- Totales anuales ----
-    const totalAnual = {
-      ventas: meses.reduce((s, m) => s + m.ventas, 0),
-      efectivo: meses.reduce((s, m) => s + m.efectivo, 0),
-      yape: meses.reduce((s, m) => s + m.yape, 0),
-      gastos: meses.reduce((s, m) => s + m.gastos, 0),
-      margen: meses.reduce((s, m) => s + m.margen, 0),
-      ingresos: meses.reduce((s, m) => s + m.ingresos, 0),
-      consumoDueno: meses.reduce((s, m) => s + m.consumoDueno, 0),
-      transacciones: meses.reduce((s, m) => s + m.transacciones, 0),
-      minutosBillar: meses.reduce((s, m) => s + m.horasBillar, 0),
-      montoBillar: meses.reduce((s, m) => s + m.montoBillar, 0),
+  // ---- Agrupar ventas por mes ----
+  const datosMes = {}; // clave: "anio-mes"
+  for (let m = 0; m < 12; m++) {
+    const clave = `${anioFiltro}-${m}`;
+    datosMes[clave] = {
+      mes: m,
+      anio: anioFiltro,
+      ventas: 0,
+      efectivo: 0,
+      yape: 0,
+      gastos: 0,
+      ingresos: 0,
+      margen: 0,
+      transacciones: 0,
+      consumoDueno: 0,
+      horasBillar: 0, // Suma de minutos totales
+      montoBillar: 0, // Dinero percibido por tiempo de juego
+      productos: {}, // { "Nombre": { cant: 0, total: 0 } }
     };
-    const utilidadAnual =
-      totalAnual.margen +
-      totalAnual.ingresos -
-      totalAnual.gastos -
-      totalAnual.consumoDueno;
+  }
 
-    // Formatear horas anuales
-    const hAnual = Math.floor(totalAnual.minutosBillar / 60);
-    const mAnual = totalAnual.minutosBillar % 60;
+  ventas.forEach((v) => {
+    const { anio, mes } = obtenerClavesMes(v.fecha || v.id);
+    if (anio !== anioFiltro) return;
+    const clave = `${anio}-${mes}`;
+    if (!datosMes[clave]) return;
+    const monto = v.monto || 0;
+    datosMes[clave].ventas += monto;
+    datosMes[clave].margen += v.ganancia || 0;
+    datosMes[clave].transacciones++;
+    if (v.metodoPago === "Mixto") {
+      datosMes[clave].efectivo += v.montoEfectivo || 0;
+      datosMes[clave].yape += v.montoYape || 0;
+    } else if ((v.metodoPago || "Efectivo") === "Efectivo") {
+      datosMes[clave].efectivo += monto;
+    } else if (v.metodoPago === "Yape") {
+      datosMes[clave].yape += monto;
+    }
 
-    // ---- Tarjetas de resumen anual ----
-    const resumenEl = document.getElementById("resumenAnualContainer");
-    if (resumenEl) {
-      resumenEl.innerHTML = `
+    // --- Sumar horas de billar ---
+    if (v.tipo === "Mesa Billar" && v.detalle) {
+      if (v.detalle.tiempoMinutos)
+        datosMes[clave].horasBillar += v.detalle.tiempoMinutos;
+      if (v.detalle.costoTiempo)
+        datosMes[clave].montoBillar += v.detalle.costoTiempo;
+    }
+
+    // --- Agrear desglose de productos ---
+    if (v.detalle && v.detalle.consumos) {
+      v.detalle.consumos.forEach((c) => {
+        const nombre = c.producto || "Desconocido";
+        if (!datosMes[clave].productos[nombre]) {
+          datosMes[clave].productos[nombre] = { cant: 0, total: 0 };
+        }
+        datosMes[clave].productos[nombre].cant += c.cantidad || 0;
+        datosMes[clave].productos[nombre].total += c.subtotal || 0;
+      });
+    }
+  });
+
+  movimientos.forEach((m) => {
+    const { anio, mes } = obtenerClavesMes(m.fecha || m.id);
+    if (anio !== anioFiltro) return;
+    const clave = `${anio}-${mes}`;
+    if (!datosMes[clave]) return;
+    if (m.tipo === "egreso" || m.tipo === "retiro" || m.tipo === "reposicion") {
+      datosMes[clave].gastos += m.monto || 0;
+    } else if (m.tipo === "ingreso") {
+      datosMes[clave].ingresos += m.monto || 0;
+    }
+  });
+
+  consumosDueno.forEach((c) => {
+    const { anio, mes } = obtenerClavesMes(c.fecha || c.id);
+    if (anio !== anioFiltro) return;
+    const clave = `${anio}-${mes}`;
+    if (!datosMes[clave]) return;
+    datosMes[clave].consumoDueno += c.totalCosto || 0;
+  });
+
+  const meses = Object.values(datosMes);
+
+  // ---- Totales anuales ----
+  const totalAnual = {
+    ventas: meses.reduce((s, m) => s + m.ventas, 0),
+    efectivo: meses.reduce((s, m) => s + m.efectivo, 0),
+    yape: meses.reduce((s, m) => s + m.yape, 0),
+    gastos: meses.reduce((s, m) => s + m.gastos, 0),
+    margen: meses.reduce((s, m) => s + m.margen, 0),
+    ingresos: meses.reduce((s, m) => s + m.ingresos, 0),
+    consumoDueno: meses.reduce((s, m) => s + m.consumoDueno, 0),
+    transacciones: meses.reduce((s, m) => s + m.transacciones, 0),
+    minutosBillar: meses.reduce((s, m) => s + m.horasBillar, 0),
+    montoBillar: meses.reduce((s, m) => s + m.montoBillar, 0),
+  };
+  const utilidadAnual =
+    totalAnual.margen +
+    totalAnual.ingresos -
+    totalAnual.gastos -
+    totalAnual.consumoDueno;
+
+  // Formatear horas anuales
+  const hAnual = Math.floor(totalAnual.minutosBillar / 60);
+  const mAnual = totalAnual.minutosBillar % 60;
+
+  // ---- Tarjetas de resumen anual ----
+  const resumenEl = document.getElementById("resumenAnualContainer");
+  if (resumenEl) {
+    resumenEl.innerHTML = `
             <div style="background: linear-gradient(135deg,#2d7a4d,#1a5c35); color:white; border-radius:10px; padding:18px; text-align:center;">
                 <div style="font-size:11px;opacity:.85;margin-bottom:5px;">🛒 Ventas Totales ${anioFiltro}</div>
                 <div style="font-size:26px;font-weight:800;">S/ ${totalAnual.ventas.toFixed(2)}</div>
@@ -6466,24 +6562,24 @@ window.sincronizarUtilidadConCaja = async function () {
                 <div style="font-size:11px;opacity:.75;margin-top:4px;">Ganancia: S/ ${totalAnual.montoBillar.toFixed(2)}</div>
             </div>
         `;
-    }
+  }
 
-    // ---- Tabla por mes ----
-    const tbody = document.getElementById("tablaMensualBody");
-    if (tbody) {
-      const mesesConDatos = meses.filter(
-        (m) => m.transacciones > 0 || m.gastos > 0,
-      );
-      if (mesesConDatos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">No hay datos para ${anioFiltro}</td></tr>`;
-      } else {
-        const maxVentas = Math.max(...meses.map((m) => m.ventas), 1);
-        tbody.innerHTML = meses
-          .map((m) => {
-            const utilidad = m.margen + m.ingresos - m.gastos - m.consumoDueno;
-            const utilColor = utilidad >= 0 ? "#16a34a" : "#dc2626";
-            const barPct = Math.round((m.ventas / maxVentas) * 100);
-            return `<tr style="border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+  // ---- Tabla por mes ----
+  const tbody = document.getElementById("tablaMensualBody");
+  if (tbody) {
+    const mesesConDatos = meses.filter(
+      (m) => m.transacciones > 0 || m.gastos > 0,
+    );
+    if (mesesConDatos.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">No hay datos para ${anioFiltro}</td></tr>`;
+    } else {
+      const maxVentas = Math.max(...meses.map((m) => m.ventas), 1);
+      tbody.innerHTML = meses
+        .map((m) => {
+          const utilidad = m.margen + m.ingresos - m.gastos - m.consumoDueno;
+          const utilColor = utilidad >= 0 ? "#16a34a" : "#dc2626";
+          const barPct = Math.round((m.ventas / maxVentas) * 100);
+          return `<tr style="border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
                     <td style="padding:10px;font-weight:600;color:#2d7a4d;">
                         ${NOMBRES_MESES[m.mes]}
                         ${m.ventas > 0 ? `<div style="margin-top:4px;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="width:${barPct}%;background:#2d7a4d;height:100%;border-radius:2px;"></div></div>` : ""}
@@ -6508,16 +6604,16 @@ window.sincronizarUtilidadConCaja = async function () {
                         }
                     </td>
                 </tr>`;
-          })
-          .join("");
-      }
+        })
+        .join("");
     }
+  }
 
-    // ---- Gráfica de barras ----
-    const grafEl = document.getElementById("graficaMensualContainer");
-    if (grafEl) {
-      const maxBar = Math.max(...meses.map((m) => m.ventas), 1);
-      grafEl.innerHTML = `
+  // ---- Gráfica de barras ----
+  const grafEl = document.getElementById("graficaMensualContainer");
+  if (grafEl) {
+    const maxBar = Math.max(...meses.map((m) => m.ventas), 1);
+    grafEl.innerHTML = `
             <div style="display:flex;align-items:flex-end;gap:8px;height:160px;padding-bottom:25px;position:relative;border-bottom:2px solid #e5e7eb;">
                 ${meses
                   .map((m) => {
@@ -6540,36 +6636,36 @@ window.sincronizarUtilidadConCaja = async function () {
                 <span><span style="display:inline-block;width:12px;height:12px;background:rgba(124,58,237,0.7);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Yape (sobre barra verde)</span>
             </div>
         `;
+  }
+};
+
+// ---- Ver productos de un mes específico en la UI ----
+window.verProductosMes = function (anio, mes) {
+  const nombreMes = NOMBRES_MESES[mes];
+  const productosMap = {};
+
+  ventas.forEach((v) => {
+    const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
+    if (a === anio && m === mes && v.detalle && v.detalle.consumos) {
+      v.detalle.consumos.forEach((c) => {
+        const n = c.producto || "Desconocido";
+        if (!productosMap[n]) productosMap[n] = { cant: 0, total: 0 };
+        productosMap[n].cant += c.cantidad || 0;
+        productosMap[n].total += c.subtotal || 0;
+      });
     }
-  };
+  });
 
-  // ---- Ver productos de un mes específico en la UI ----
-  window.verProductosMes = function (anio, mes) {
-    const nombreMes = NOMBRES_MESES[mes];
-    const productosMap = {};
+  const items = Object.entries(productosMap).sort(
+    (a, b) => b[1].cant - a[1].cant,
+  );
 
-    ventas.forEach((v) => {
-      const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
-      if (a === anio && m === mes && v.detalle && v.detalle.consumos) {
-        v.detalle.consumos.forEach((c) => {
-          const n = c.producto || "Desconocido";
-          if (!productosMap[n]) productosMap[n] = { cant: 0, total: 0 };
-          productosMap[n].cant += c.cantidad || 0;
-          productosMap[n].total += c.subtotal || 0;
-        });
-      }
-    });
+  if (items.length === 0) {
+    alert(`No hay registro detallado de productos para ${nombreMes} ${anio}`);
+    return;
+  }
 
-    const items = Object.entries(productosMap).sort(
-      (a, b) => b[1].cant - a[1].cant,
-    );
-
-    if (items.length === 0) {
-      alert(`No hay registro detallado de productos para ${nombreMes} ${anio}`);
-      return;
-    }
-
-    const html = `
+  const html = `
         <div style="padding:10px;">
             <h3 style="color:#2d7a4d;margin-bottom:15px;display:flex;align-items:center;gap:10px;">
                 📦 Productos Vendidos - ${nombreMes} ${anio}
@@ -6599,103 +6695,101 @@ window.sincronizarUtilidadConCaja = async function () {
         </div>
     `;
 
-    // Usar un Swal si está disponible o un div temporal
-    if (window.Swal) {
-      Swal.fire({
-        title: "",
-        html: html,
-        width: "500px",
-        showConfirmButton: true,
-        confirmButtonText: "Cerrar",
-        confirmButtonColor: "#2d7a4d",
+  // Usar un Swal si está disponible o un div temporal
+  if (window.Swal) {
+    Swal.fire({
+      title: "",
+      html: html,
+      width: "500px",
+      showConfirmButton: true,
+      confirmButtonText: "Cerrar",
+      confirmButtonColor: "#2d7a4d",
+    });
+  } else {
+    alert("Instalando vista de productos...");
+    const modal = document.createElement("div");
+    modal.style =
+      "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.3);z-index:10000;max-height:80vh;overflow-y:auto;width:90%;max-width:500px;";
+    modal.innerHTML =
+      html +
+      '<button onclick="this.parentElement.remove()" style="margin-top:20px;width:100%;padding:10px;background:#2d7a4d;color:white;border:none;border-radius:5px;cursor:pointer;">Cerrar</button>';
+    document.body.appendChild(modal);
+  }
+};
+
+// ---- PDF de un mes específico ----
+window.descargarReporteMensualPDF = function (anio, mes) {
+  const nombreMes = NOMBRES_MESES[mes];
+
+  // 1. Filtrar datos del mes
+  const ventasMes = ventas.filter((v) => {
+    const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
+    return a === anio && m === mes;
+  });
+  const movsMes = movimientos.filter((mv) => {
+    const { anio: a, mes: m } = obtenerClavesMes(mv.fecha || mv.id);
+    return a === anio && m === mes;
+  });
+  const consumosMes = consumosDueno.filter((c) => {
+    const { anio: a, mes: m } = obtenerClavesMes(c.fecha || c.id);
+    return a === anio && m === mes;
+  });
+
+  // 2. Cálculos base
+  const totalVentas = ventasMes.reduce((s, v) => s + (v.monto || 0), 0);
+  const totalEfectivo = ventasMes.reduce((s, v) => {
+    if (v.metodoPago === "Mixto") return s + (v.montoEfectivo || 0);
+    if ((v.metodoPago || "Efectivo") === "Efectivo") return s + (v.monto || 0);
+    return s;
+  }, 0);
+  const totalYape = ventasMes.reduce((s, v) => {
+    if (v.metodoPago === "Mixto") return s + (v.montoYape || 0);
+    if (v.metodoPago === "Yape") return s + (v.monto || 0);
+    return s;
+  }, 0);
+  const totalGastos = movsMes
+    .filter(
+      (m) =>
+        m.tipo === "egreso" || m.tipo === "retiro" || m.tipo === "reposicion",
+    )
+    .reduce((s, m) => s + (m.monto || 0), 0);
+  const totalIngresos = movsMes
+    .filter((m) => m.tipo === "ingreso")
+    .reduce((s, m) => s + (m.monto || 0), 0);
+  const totalMargen = ventasMes.reduce((s, v) => s + (v.ganancia || 0), 0);
+  const totalConsumoDueno = consumosMes.reduce(
+    (s, c) => s + (c.totalCosto || 0),
+    0,
+  );
+  const utilidadNeta =
+    totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
+
+  const totalMinutosMes = ventasMes
+    .filter((v) => v.tipo === "Mesa Billar")
+    .reduce((s, v) => s + (v.detalle?.tiempoMinutos || 0), 0);
+  const hMes = Math.floor(totalMinutosMes / 60);
+  const mMes = totalMinutosMes % 60;
+
+  // 3. Generar bloques HTML auxiliares para evitar anidamiento de `
+
+  // Bloque Productos
+  const productosVendidos = {};
+  ventasMes.forEach((v) => {
+    if (v.detalle && v.detalle.consumos) {
+      v.detalle.consumos.forEach((c) => {
+        const n = c.producto || "Desconocido";
+        if (!productosVendidos[n]) productosVendidos[n] = { cant: 0, total: 0 };
+        productosVendidos[n].cant += c.cantidad || 0;
+        productosVendidos[n].total += c.subtotal || 0;
       });
-    } else {
-      alert("Instalando vista de productos...");
-      const modal = document.createElement("div");
-      modal.style =
-        "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.3);z-index:10000;max-height:80vh;overflow-y:auto;width:90%;max-width:500px;";
-      modal.innerHTML =
-        html +
-        '<button onclick="this.parentElement.remove()" style="margin-top:20px;width:100%;padding:10px;background:#2d7a4d;color:white;border:none;border-radius:5px;cursor:pointer;">Cerrar</button>';
-      document.body.appendChild(modal);
     }
-  };
-
-  // ---- PDF de un mes específico ----
-  window.descargarReporteMensualPDF = function (anio, mes) {
-    const nombreMes = NOMBRES_MESES[mes];
-
-    // 1. Filtrar datos del mes
-    const ventasMes = ventas.filter((v) => {
-      const { anio: a, mes: m } = obtenerClavesMes(v.fecha || v.id);
-      return a === anio && m === mes;
-    });
-    const movsMes = movimientos.filter((mv) => {
-      const { anio: a, mes: m } = obtenerClavesMes(mv.fecha || mv.id);
-      return a === anio && m === mes;
-    });
-    const consumosMes = consumosDueno.filter((c) => {
-      const { anio: a, mes: m } = obtenerClavesMes(c.fecha || c.id);
-      return a === anio && m === mes;
-    });
-
-    // 2. Cálculos base
-    const totalVentas = ventasMes.reduce((s, v) => s + (v.monto || 0), 0);
-    const totalEfectivo = ventasMes.reduce((s, v) => {
-      if (v.metodoPago === "Mixto") return s + (v.montoEfectivo || 0);
-      if ((v.metodoPago || "Efectivo") === "Efectivo")
-        return s + (v.monto || 0);
-      return s;
-    }, 0);
-    const totalYape = ventasMes.reduce((s, v) => {
-      if (v.metodoPago === "Mixto") return s + (v.montoYape || 0);
-      if (v.metodoPago === "Yape") return s + (v.monto || 0);
-      return s;
-    }, 0);
-    const totalGastos = movsMes
-      .filter(
-        (m) =>
-          m.tipo === "egreso" || m.tipo === "retiro" || m.tipo === "reposicion",
-      )
-      .reduce((s, m) => s + (m.monto || 0), 0);
-    const totalIngresos = movsMes
-      .filter((m) => m.tipo === "ingreso")
-      .reduce((s, m) => s + (m.monto || 0), 0);
-    const totalMargen = ventasMes.reduce((s, v) => s + (v.ganancia || 0), 0);
-    const totalConsumoDueno = consumosMes.reduce(
-      (s, c) => s + (c.totalCosto || 0),
-      0,
-    );
-    const utilidadNeta =
-      totalMargen + totalIngresos - totalGastos - totalConsumoDueno;
-
-    const totalMinutosMes = ventasMes
-      .filter((v) => v.tipo === "Mesa Billar")
-      .reduce((s, v) => s + (v.detalle?.tiempoMinutos || 0), 0);
-    const hMes = Math.floor(totalMinutosMes / 60);
-    const mMes = totalMinutosMes % 60;
-
-    // 3. Generar bloques HTML auxiliares para evitar anidamiento de `
-
-    // Bloque Productos
-    const productosVendidos = {};
-    ventasMes.forEach((v) => {
-      if (v.detalle && v.detalle.consumos) {
-        v.detalle.consumos.forEach((c) => {
-          const n = c.producto || "Desconocido";
-          if (!productosVendidos[n])
-            productosVendidos[n] = { cant: 0, total: 0 };
-          productosVendidos[n].cant += c.cantidad || 0;
-          productosVendidos[n].total += c.subtotal || 0;
-        });
-      }
-    });
-    const listaProductos = Object.entries(productosVendidos).sort(
-      (a, b) => b[1].cant - a[1].cant,
-    );
-    let htmlProductos = "";
-    if (listaProductos.length > 0) {
-      htmlProductos = `
+  });
+  const listaProductos = Object.entries(productosVendidos).sort(
+    (a, b) => b[1].cant - a[1].cant,
+  );
+  let htmlProductos = "";
+  if (listaProductos.length > 0) {
+    htmlProductos = `
         <div class="section">
             <div class="section-title">📦 PRODUCTOS VENDIDOS (UNIDADES Y MONTO)</div>
             <table>
@@ -6712,19 +6806,19 @@ window.sincronizarUtilidadConCaja = async function () {
                 <tfoot><tr style="background:#f8fafc;font-weight:800;"><td style="padding:10px;">TOTAL</td><td class="center">${listaProductos.reduce((s, p) => s + p[1].cant, 0)}</td><td class="right">S/ ${listaProductos.reduce((s, p) => s + p[1].total, 0).toFixed(2)}</td></tr></tfoot>
             </table>
         </div>`;
-    }
+  }
 
-    // Bloque Ventas por Tipo
-    const ventasPorTipo = {};
-    ventasMes.forEach((v) => {
-      const t = v.tipo || "Otros";
-      if (!ventasPorTipo[t]) ventasPorTipo[t] = { monto: 0, cant: 0 };
-      ventasPorTipo[t].monto += v.monto || 0;
-      ventasPorTipo[t].cant++;
-    });
-    let htmlPorTipo = "";
-    if (Object.keys(ventasPorTipo).length > 0) {
-      htmlPorTipo = `
+  // Bloque Ventas por Tipo
+  const ventasPorTipo = {};
+  ventasMes.forEach((v) => {
+    const t = v.tipo || "Otros";
+    if (!ventasPorTipo[t]) ventasPorTipo[t] = { monto: 0, cant: 0 };
+    ventasPorTipo[t].monto += v.monto || 0;
+    ventasPorTipo[t].cant++;
+  });
+  let htmlPorTipo = "";
+  if (Object.keys(ventasPorTipo).length > 0) {
+    htmlPorTipo = `
         <div class="section">
             <div class="section-title">🛒 Ventas por Tipo</div>
             <table>
@@ -6741,12 +6835,12 @@ window.sincronizarUtilidadConCaja = async function () {
                 </tbody>
             </table>
         </div>`;
-    }
+  }
 
-    // Bloque Gastos
-    let htmlGastos = "";
-    if (movsMes.length > 0) {
-      htmlGastos = `
+  // Bloque Gastos
+  let htmlGastos = "";
+  if (movsMes.length > 0) {
+    htmlGastos = `
         <div class="section">
             <div class="section-title">📉 Movimientos de Caja</div>
             <table>
@@ -6762,36 +6856,36 @@ window.sincronizarUtilidadConCaja = async function () {
                 </tbody>
             </table>
         </div>`;
-    }
+  }
 
-    // Bloque Detalle Ventas
-    let htmlDetalleVentas =
-      '<tr><td colspan="5" class="center">Sin ventas</td></tr>';
-    if (ventasMes.length > 0) {
-      htmlDetalleVentas = [...ventasMes]
-        .reverse()
-        .map((v) => {
-          const metodoColor =
-            v.metodoPago === "Yape"
-              ? "badge-purple"
-              : v.metodoPago === "Mixto"
-                ? "badge-info"
-                : "badge-green";
-          const metodoTXT =
-            v.metodoPago === "Mixto"
-              ? `Ef: S/${(v.montoEfectivo || 0).toFixed(2)} / Yp: S/${(v.montoYape || 0).toFixed(2)}`
-              : v.metodoPago || "Efectivo";
-          return `
+  // Bloque Detalle Ventas
+  let htmlDetalleVentas =
+    '<tr><td colspan="5" class="center">Sin ventas</td></tr>';
+  if (ventasMes.length > 0) {
+    htmlDetalleVentas = [...ventasMes]
+      .reverse()
+      .map((v) => {
+        const metodoColor =
+          v.metodoPago === "Yape"
+            ? "badge-purple"
+            : v.metodoPago === "Mixto"
+              ? "badge-info"
+              : "badge-green";
+        const metodoTXT =
+          v.metodoPago === "Mixto"
+            ? `Ef: S/${(v.montoEfectivo || 0).toFixed(2)} / Yp: S/${(v.montoYape || 0).toFixed(2)}`
+            : v.metodoPago || "Efectivo";
+        return `
                 <tr><td>${v.fecha || "—"}</td><td>${v.tipo || "—"}</td><td>${v.usuario || "—"}</td><td class="center"><span class="badge ${metodoColor}">${metodoTXT}</span></td><td class="right green">S/ ${(v.monto || 0).toFixed(2)}</td></tr>
             `;
-        })
-        .join("");
-    }
+      })
+      .join("");
+  }
 
-    // Bloque Consumos Dueño
-    let htmlDueno = "";
-    if (consumosMes.length > 0) {
-      htmlDueno = `
+  // Bloque Consumos Dueño
+  let htmlDueno = "";
+  if (consumosMes.length > 0) {
+    htmlDueno = `
         <div class="section">
             <div class="section-title">🍽️ Consumo del Dueño</div>
             <table>
@@ -6801,11 +6895,11 @@ window.sincronizarUtilidadConCaja = async function () {
                 </tbody>
             </table>
         </div>`;
-    }
+  }
 
-    // 4. Escribir PDF final
-    const w = window.open("", "_blank", "width=860,height=700");
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  // 4. Escribir PDF final
+  const w = window.open("", "_blank", "width=860,height=700");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>Reporte - ${nombreMes} ${anio}</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
@@ -6858,6 +6952,5 @@ window.sincronizarUtilidadConCaja = async function () {
     <footer style="margin-top:30px;text-align:center;color:#aaa;font-size:11px;border-top:1px solid #eee;padding-top:15px">Sistema de Gestión de Billar</footer>
     <script>window.onload=function(){setTimeout(()=>window.print(),600)}<\/script>
     </body></html>`);
-    w.document.close();
-  };
-
+  w.document.close();
+};
